@@ -210,7 +210,7 @@ describe("MapView", () => {
     );
   });
 
-  it("adds cluster, cluster-count, and unclustered layers after style.load", async () => {
+  it("adds cluster and cluster-count layers after style.load", async () => {
     render(<MapView />);
     await act(async () => fireStyleLoad());
 
@@ -223,12 +223,31 @@ describe("MapView", () => {
         type: "symbol",
       }),
     );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "cell-towers-unclustered",
-        type: "circle",
-      }),
-    );
+  });
+
+  it("adds four per-type tower layers with correct filters and colors", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+
+    const cases: Array<{ id: string; radio: string; color: string }> = [
+      { id: "cell-towers-gsm", radio: "GSM", color: "#fde047" },
+      { id: "cell-towers-umts", radio: "UMTS", color: "#fb923c" },
+      { id: "cell-towers-lte", radio: "LTE", color: "#4ade80" },
+      { id: "cell-towers-cdma", radio: "CDMA", color: "#c4b5fd" },
+    ];
+
+    for (const { id, radio, color } of cases) {
+      expect(mockAddLayer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id,
+          type: "circle",
+          filter: expect.arrayContaining([
+            expect.arrayContaining(["==", expect.anything(), radio]),
+          ]),
+          paint: expect.objectContaining({ "circle-color": color }),
+        }),
+      );
+    }
   });
 
   it("registers a moveend listener after style.load", async () => {
@@ -277,23 +296,42 @@ describe("MapView", () => {
     ).toBeGreaterThan(fetchCallsBefore);
   });
 
-  it("registers click, mouseenter, and mouseleave handlers for unclustered towers", async () => {
+  it("registers click, mouseenter, and mouseleave handlers for each per-type tower layer", async () => {
     render(<MapView />);
     await act(async () => fireStyleLoad());
 
-    const eventNames = mockOn.mock.calls.map(([event]) => event);
-    expect(eventNames).toContain("click");
-    expect(eventNames).toContain("mouseenter");
-    expect(eventNames).toContain("mouseleave");
+    const layerIds = [
+      "cell-towers-gsm",
+      "cell-towers-umts",
+      "cell-towers-lte",
+      "cell-towers-cdma",
+    ];
+
+    for (const layerId of layerIds) {
+      expect(
+        mockOn.mock.calls.some(
+          ([event, layer]) => event === "click" && layer === layerId,
+        ),
+      ).toBe(true);
+      expect(
+        mockOn.mock.calls.some(
+          ([event, layer]) => event === "mouseenter" && layer === layerId,
+        ),
+      ).toBe(true);
+      expect(
+        mockOn.mock.calls.some(
+          ([event, layer]) => event === "mouseleave" && layer === layerId,
+        ),
+      ).toBe(true);
+    }
   });
 
-  it("opens a Popup when an unclustered tower is clicked", async () => {
+  it("opens a Popup when a per-type tower is clicked", async () => {
     render(<MapView />);
     await act(async () => fireStyleLoad());
 
     const clickCall = mockOn.mock.calls.find(
-      ([event, layer]) =>
-        event === "click" && layer === "cell-towers-unclustered",
+      ([event, layer]) => event === "click" && layer === "cell-towers-lte",
     );
     expect(clickCall).toBeDefined();
 
