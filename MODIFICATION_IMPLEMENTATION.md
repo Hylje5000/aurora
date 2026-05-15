@@ -35,6 +35,12 @@
 - `MapLoader`: 2 tests — renders without crash, dynamic stub visible. Mocked `next/dynamic` to return a plain stub component.
 - All 20 tests pass. Lint and tsc clean.
 
+### Phase 5 — 2026-05-15
+
+- Replaced the hedging `"npm test or npx jest or npx vitest run, whichever is configured"` line in `modify.md` with `npm test` and explicit hard-blocker language.
+- Added `npm run test:coverage` step to the last-phase checklist in `modify.md`.
+- No code changes; all 20 tests still pass.
+
 ---
 
 ## Phase 0 — Baseline Verification
