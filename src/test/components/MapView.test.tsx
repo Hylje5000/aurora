@@ -12,6 +12,7 @@ const {
   mockSetData,
   mockGetSource,
   mockGetCanvas,
+  mockSetConfigProperty,
   mockSetLngLat,
   mockSetHTML,
   mockAddTo,
@@ -34,6 +35,7 @@ const {
   const mockSetData = vi.fn();
   const mockGetSource = vi.fn(() => ({ setData: mockSetData }));
   const mockGetCanvas = vi.fn(() => ({ style: { cursor: "" } }));
+  const mockSetConfigProperty = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -54,6 +56,7 @@ const {
     getBounds: mockGetBounds,
     getSource: mockGetSource,
     getCanvas: mockGetCanvas,
+    setConfigProperty: mockSetConfigProperty,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -67,6 +70,7 @@ const {
     mockSetData,
     mockGetSource,
     mockGetCanvas,
+    mockSetConfigProperty,
     mockSetLngLat,
     mockSetHTML,
     mockAddTo,
@@ -113,6 +117,7 @@ describe("MapView", () => {
     mockSetData.mockClear();
     mockGetSource.mockClear();
     mockGetCanvas.mockClear();
+    mockSetConfigProperty.mockClear();
     mockSetLngLat.mockClear();
     mockSetHTML.mockClear();
     mockAddTo.mockClear();
@@ -156,6 +161,17 @@ describe("MapView", () => {
       ([event]) => event === "style.load",
     );
     expect(styleLoadCall).toBeDefined();
+  });
+
+  it("sets lightPreset to night after style.load fires", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+
+    expect(mockSetConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "lightPreset",
+      "night",
+    );
   });
 
   it("adds aoi-source, aoi-fill, and aoi-outline after style.load fires", async () => {

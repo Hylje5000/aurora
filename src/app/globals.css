@@ -29,6 +29,27 @@ body {
   border-top-color: #334155;
 }
 
+/* Dark Mapbox NavigationControl */
+.mapboxgl-ctrl-group {
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+.mapboxgl-ctrl-group button {
+  background-color: transparent !important;
+  border-bottom: 1px solid #334155 !important;
+}
+
+.mapboxgl-ctrl-group button:last-child {
+  border-bottom: none !important;
+}
+
+.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+  filter: invert(1) brightness(0.85);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

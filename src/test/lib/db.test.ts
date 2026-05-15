@@ -17,6 +17,7 @@ describe("db singleton", () => {
     await import("@/lib/db");
     expect(MockPool).toHaveBeenCalledWith({
       connectionString: "postgres://test-host/testdb",
+      ssl: { rejectUnauthorized: false },
     });
     delete process.env.DATABASE_URL;
   });

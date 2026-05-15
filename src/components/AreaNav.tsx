@@ -27,7 +27,7 @@ export default function AreaNav({ selectedAreaId, onSelect }: AreaNavProps) {
             className={[
               "rounded px-4 py-1.5 text-sm font-semibold text-white transition-all",
               "bg-black/60 backdrop-blur-sm hover:bg-black/80",
-              isActive ? "border border-transparent" : "border border-white/20",
+              isActive ? "border border-transparent" : "border border-white/30",
             ].join(" ")}
           >
             {area.name}
