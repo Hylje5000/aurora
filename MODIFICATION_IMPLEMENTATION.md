@@ -33,6 +33,19 @@
 - Created `src/test/components/MapWithNav.test.tsx` — 5 tests using stubbed AreaNav/MapView to verify: renders, children present, initial null state, selection propagation, selection change.
 - All 48 tests passing. tsc clean. prettier no-op.
 
+### Phase 5 — 2026-05-15
+
+- Coverage summary (48 tests, v8 provider):
+  - `src/lib/areas.ts`: 100% stmts / 100% branch / 100% funcs / 100% lines
+  - `src/lib/db.ts`: 100% / 100% / 100% / 100%
+  - `src/app/api/features/route.ts`: 100% / 100% / 100% / 100%
+  - `src/components/AreaNav.tsx`: 100% / 100% / 100% / 100%
+  - `src/components/MapWithNav.tsx`: 100% / 100% / 100% / 100%
+  - `src/components/MapView.tsx`: 100% stmts / 80% branch / 100% funcs / 100% lines (branch gaps at null-guard inside style.load callback and unknown-area guard — unreachable in normal use)
+  - `src/components/MapLoader.tsx`: 100% stmts / 100% branch / 0% funcs / 100% lines (0% funcs expected — dynamic import mocked out entirely)
+- Updated README.md with Areas of Interest table, updated project structure, updated test tree.
+- Updated CLAUDE.md with new file structure, AOI patterns, updated mock strategy notes, coverage summary.
+
 ---
 
 ## Phase 0 — Baseline Verification
