@@ -10,6 +10,10 @@ const ALL_KEYS: LayerKey[] = [
   "hillshade",
   "contours",
   "landcover",
+  "cellGSM",
+  "cellUMTS",
+  "cellLTE",
+  "cellCDMA",
 ];
 
 describe("DEFAULT_LAYER_VISIBILITY", () => {
@@ -27,6 +31,13 @@ describe("DEFAULT_LAYER_VISIBILITY", () => {
     expect(DEFAULT_LAYER_VISIBILITY.hillshade).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.contours).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.landcover).toBe(true);
+  });
+
+  it("has all cell tower types on by default", () => {
+    expect(DEFAULT_LAYER_VISIBILITY.cellGSM).toBe(true);
+    expect(DEFAULT_LAYER_VISIBILITY.cellUMTS).toBe(true);
+    expect(DEFAULT_LAYER_VISIBILITY.cellLTE).toBe(true);
+    expect(DEFAULT_LAYER_VISIBILITY.cellCDMA).toBe(true);
   });
 });
 
@@ -55,5 +66,21 @@ describe("LAYER_GROUPS", () => {
 
   it("landcover maps to landcover-military layer", () => {
     expect(LAYER_GROUPS.landcover).toEqual(["landcover-military"]);
+  });
+
+  it("cellGSM maps to cell-towers-gsm layer", () => {
+    expect(LAYER_GROUPS.cellGSM).toEqual(["cell-towers-gsm"]);
+  });
+
+  it("cellUMTS maps to cell-towers-umts layer", () => {
+    expect(LAYER_GROUPS.cellUMTS).toEqual(["cell-towers-umts"]);
+  });
+
+  it("cellLTE maps to cell-towers-lte layer", () => {
+    expect(LAYER_GROUPS.cellLTE).toEqual(["cell-towers-lte"]);
+  });
+
+  it("cellCDMA maps to cell-towers-cdma layer", () => {
+    expect(LAYER_GROUPS.cellCDMA).toEqual(["cell-towers-cdma"]);
   });
 });

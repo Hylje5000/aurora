@@ -442,6 +442,10 @@ describe("MapView", () => {
           hillshade: true,
           contours: true,
           landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
         }}
       />,
     );
@@ -463,6 +467,10 @@ describe("MapView", () => {
           hillshade: false,
           contours: true,
           landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
         }}
       />,
     );
@@ -486,6 +494,10 @@ describe("MapView", () => {
           hillshade: true,
           contours: false,
           landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
         }}
       />,
     );
@@ -515,6 +527,10 @@ describe("MapView", () => {
           hillshade: true,
           contours: true,
           landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
         }}
       />,
     );
@@ -528,6 +544,10 @@ describe("MapView", () => {
           hillshade: true,
           contours: true,
           landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
         }}
       />,
     );
@@ -547,6 +567,10 @@ describe("MapView", () => {
           hillshade: true,
           contours: true,
           landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
         }}
       />,
     );

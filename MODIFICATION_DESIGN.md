@@ -1,8 +1,11 @@
-# Design Document: Military Terrain & Intelligence Layers
+# Design: Cell Tower Layer Toggles in LayerPanel
 
 ## Overview
 
-Add military-relevant map overlay layers to the Aurora IPB dark-theme Mapbox map, controlled via a floating toggle panel. Layers cover terrain analysis, elevation, land cover (vegetation density), and water — critical data for GO/SLOW-GO/NO-GO terrain assessment and convoy route planning.
+Add per-radio-type (GSM / UMTS / LTE / CDMA) visibility toggles for cell towers to the existing
+`LayerPanel` component. Each radio type gets its own colored dot and checkbox. The dot color
+matches the map marker color exactly. Colors are brightened one Tailwind shade across the board for
+better contrast on the dark night basemap.
 
 ---
 
@@ -10,235 +13,153 @@ Add military-relevant map overlay layers to the Aurora IPB dark-theme Mapbox map
 
 ### Current State
 
-`MapView.tsx` initialises a single Mapbox Standard style map (night preset) with:
-- AOI bounding-box polygons (`aoi-source`, `aoi-fill`, `aoi-outline`)
-- Cell tower overlay with clustering (`cell-towers-source`, 3 layers)
+| Location                        | Relevant code                                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib/layers.ts`             | Four keys: `terrain3d`, `hillshade`, `contours`, `landcover`                                                                                     |
+| `src/components/LayerPanel.tsx` | Three sections (Terrain / Elevation / Vegetation); no cell towers                                                                                |
+| `src/components/MapView.tsx`    | Single `cell-towers-unclustered` layer uses a Mapbox `match` expression for color by radio type; cluster layers use a fixed dark slate `#64748b` |
 
-All layers are always-visible; there is no layer control UI. The component is entirely self-contained (refs, not state, for the map instance). `MapWithNav.tsx` owns only `selectedAreaId` state.
+Cell towers are always visible — there is no way to hide them from the UI.
 
 ### Problem
 
-Military analysts need to read terrain features directly on the map to perform IPB:
-1. **Elevation/terrain** — hills, ridgelines, valleys (3D or hillshade-derived)
-2. **Contour lines** — precise elevation data for tactical planning
-3. **Vegetation/land cover** — forests (NO-GO for vehicles), scrub (SLOW-GO), open terrain (GO)
-4. **Water obstacles** — rivers, lakes, bogs (crossing obstacles)
-5. **Routes** — road network legibility in tactical context
-
-These must be **individually toggleable** because analysts may want clean basemap + only contours, or full terrain mode, depending on the planning phase.
-
-### Data Sources
-
-All layers are served from Mapbox-hosted tilesets — no additional backend is required:
-
-| Layer group | Tileset | Type |
-|---|---|---|
-| 3D Terrain + Hillshade | `mapbox://mapbox.mapbox-terrain-dem-v1` | raster-dem |
-| Contour lines | `mapbox://mapbox.mapbox-terrain-v2` | vector (source-layer: `contour`) |
-| Land cover | `mapbox://mapbox.mapbox-terrain-v2` | vector (source-layer: `landcover`) |
-| Water | Mapbox Standard built-in | config property |
-
-### Constraints
-
-- Mapbox GL JS v3 (installed `^3.23.1`) — Standard style with slots (`bottom`, `middle`, `top`) is fully supported.
-- SSR guard already in place via `MapLoader.tsx`.
-- Map init is one-shot (`useEffect([], [])`); layer visibility changes must go through `map.setLayoutProperty()` and `map.setTerrain()` in a separate `useEffect` keyed to layer state.
-- Must remain readable in 2D (flat) mode — 3D terrain is optional.
-- Dark/military colour palette throughout (slate, olive, muted greens, blues).
+1. The user cannot toggle cell towers on/off from the LayerPanel.
+2. There is no per-radio-type granularity.
+3. The cluster circle color (`#64748b`) and some existing layer-panel dot colors are dark and hard
+   to distinguish on the night basemap.
 
 ---
 
 ## Alternatives Considered
 
-### A. Always-on overlay layers (rejected)
-Simpler implementation, no UI needed. Rejected because stacking all layers simultaneously creates a visually noisy map — analysts need to focus on specific intelligence aspects. Toggle control is essential for operational use.
-
-### B. External tile server (rejected)
-Hosting a custom Mapbox-compatible tile server with NLS Finland data would provide higher-fidelity Finnish terrain. Rejected for this phase — the hackathon timeline requires a working demo using Mapbox-hosted tilesets. Finnish PostGIS data (landcover from NLS CORINE) can be added as a future phase via `/api/landcover` GeoJSON overlay.
-
-### C. Layer control in sidebar (rejected)
-A full sidebar panel requires significant layout restructuring and is harder to use while panning the map. A floating semi-transparent panel (bottom-left) is more space-efficient and stays visible regardless of AOI nav state.
-
-### D. `setConfigProperty` for water colour only (accepted for water)
-The Standard style's `colorWater` config property colours all water features globally without an additional source or layer. This is the correct approach for water highlighting — no GeoJSON overlay needed at this stage.
+| Option                                                                 | Verdict                                                                                                                                                                                    |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Single "Cell Towers" toggle (all types on/off)                         | Simpler but less useful for analysts wanting, e.g., only LTE.                                                                                                                              |
+| Per-radio-type toggles (chosen)                                        | Four rows — one per radio type — gives fine-grained control. Matches user preference.                                                                                                      |
+| Dynamic filter rewriting on the single `cell-towers-unclustered` layer | Works but is fragile: building a `match` filter expression from state at runtime is more complex than the clean `setLayoutProperty('visibility',…)` pattern already used for other layers. |
 
 ---
 
 ## Detailed Design
 
-### 1. Layer Architecture
+### 1. `src/lib/layers.ts`
 
-Two Mapbox sources are added once on `style.load`:
-
-```
-mapbox-dem      → raster-dem (terrain-dem-v1)
-terrain-v2      → vector (terrain-v2 tileset)
-```
-
-Five new layers are added in slot order:
-
-| Layer ID | Type | Source | Source-layer | Slot | Toggle key |
-|---|---|---|---|---|---|
-| `hillshading` | hillshade | mapbox-dem | — | bottom | `hillshade` |
-| `landcover-military` | fill | terrain-v2 | landcover | bottom | `landcover` |
-| `contours-minor` | line | terrain-v2 | contour | bottom | `contours` |
-| `contours-major` | line | terrain-v2 | contour | bottom | `contours` |
-| `contours-labels` | symbol | terrain-v2 | contour | middle | `contours` |
-
-3D terrain is controlled via `map.setTerrain()` / `map.setTerrain(null)` — not a layer, so it uses a separate `terrain3d` toggle key.
-
-Water colour is controlled via `map.setConfigProperty('basemap', 'colorWater', ...)` — also not a layer.
-
-### 2. Layer Group → Toggle Keys
-
-```
-terrain3d   → 3D terrain extrusion (setTerrain on/off)
-hillshade   → hillshading layer
-contours    → contours-minor, contours-major, contours-labels layers
-landcover   → landcover-military layer
-```
-
-Cell towers remain controlled by their existing always-on logic (no change in this PR).
-
-### 3. Component Architecture
-
-```mermaid
-graph TD
-  A["MapWithNav.tsx (client)"] -->|"layerVisibility: LayerVisibility"| B["MapView.tsx"]
-  A -->|"layerVisibility + onToggle"| C["LayerPanel.tsx (new)"]
-  B -->|"map.setLayoutProperty / setTerrain"| D["Mapbox GL JS Map"]
-  C -->|"checkbox toggle"| A
-```
-
-**State location:** `MapWithNav` — owns `LayerVisibility` state (Record of toggle keys → boolean).
-
-**`LayerVisibility` type (new, in `src/lib/layers.ts`):**
+Add four new `LayerKey` values and map them to dedicated per-type Mapbox layer IDs.
 
 ```ts
-export type LayerKey = 'terrain3d' | 'hillshade' | 'contours' | 'landcover';
-
-export interface LayerVisibility extends Record<LayerKey, boolean> {
-  terrain3d: boolean;
-  hillshade:  boolean;
-  contours:   boolean;
-  landcover:  boolean;
-}
+export type LayerKey =
+  | "terrain3d"
+  | "hillshade"
+  | "contours"
+  | "landcover"
+  | "cellGSM"
+  | "cellUMTS"
+  | "cellLTE"
+  | "cellCDMA";
 
 export const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
   terrain3d: false,
-  hillshade:  true,
-  contours:   true,
-  landcover:  true,
+  hillshade: true,
+  contours: true,
+  landcover: true,
+  cellGSM: true,
+  cellUMTS: true,
+  cellLTE: true,
+  cellCDMA: true,
+};
+
+export const LAYER_GROUPS: Record<LayerKey, string[]> = {
+  // existing…
+  cellGSM: ["cell-towers-gsm"],
+  cellUMTS: ["cell-towers-umts"],
+  cellLTE: ["cell-towers-lte"],
+  cellCDMA: ["cell-towers-cdma"],
 };
 ```
 
-**`LayerPanel.tsx` (new `src/components/LayerPanel.tsx`):**
-- `'use client'`
-- Props: `visibility: LayerVisibility`, `onToggle: (key: LayerKey) => void`
-- Renders a fixed-position floating panel (bottom-left, above Mapbox attribution)
-- Dark slate background (`bg-slate-900/90 border-slate-700`)
-- Military-style section headings: `TERRAIN`, `ELEVATION`, `VEGETATION`
-- Each row: label + checkbox/switch
-- Collapsible with a chevron button
+### 2. `src/components/MapView.tsx` — split unclustered layer into four
 
-**`MapView.tsx` changes:**
-- New prop: `layerVisibility: LayerVisibility`
-- `style.load` handler adds all sources and layers (initial visibility set from `layerVisibility` at init time)
-- New `useEffect([layerVisibility], ...)` syncs visibility changes to the live map:
-  ```ts
-  // Layer groups → layer IDs
-  const LAYER_GROUPS: Record<LayerKey, string[]> = {
-    terrain3d: [],  // handled via setTerrain
-    hillshade:  ['hillshading'],
-    contours:   ['contours-minor', 'contours-major', 'contours-labels'],
-    landcover:  ['landcover-military'],
-  };
-  ```
+Replace the single `cell-towers-unclustered` layer with four per-type circle layers. Each uses a
+static filter so Mapbox only draws the matching radio type:
 
-**`MapWithNav.tsx` changes:**
-- Import and render `LayerPanel` (positioned absolute bottom-left inside the map container)
-- Add `layerVisibility` state initialised to `DEFAULT_LAYER_VISIBILITY`
-- Pass `layerVisibility` and `onToggle` to `LayerPanel`
-- Pass `layerVisibility` to `MapView`
+| Layer ID           | Filter                             | Color (new)            |
+| ------------------ | ---------------------------------- | ---------------------- |
+| `cell-towers-gsm`  | `["==", ["get", "radio"], "GSM"]`  | `#fde047` (yellow-300) |
+| `cell-towers-umts` | `["==", ["get", "radio"], "UMTS"]` | `#fb923c` (orange-400) |
+| `cell-towers-lte`  | `["==", ["get", "radio"], "LTE"]`  | `#4ade80` (green-400)  |
+| `cell-towers-cdma` | `["==", ["get", "radio"], "CDMA"]` | `#c4b5fd` (violet-300) |
 
-### 4. Visual Style Palette
+The cluster circle color brightens from `#64748b` to `#94a3b8` (slate-400). The stroke changes
+from near-black `#1e293b` to `rgba(0,0,0,0.5)` so it no longer darkens individual dots.
 
-All layer colours follow the existing dark/military slate palette:
+The popup click handler and hover cursor handlers attach to all four per-type layer IDs instead of
+the old single ID. The visibility-sync `useEffect` iterates `LAYER_GROUPS` automatically — no
+extra logic needed once the new layer IDs are registered there.
 
-| Layer | Colour intent | Value |
-|---|---|---|
-| Hillshade shadow | Night-mode terrain shadow | `#0d1520` |
-| Hillshade highlight | Pale ridge highlight | `#3a6080` |
-| Contour (minor) | Subtle elevation line | `rgba(100,160,120,0.45)` |
-| Contour (major) | Bold 5× interval line | `rgba(130,200,150,0.75)` |
-| Contour labels | Elevation annotation | `#8acd9a` text, dark halo |
-| Landcover: wood | NO-GO forest | `rgba(20,83,45,0.55)` |
-| Landcover: scrub | SLOW-GO | `rgba(54,83,20,0.35)` |
-| Landcover: grass/crop | GO terrain | `rgba(74,108,42,0.22)` |
-| Landcover: snow | Hazard | `rgba(180,210,255,0.3)` |
-| Water (config) | Obstacle blue | `#0d2137` |
+### 3. `src/components/LayerPanel.tsx` — COMMS section
 
-### 5. Military Standard Style Config Hardening
-
-On `style.load`, add military-appropriate config hardening (suppress civilian noise):
-
-```ts
-map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
-map.setConfigProperty('basemap', 'showTransitLabels', false);
-map.setConfigProperty('basemap', 'show3dObjects', false);
-map.setConfigProperty('basemap', 'colorWater', '#0d2137');
-```
-
-These fire unconditionally — they harden the basemap for IPB use regardless of which toggleable layers are on.
-
-### 6. 3D Terrain Behaviour
-
-- When `terrain3d: true`: `map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })`
-- When `terrain3d: false`: `map.setTerrain(null)`
-- The map pitch is not forced — analysts control camera with mouse. The 3D toggle enables terrain extrusion but does not lock/unlock the camera.
-- When 3D terrain is off, hillshade + contours still provide 2D terrain readability.
-
-### 7. LayerPanel UI Layout
+Add a `COMMS` section with a `LayerRow` per radio type. The `dotColor` exactly matches the
+`circle-color` used in the corresponding Mapbox layer:
 
 ```
-┌─────────────────────────────────────┐
-│  LAYERS                          ▲  │
-├─────────────────────────────────────┤
-│  TERRAIN                            │
-│  ○ 3D Terrain                   [✓] │
-│  ○ Hillshade                    [✓] │
-├─────────────────────────────────────┤
-│  ELEVATION                          │
-│  ○ Contour Lines                [✓] │
-├─────────────────────────────────────┤
-│  VEGETATION                         │
-│  ○ Land Cover                   [✓] │
-└─────────────────────────────────────┘
+GSM   dot #fde047   UMTS  dot #fb923c
+LTE   dot #4ade80   CDMA  dot #c4b5fd
 ```
 
-Position: `absolute` bottom-left (`left-4 bottom-10`), above Mapbox attribution.
-Width: `w-52` (208px). Dark slate background with 90% opacity.
+---
+
+## Data Flow Diagram
+
+```mermaid
+flowchart LR
+    subgraph LayerPanel
+        P1["GSM checkbox"] -- "onToggle('cellGSM')" --> MW
+        P2["UMTS checkbox"] -- "onToggle('cellUMTS')" --> MW
+        P3["LTE checkbox"] -- "onToggle('cellLTE')" --> MW
+        P4["CDMA checkbox"] -- "onToggle('cellCDMA')" --> MW
+    end
+
+    subgraph MapWithNav
+        MW["layerVisibility state"] -- "prop" --> MV
+    end
+
+    subgraph MapView
+        MV["useEffect([layerVisibility])"] -- "setLayoutProperty visibility" --> L1["cell-towers-gsm"]
+        MV --> L2["cell-towers-umts"]
+        MV --> L3["cell-towers-lte"]
+        MV --> L4["cell-towers-cdma"]
+    end
+```
+
+---
+
+## Color Reference
+
+| Radio type | Old marker color     | New marker color     | Layer panel dot |
+| ---------- | -------------------- | -------------------- | --------------- |
+| GSM        | `#facc15` yellow-400 | `#fde047` yellow-300 | `#fde047`       |
+| UMTS       | `#f97316` orange-500 | `#fb923c` orange-400 | `#fb923c`       |
+| LTE        | `#22c55e` green-500  | `#4ade80` green-400  | `#4ade80`       |
+| CDMA       | `#a78bfa` violet-400 | `#c4b5fd` violet-300 | `#c4b5fd`       |
+| Cluster    | `#64748b` slate-500  | `#94a3b8` slate-400  | —               |
 
 ---
 
 ## Summary
 
-| Component | Change |
-|---|---|
-| `src/lib/layers.ts` | **New** — `LayerKey`, `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY`, `LAYER_GROUPS` |
-| `src/components/LayerPanel.tsx` | **New** — floating toggle panel |
-| `src/components/MapView.tsx` | Add terrain sources/layers; `layerVisibility` prop + sync effect |
-| `src/components/MapWithNav.tsx` | Add `layerVisibility` state; render `LayerPanel` |
+Three files change: `layers.ts`, `MapView.tsx`, `LayerPanel.tsx`.
 
-No API routes, database changes, or new npm packages are required. All terrain data comes from Mapbox-hosted tilesets already accessible with the existing `NEXT_PUBLIC_MAPBOX_TOKEN`.
+- Four new `LayerKey` values (`cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`).
+- Four Mapbox circle layers replace the single `cell-towers-unclustered` layer; cluster layers
+  are kept intact.
+- Colors are brightened one shade across the board.
+- The visibility-sync mechanism requires **zero changes** — it already iterates `LAYER_GROUPS`.
+- Tests that reference `cell-towers-unclustered` must be updated to the new layer IDs.
 
 ---
 
 ## References
 
-- Mapbox Terrain DEM source: `mapbox://mapbox.mapbox-terrain-dem-v1`
-- Mapbox Terrain v2 (contours + landcover): `mapbox://mapbox.mapbox-terrain-v2`
-- Mapbox Standard style slots: `bottom`, `middle`, `top`
-- Mapbox GL JS `setTerrain()` API — enable/disable 3D terrain extrusion
-- Mapbox Standard style `setConfigProperty('basemap', ...)` — config property reference
-- `map.setLayoutProperty(id, 'visibility', 'visible'|'none')` — runtime layer toggle
+- Mapbox GL JS `setLayoutProperty`: https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setlayoutproperty
+- Mapbox layer filters: https://docs.mapbox.com/mapbox-gl-js/style-spec/expressions/#filter
+- Tailwind color palette: https://tailwindcss.com/docs/customizing-colors
