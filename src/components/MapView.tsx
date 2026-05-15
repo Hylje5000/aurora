@@ -124,6 +124,8 @@ export default function MapView({
         },
       });
 
+      const vis = layerVisibility;
+
       // Cell tower clustered source
       map.addSource("cell-towers-source", {
         type: "geojson",
@@ -140,7 +142,7 @@ export default function MapView({
         source: "cell-towers-source",
         filter: ["has", "point_count"],
         paint: {
-          "circle-color": "#64748b",
+          "circle-color": "#94a3b8",
           "circle-radius": [
             "step",
             ["get", "point_count"],
@@ -167,77 +169,112 @@ export default function MapView({
         paint: { "text-color": "#ffffff" },
       });
 
-      // Individual tower dots colored by radio type
-      map.addLayer({
-        id: "cell-towers-unclustered",
-        type: "circle",
-        source: "cell-towers-source",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-radius": 5,
-          "circle-color": [
-            "match",
-            ["get", "radio"],
-            "GSM",
-            "#facc15",
-            "UMTS",
-            "#f97316",
-            "LTE",
-            "#22c55e",
-            "CDMA",
-            "#a78bfa",
-            "#94a3b8",
-          ],
-          "circle-stroke-width": 1,
-          "circle-stroke-color": "#1e293b",
+      // Individual tower dots — one layer per radio type for per-type visibility toggling
+      const towerLayers: Array<{
+        id: string;
+        radio: string;
+        color: string;
+        visible: boolean;
+      }> = [
+        {
+          id: "cell-towers-gsm",
+          radio: "GSM",
+          color: "#fde047",
+          visible: vis.cellGSM,
         },
-      });
+        {
+          id: "cell-towers-umts",
+          radio: "UMTS",
+          color: "#fb923c",
+          visible: vis.cellUMTS,
+        },
+        {
+          id: "cell-towers-lte",
+          radio: "LTE",
+          color: "#4ade80",
+          visible: vis.cellLTE,
+        },
+        {
+          id: "cell-towers-cdma",
+          radio: "CDMA",
+          color: "#c4b5fd",
+          visible: vis.cellCDMA,
+        },
+      ];
 
-      // Popup on click
-      map.on("click", "cell-towers-unclustered", (e) => {
-        const feature = e.features?.[0];
-        if (!feature) return;
-        const { radio, aoi_id, range_m, avg_signal } =
-          feature.properties as Record<string, unknown>;
-        const coords = (
-          feature.geometry as GeoJSON.Point
-        ).coordinates.slice() as [number, number];
-        new mapboxgl.Popup({ className: "aurora-popup" })
-          .setLngLat(coords)
-          .setHTML(
-            `<div style="
-              background:#0f172a;
-              color:#e2e8f0;
-              border:1px solid #334155;
-              border-radius:6px;
-              padding:10px 14px;
-              font-family:monospace;
-              font-size:12px;
-              line-height:1.8;
-              min-width:160px;
-            ">
-              <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${radio}</div>
-              <div><span style="color:#64748b">AOI</span>&nbsp;&nbsp;&nbsp;&nbsp;${aoi_id}</div>
-              <div><span style="color:#64748b">RANGE</span>&nbsp;&nbsp;${range_m != null ? `${range_m} m` : "—"}</div>
-              <div><span style="color:#64748b">SIGNAL</span>&nbsp;${avg_signal != null ? `${avg_signal} dBm` : "—"}</div>
-            </div>`,
-          )
-          .addTo(map);
-      });
+      for (const { id, radio, color, visible } of towerLayers) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source: "cell-towers-source",
+          filter: [
+            "all",
+            ["!", ["has", "point_count"]],
+            ["==", ["get", "radio"], radio],
+          ],
+          layout: { visibility: visible ? "visible" : "none" },
+          paint: {
+            "circle-radius": 5,
+            "circle-color": color,
+            "circle-stroke-width": 1,
+            "circle-stroke-color": "rgba(0,0,0,0.5)",
+          },
+        });
+      }
 
-      map.on("mouseenter", "cell-towers-unclustered", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "cell-towers-unclustered", () => {
-        map.getCanvas().style.cursor = "";
-      });
+      // Popup and cursor handlers for all per-type tower layers
+      const TOWER_LAYER_IDS = [
+        "cell-towers-gsm",
+        "cell-towers-umts",
+        "cell-towers-lte",
+        "cell-towers-cdma",
+      ];
+
+      for (const layerId of TOWER_LAYER_IDS) {
+        map.on("click", layerId, (e) => {
+          const feature = e.features?.[0];
+          if (!feature) return;
+          const { radio, aoi_id, range_m, avg_signal } =
+            feature.properties as Record<string, unknown>;
+          const coords = (
+            feature.geometry as GeoJSON.Point
+          ).coordinates.slice() as [number, number];
+          new mapboxgl.Popup({ className: "aurora-popup" })
+            .setLngLat(coords)
+            .setHTML(
+              `<div style="
+                background:#0f172a;
+                color:#e2e8f0;
+                border:1px solid #334155;
+                border-radius:6px;
+                padding:10px 14px;
+                font-family:monospace;
+                font-size:12px;
+                line-height:1.8;
+                min-width:160px;
+              ">
+                <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${radio}</div>
+                <div><span style="color:#64748b">AOI</span>&nbsp;&nbsp;&nbsp;&nbsp;${aoi_id}</div>
+                <div><span style="color:#64748b">RANGE</span>&nbsp;&nbsp;${range_m != null ? `${range_m} m` : "—"}</div>
+                <div><span style="color:#64748b">SIGNAL</span>&nbsp;${avg_signal != null ? `${avg_signal} dBm` : "—"}</div>
+              </div>`,
+            )
+            .addTo(map);
+        });
+
+        map.on("mouseenter", layerId, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", layerId, () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
 
       // Fetch on every pan/zoom and immediately on load
       map.on("moveend", () => fetchCellTowers(map));
       fetchCellTowers(map);
 
       // ── Terrain & intelligence layers ──────────────────────────────────
-      const vis = layerVisibility;
 
       map.addSource("mapbox-dem", {
         type: "raster-dem",
