@@ -76,10 +76,10 @@ Extend `MapView.tsx` with the new Mapbox terrain sources, layers, and visibility
 - [ ] Inside `style.load` handler, after existing config, add:
   - Military basemap config hardening:
     ```ts
-    map.setConfigProperty('basemap', 'showPointOfInterestLabels', false);
-    map.setConfigProperty('basemap', 'showTransitLabels', false);
-    map.setConfigProperty('basemap', 'show3dObjects', false);
-    map.setConfigProperty('basemap', 'colorWater', '#0d2137');
+    map.setConfigProperty("basemap", "showPointOfInterestLabels", false);
+    map.setConfigProperty("basemap", "showTransitLabels", false);
+    map.setConfigProperty("basemap", "show3dObjects", false);
+    map.setConfigProperty("basemap", "colorWater", "#0d2137");
     ```
   - Add `mapbox-dem` raster-dem source (`mapbox://mapbox.mapbox-terrain-dem-v1`, tileSize 512, maxzoom 14)
   - Add `terrain-v2` vector source (`mapbox://mapbox.mapbox-terrain-v2`)
@@ -154,20 +154,50 @@ Connect `LayerPanel` and the new `MapView` prop in `MapWithNav.tsx`.
 
 ## Journal
 
-### Phase 0
-_(to be filled in)_
+### Phase 0 — 2026-05-16
 
-### Phase 1
-_(to be filled in)_
+Baseline: 67 tests passing, zero TS errors, zero lint errors. Clean starting point.
 
-### Phase 2
-_(to be filled in)_
+### Phase 1 — 2026-05-16
 
-### Phase 3
-_(to be filled in)_
+Created `src/lib/layers.ts` with `LayerKey` union, `LayerVisibility` interface, `DEFAULT_LAYER_VISIBILITY` (terrain3d off, others on), and `LAYER_GROUPS`. 8 unit tests added. No surprises.
 
-### Phase 4
-_(to be filled in)_
+### Phase 2 — 2026-05-16
 
-### Phase 5 — Coverage Summary
-_(to be filled in)_
+Created `src/components/LayerPanel.tsx` — collapsible floating dark panel with TERRAIN / ELEVATION / VEGETATION sections. Each row uses a `<label>` wrapping a checkbox so `getByLabelText` works in tests. 8 unit tests cover render, checked state, each `onToggle` key, and collapse/expand. No surprises.
+
+### Phase 3 — 2026-05-16
+
+Extended `MapView.tsx` with:
+
+- Military basemap hardening (`showPointOfInterestLabels:false`, `showTransitLabels:false`, `show3dObjects:false`, `colorWater:#0d2137`)
+- `mapbox-dem` raster-dem source + `terrain-v2` vector source
+- 5 new layers: `hillshading`, `landcover-military`, `contours-minor`, `contours-major`, `contours-labels`
+- `styleLoadedRef` guard + `useEffect([layerVisibility])` sync
+
+**Deviation**: Initial draft used `layerVisibilityRef.current = layerVisibility` during render, which the `react-hooks/refs` ESLint rule (new in this project's config) flags as an error. Fixed by removing the ref and capturing `layerVisibility` directly in the one-shot init closure (same pattern as the existing `center`/`zoom` comment). The initial visibility is always `DEFAULT_LAYER_VISIBILITY` at mount time; subsequent changes are handled by the sync effect.
+
+Mock updated with `mockSetLayoutProperty` and `mockSetTerrain`. 9 new tests (29 total for MapView).
+
+### Phase 4 — 2026-05-16
+
+`MapWithNav` now owns `layerVisibility` state + `handleToggle` (useCallback). Renders `LayerPanel` as a sibling to `MapView`. `MapView` stub in tests extended with `data-hillshade` / `data-terrain3d` attributes; `LayerPanel` stub added with two toggle buttons. 4 new wiring tests (9 total for MapWithNav). No surprises.
+
+### Phase 5 — Coverage Summary (96 tests, 2026-05-16)
+
+```
+File               | % Stmts | % Branch | % Funcs | % Lines
+-------------------|---------|----------|---------|--------
+layers.ts          |   100   |   100    |   100   |  100
+areas.ts           |   100   |   100    |   100   |  100
+db.ts              |   100   |   100    |   100   |  100
+features/route.ts  |   100   |   100    |   100   |  100
+cell-towers/route.ts|  100   |   100    |   100   |  100
+AreaNav.tsx        |   100   |   100    |   100   |  100
+LayerPanel.tsx     |   100   |   100    |   100   |  100
+MapWithNav.tsx     |   100   |   100    |   100   |  100
+MapLoader.tsx      |   100   |   100    |     0   |  100
+MapView.tsx        |  99.39  |   71.42  |   100   | 99.39
+```
+
+MapView branch gaps (71%) are at lines 229/232 — the async `null` guards inside `mouseenter`/`mouseleave` callbacks where `map.getCanvas()` could theoretically return null. These are unreachable in practice (mapbox-gl never returns null for `getCanvas` on an initialised map). All other files at 100%.
