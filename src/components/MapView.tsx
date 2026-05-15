@@ -186,14 +186,24 @@ export default function MapView({
         const coords = (
           feature.geometry as GeoJSON.Point
         ).coordinates.slice() as [number, number];
-        new mapboxgl.Popup()
+        new mapboxgl.Popup({ className: "aurora-popup" })
           .setLngLat(coords)
           .setHTML(
-            `<div style="font-size:13px;line-height:1.6">
-              <strong>${radio}</strong><br/>
-              AOI: ${aoi_id}<br/>
-              Range: ${range_m != null ? `${range_m} m` : "—"}<br/>
-              Signal: ${avg_signal != null ? `${avg_signal} dBm` : "—"}
+            `<div style="
+              background:#0f172a;
+              color:#e2e8f0;
+              border:1px solid #334155;
+              border-radius:6px;
+              padding:10px 14px;
+              font-family:monospace;
+              font-size:12px;
+              line-height:1.8;
+              min-width:160px;
+            ">
+              <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${radio}</div>
+              <div><span style="color:#64748b">AOI</span>&nbsp;&nbsp;&nbsp;&nbsp;${aoi_id}</div>
+              <div><span style="color:#64748b">RANGE</span>&nbsp;&nbsp;${range_m != null ? `${range_m} m` : "—"}</div>
+              <div><span style="color:#64748b">SIGNAL</span>&nbsp;${avg_signal != null ? `${avg_signal} dBm` : "—"}</div>
             </div>`,
           )
           .addTo(map);
