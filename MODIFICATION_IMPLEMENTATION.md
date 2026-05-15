@@ -137,16 +137,16 @@ _Updated after each phase._
 
 ## Phase 8 — Final Cleanup & Documentation
 
-- [ ] Update `README.md` with:
+- [x] Update `README.md` with:
   - Project name and description (IPB Aurora).
   - Prerequisites (Node 20+, Mapbox token, PostgreSQL + PostGIS).
   - Setup instructions (`npm install`, `.env.local` configuration, `npm run dev`).
   - Overview of key files/directories.
-- [ ] Update `CLAUDE.md` (project's `claude.md`) to reflect the current file structure, tech decisions, and any implementation notes.
-- [ ] Run full lint + type-check + prettier one final time.
+- [x] Update `CLAUDE.md` (project's `claude.md`) to reflect the current file structure, tech decisions, and any implementation notes.
+- [x] Run full lint + type-check + prettier one final time.
 - [ ] Ask the user to inspect the running app and confirm satisfaction.
 - [ ] After completing a task, if any TODOs remain in the code or anything was not fully implemented, add new tasks here to track them.
-- [ ] Update journal with final notes.
+- [x] Update journal with final notes.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -178,4 +178,4 @@ Set dark military background (#0d1117) as default in globals.css (removed light/
 Created `src/app/api/features/route.ts` with bbox validation (parseBbox returns null on bad input → 400), graceful degradation when DATABASE_URL is absent (returns empty FeatureCollection with X-Aurora-Warning header), and a PostGIS stub query using ST_MakeEnvelope/ST_Intersects/ST_AsGeoJSON. The SQL targets a `poi` table as a placeholder — real table names will be wired in as data is ingested. tsc and lint clean.
 
 ### Phase 8
-_Not yet started._
+Rewrote README.md with project description, prerequisites, setup steps, file structure table, API docs, and scripts table. Updated CLAUDE.md with the implemented file layout, key patterns (SSR guard, map init, DB singleton, GeoJSON API), environment variable table, and corrected tech stack (Next.js 16, Tailwind v4, Mapbox GL JS — no MapLibre). Final lint + tsc both clean. No outstanding TODOs in code — remaining features (clustering, milsymbol, chokepoint analysis, explainability panel) are tracked in CLAUDE.md as future work.
