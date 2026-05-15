@@ -51,16 +51,16 @@ _Updated after each phase._
 
 ## Phase 3 — Environment & Config
 
-- [ ] Create `.env.local` with placeholder values:
+- [x] Create `.env.local` with placeholder values:
   ```
   NEXT_PUBLIC_MAPBOX_TOKEN=pk.YOUR_TOKEN_HERE
   DATABASE_URL=postgresql://user:password@localhost:5432/aurora
   ```
-- [ ] Confirm `.env.local` is git-ignored (should already be in default `.gitignore`).
-- [ ] Add a `next.config.ts` note if any Webpack/Turbopack config is needed for mapbox-gl (check if `mapbox-gl` requires any special handling in Next.js 15).
-- [ ] Run `tsc --noEmit` — no errors expected.
-- [ ] Run `npm run lint` — no errors expected.
-- [ ] Update journal.
+- [x] Confirm `.env.local` is git-ignored (should already be in default `.gitignore`).
+- [x] Add a `next.config.ts` note if any Webpack/Turbopack config is needed for mapbox-gl (check if `mapbox-gl` requires any special handling in Next.js 15).
+- [x] Run `tsc --noEmit` — no errors expected.
+- [x] Run `npm run lint` — no errors expected.
+- [x] Update journal.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -163,7 +163,7 @@ Ran `create-next-app@latest . --typescript --tailwind --eslint --app --src-dir -
 Installed `mapbox-gl` + `@types/mapbox-gl` and `pg` + `@types/pg`. The recurring `eslint-visitor-keys` engine warning (requires Node ^20.19 or ^22.13 or >=24, we have v23.11) is harmless — it's a transitive ESLint dep and does not affect functionality. tsc and lint both clean after install.
 
 ### Phase 3
-_Not yet started._
+Created `.env.local` with `NEXT_PUBLIC_MAPBOX_TOKEN` and `DATABASE_URL` placeholders. Confirmed git-ignored by `.env*` rule. No `next.config.ts` changes needed — Turbopack + `next/dynamic ssr:false` handles mapbox-gl without webpack overrides.
 
 ### Phase 4
 _Not yet started._
