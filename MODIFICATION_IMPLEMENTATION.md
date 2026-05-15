@@ -13,6 +13,12 @@
 - Created `src/test/lib/areas.test.ts` — 15 tests covering count, unique ids, bbox validity, center validity, center-within-bbox, and description length.
 - All 35 tests passing. tsc clean. prettier applied.
 
+### Phase 2 — 2026-05-15
+
+- Created `src/components/AreaNav.tsx` — horizontal button strip, absolute top-center overlay, active area highlighted with inline `borderColor` + `boxShadow` using the area's hex color.
+- Created `src/test/components/AreaNav.test.tsx` — 4 tests: all buttons render, click triggers correct id, active styling applied, sequential clicks work.
+- All 39 tests passing. tsc clean. prettier applied.
+
 ---
 
 ## Phase 0 — Baseline Verification
