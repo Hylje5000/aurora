@@ -22,12 +22,14 @@ src/
 │   ├── page.tsx                # Home — full-screen MapLoader (h-screen)
 │   ├── globals.css             # Tailwind v4 + html/body height:100%, dark background
 │   └── api/
-│       └── features/
-│           └── route.ts        # GET /api/features?bbox=... → GeoJSON FeatureCollection
+│       ├── features/
+│       │   └── route.ts        # GET /api/features?bbox=... → GeoJSON FeatureCollection (stub)
+│       └── cell-towers/
+│           └── route.ts        # GET /api/cell-towers?bbox=... → GeoJSON FeatureCollection (cell_towers table)
 ├── components/
 │   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, composes AreaNav + MapView
 │   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
-│   ├── MapView.tsx             # 'use client' Mapbox GL JS — useRef/useEffect init, AOI layers, fitBounds
+│   ├── MapView.tsx             # 'use client' Mapbox GL JS — useRef/useEffect init, AOI layers, cell tower overlay, fitBounds
 │   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
 ├── lib/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
@@ -35,12 +37,13 @@ src/
 └── test/
     ├── setup.ts                # @testing-library/jest-dom global matchers
     ├── api/
-    │   └── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
+    │   ├── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
+    │   └── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
     ├── lib/
     │   ├── db.test.ts          # pool singleton guard + query passthrough
     │   └── areas.test.ts       # AOI bbox validity, center-within-bbox, description presence
     └── components/
-        ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), AOI layer setup, fitBounds assertions
+        ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), AOI + cell tower layers, fetch, popup, fitBounds
         ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView)
         ├── AreaNav.test.tsx    # button render + onSelect callback tests
         └── MapLoader.test.tsx  # next/dynamic stub
@@ -51,13 +54,14 @@ src/
 - **Framework**: Vitest 3 + `@testing-library/react` + jsdom. Config: `vitest.config.ts` (excluded from `tsconfig.json` to avoid Vite version conflicts).
 - **Scripts**: `npm test` (run once), `npm run test:watch`, `npm run test:coverage` (v8 provider).
 - **Mock strategy**:
-  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `fitBounds`.
+  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
+  - `global.fetch` — mocked with `vi.fn()` in MapView tests to simulate cell tower API responses.
   - `@/lib/db` — `vi.mock("@/lib/db", () => ({ query: vi.fn() }))` in API route tests.
   - `pg` — `vi.mock("pg")` + `vi.resetModules()` / `delete globalThis._pgPool` in db tests.
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
   - Child components (`AreaNav`, `MapView`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 48 tests)**: `areas.ts` 100%, `db.ts` 100%, `route.ts` 100%, `AreaNav.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` 100% stmts/lines (branch gaps at null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 66 tests)**: `areas.ts` 100%, `db.ts` 100%, `features/route.ts` 100%, `cell-towers/route.ts` 100%, `AreaNav.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` ~99% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -68,6 +72,9 @@ src/
 - **AOI data module**: `src/lib/areas.ts` exports `AREAS_OF_INTEREST` — the single source of truth for bbox, color, and description. Bboxes are `[minLng, minLat, maxLng, maxLat]` EPSG:4326, directly usable in PostGIS `ST_MakeEnvelope`.
 - **DB singleton**: `global._pgPool` prevents creating a new pool on every hot reload in dev. API routes import `query` from `@/lib/db`.
 - **GeoJSON API**: `GET /api/features?bbox=minLng,minLat,maxLng,maxLat` — validates bbox, queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`, returns `FeatureCollection`. Degrades gracefully (empty collection) when `DATABASE_URL` is absent.
+- **Cell tower API**: `GET /api/cell-towers?bbox=minLng,minLat,maxLng,maxLat` — queries `cell_towers` table (PostGIS GIST index on `geom`), returns up to 2000 features with properties `id, radio, aoi_id, range_m, avg_signal, samples`. Same bbox validation and graceful degradation as the features route. `parseBbox` is imported from `@/app/api/features/route`.
+- **Cell tower overlay**: On `style.load`, `MapView` adds `cell-towers-source` (GeoJSON, `cluster:true`, `clusterMaxZoom:14`, `clusterRadius:50`) and three layers: `cell-towers-clusters` (circle), `cell-towers-cluster-count` (symbol), `cell-towers-unclustered` (circle with `match` expression coloring by radio type — GSM amber, UMTS orange, LTE green, CDMA purple). A `fetchCellTowers(map)` helper is called immediately after `style.load` and on every `moveend` event; it reads `map.getBounds()`, fetches `/api/cell-towers?bbox=...`, and calls `source.setData()`.
+- **Cell tower popup**: Clicking `cell-towers-unclustered` opens a `mapboxgl.Popup` showing radio type, AOI, estimated range (m), and average signal (dBm). Cursor changes to `pointer` on hover.
 - **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style.
 
 ## Environment Variables
@@ -82,13 +89,13 @@ Set both in `.env.local` (git-ignored).
 ## Data Architecture & Flow
 
 - **Base Map Layers (Terrain, General Roads, Elevation)**: Rendered natively via Mapbox's built-in standard vector tile APIs. No self-hosted tile server needed.
-- **Custom Overlay Layers (Cell Towers, Medical Facilities, Units, POIs)**: Fetched as GeoJSON from `/api/features?bbox=...` and rendered by Mapbox GL JS on the client.
+- **Custom Overlay Layers (Cell Towers, Medical Facilities, Units, POIs)**: Fetched as GeoJSON from dedicated API routes (`/api/cell-towers`, `/api/features`, etc.) and rendered by Mapbox GL JS on the client. Cell towers are live — fetched on every viewport change.
 - **Dynamic Dashboard**: As the user pans/zooms, the frontend passes the bounding box to API routes to query PostGIS for summary statistics (population, bridge capacity, etc.).
 
 ## Key Features to Implement
 
 1. **Interactive Map Layer**: Critical infrastructure, terrain features (GO / SLOW GO / NO GO), weather impacts.
-2. **Dynamic Viewport Clustering**: Mapbox native `cluster: true` for dense point layers (cell towers, demographics).
+2. **Dynamic Viewport Clustering**: Mapbox native `cluster: true` for dense point layers (cell towers implemented; demographics pending).
 3. **Military Symbology**: `milsymbol` library for NATO APP-6 / US MIL-STD-2525 icons on the client side.
 4. **Chokepoint & Logistics Analysis**: Road segments with bridge weight/height limits for heavy armour / convoy routing.
 5. **Explainability Panel**: UI showing active data sources and timestamps for analyst trust.
