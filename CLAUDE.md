@@ -27,9 +27,29 @@ src/
 ├── components/
 │   ├── MapView.tsx             # 'use client' Mapbox GL JS — useRef/useEffect init, cleanup
 │   └── MapLoader.tsx           # next/dynamic(MapView, {ssr:false}) — SSR guard
-└── lib/
-    └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
+├── lib/
+│   └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
+└── test/
+    ├── setup.ts                # @testing-library/jest-dom global matchers
+    ├── api/
+    │   └── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
+    ├── lib/
+    │   └── db.test.ts          # pool singleton guard + query passthrough
+    └── components/
+        ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), mount/unmount assertions
+        └── MapLoader.test.tsx  # next/dynamic stub
 ```
+
+## Testing
+
+- **Framework**: Vitest 3 + `@testing-library/react` + jsdom. Config: `vitest.config.ts` (excluded from `tsconfig.json` to avoid Vite version conflicts).
+- **Scripts**: `npm test` (run once), `npm run test:watch`, `npm run test:coverage` (v8 provider).
+- **Mock strategy**:
+  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error.
+  - `@/lib/db` — `vi.mock("@/lib/db", () => ({ query: vi.fn() }))` in API route tests.
+  - `pg` — `vi.mock("pg")` + `vi.resetModules()` / `delete globalThis._pgPool` in db tests.
+  - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
+- **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
 
 ## Key Patterns
 
