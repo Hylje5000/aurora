@@ -84,6 +84,8 @@ export default function MapView({
       const map = mapRef.current;
       if (!map) return;
 
+      map.setConfigProperty("basemap", "lightPreset", "night");
+
       // AOI highlight layers
       map.addSource("aoi-source", {
         type: "geojson",
