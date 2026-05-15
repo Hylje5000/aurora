@@ -39,11 +39,11 @@ Automated Intelligence Preparation of the Battlespace — open-source situationa
 
 Three operational areas are pre-defined in `src/lib/areas.ts` and visible on the map:
 
-| Area    | Description |
-|---------|-------------|
-| **Lappi** | Northern Lapland — E8/E75 corridors, Saariselkä highlands, Inari lake system |
-| **Karjala** | North Karelia — Finnish-Russian border zone, Joensuu hub, Niirala crossing |
-| **Turku** | Archipelago Sea — maritime chokepoints, Turku port, Stockholm/Tallinn ferry links |
+| Area        | Description                                                                       |
+| ----------- | --------------------------------------------------------------------------------- |
+| **Lappi**   | Northern Lapland — E8/E75 corridors, Saariselkä highlands, Inari lake system      |
+| **Karjala** | North Karelia — Finnish-Russian border zone, Joensuu hub, Niirala crossing        |
+| **Turku**   | Archipelago Sea — maritime chokepoints, Turku port, Stockholm/Tallinn ferry links |
 
 Use the buttons at the top of the map to animate to each area. The bounding boxes are in `[minLng, minLat, maxLng, maxLat]` EPSG:4326 format — directly usable in PostGIS `ST_MakeEnvelope` queries.
 

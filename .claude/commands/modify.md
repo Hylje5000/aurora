@@ -52,6 +52,7 @@ The implementation plan should include a section for a "Journal" which will be u
 The plan should include instructions similar to: "After completing a task, if you added any TODOs to the code or didn't fully implement anything, make sure to add new tasks so that you can come back and complete them later." to prevent leaving tasks unfinished.
 
 In the first phase of the implementation plan, include:
+
 - [ ] Run all tests to ensure the project is in a good state before starting modifications.
 
 The implementation plan should specify after each phase that you should:
