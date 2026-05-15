@@ -22,6 +22,12 @@
 - `console.error` fires in the 500 test (route logs the error) — this appears in stderr during `npm test` but is not a failure; it's correct behavior.
 - All 11 tests pass. Lint and tsc clean.
 
+### Phase 3 — 2026-05-15
+
+- Mocked `pg` at module level; used `vi.resetModules()` + `delete globalThis._pgPool` in `beforeEach` to reset the singleton between tests (required because the module caches the pool in a global).
+- 3 tests: Pool constructed with correct connectionString, singleton reuse (Pool called once across two imports), `query` delegates args correctly.
+- All 14 tests pass. Lint and tsc clean.
+
 ---
 
 ## Phase 0 — Baseline Verification
