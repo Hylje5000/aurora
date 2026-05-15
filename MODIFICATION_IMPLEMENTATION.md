@@ -19,6 +19,13 @@
 - Created `src/test/components/AreaNav.test.tsx` — 4 tests: all buttons render, click triggers correct id, active styling applied, sequential clicks work.
 - All 39 tests passing. tsc clean. prettier applied.
 
+### Phase 3 — 2026-05-15
+
+- Extended `MapView.tsx`: added `selectedAreaId` prop, `buildAoiCollection()` helper, `map.on('style.load', ...)` registers aoi-source + aoi-fill + aoi-outline layers, second `useEffect([selectedAreaId])` calls `fitBounds` with padding 60 / duration 1200.
+- `buildAoiCollection` returns a typed FeatureCollection using `as const` — no external `geojson` type import needed.
+- Extended `MapView.test.tsx` with 4 new tests: style.load listener registered, addSource/addLayer called after triggering it, fitBounds called with correct bbox, fitBounds skipped when null.
+- All 43 tests passing. tsc clean. prettier no-op.
+
 ---
 
 ## Phase 0 — Baseline Verification
