@@ -26,6 +26,13 @@
 - Extended `MapView.test.tsx` with 4 new tests: style.load listener registered, addSource/addLayer called after triggering it, fitBounds called with correct bbox, fitBounds skipped when null.
 - All 43 tests passing. tsc clean. prettier no-op.
 
+### Phase 4 — 2026-05-15
+
+- Created `src/components/MapWithNav.tsx` — `'use client'` wrapper, owns `selectedAreaId` state, renders `AreaNav` + `MapView` inside `relative w-full h-full` container.
+- Updated `MapLoader.tsx` to dynamically import `MapWithNav` instead of `MapView` (one-line change).
+- Created `src/test/components/MapWithNav.test.tsx` — 5 tests using stubbed AreaNav/MapView to verify: renders, children present, initial null state, selection propagation, selection change.
+- All 48 tests passing. tsc clean. prettier no-op.
+
 ---
 
 ## Phase 0 — Baseline Verification
