@@ -47,14 +47,27 @@ _(Updated after each phase)_
 
 ## Journal
 
-### Phase 0
+### Phase 0 — 2026-05-15
 
-_(to be filled in)_
+- Found 1 pre-existing failing test: `db.test.ts` expected `Pool` to be called without `ssl` option, but `db.ts` had been updated to pass `ssl: { rejectUnauthorized: false }`. Fixed the test expectation. All 66 tests passed after fix.
 
-### Phase 1
+### Phase 1 — 2026-05-15
 
-_(to be filled in)_
+- Added `map.setConfigProperty("basemap", "lightPreset", "night")` as first line of `style.load` in `MapView.tsx`.
+- Added dark NavigationControl CSS block to `globals.css` (slate-800 bg, slate-700 borders, inverted SVG icons).
+- Bumped AreaNav inactive border from `border-white/20` to `border-white/30`.
+- Added `mockSetConfigProperty` to the MapView test mock and a new test asserting `lightPreset: "night"` is applied on `style.load`.
+- 67 tests passing. Lint clean. Types OK. Prettier no changes to source files.
 
-### Phase 2
+### Phase 2 — 2026-05-15
 
-_(to be filled in)_
+Coverage summary (67 tests):
+- `cell-towers/route.ts`: 100% stmts/branch/funcs/lines
+- `features/route.ts`: 100% stmts/branch/funcs/lines
+- `areas.ts`: 100% stmts/branch/funcs/lines
+- `db.ts`: 100% stmts/branch/funcs/lines
+- `AreaNav.tsx`: 100% stmts/branch/funcs/lines
+- `MapWithNav.tsx`: 100% stmts/branch/funcs/lines
+- `MapView.tsx`: 98.97% stmts/lines, 73.07% branch (gaps at async null guards — expected)
+- `MapLoader.tsx`: 100% stmts/lines
+- Updated `CLAUDE.md` with dark theme pattern and updated coverage count.
