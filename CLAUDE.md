@@ -6,12 +6,12 @@ We are building a web application for the Junction Defence Hackathon (Challenge 
 
 ## Tech Stack
 
-* **Frontend**: Next.js 16 (React), Tailwind CSS v4, Mapbox GL JS.
-* **Router**: App Router (`src/app/`), TypeScript, Turbopack in dev.
-* **Backend**: Next.js API Routes (`src/app/api/`) for GeoJSON overlay queries and dashboard aggregations.
-* **Map Layer**: Mapbox standard vector tiles for terrain, roads, and basemap. Custom overlay layers rendered as GeoJSON via API routes.
-* **Database**: PostgreSQL with the PostGIS extension. Accessed via a singleton `pg.Pool` in `src/lib/db.ts`.
-* **Data Ingestion (Pre-computation)**: Python background scripts (GeoPandas, requests, etc.) to fetch, clean, and load open-source data into PostGIS before the demo.
+- **Frontend**: Next.js 16 (React), Tailwind CSS v4, Mapbox GL JS.
+- **Router**: App Router (`src/app/`), TypeScript, Turbopack in dev.
+- **Backend**: Next.js API Routes (`src/app/api/`) for GeoJSON overlay queries and dashboard aggregations.
+- **Map Layer**: Mapbox standard vector tiles for terrain, roads, and basemap. Custom overlay layers rendered as GeoJSON via API routes.
+- **Database**: PostgreSQL with the PostGIS extension. Accessed via a singleton `pg.Pool` in `src/lib/db.ts`.
+- **Data Ingestion (Pre-computation)**: Python background scripts (GeoPandas, requests, etc.) to fetch, clean, and load open-source data into PostGIS before the demo.
 
 ## File Structure
 
@@ -33,26 +33,26 @@ src/
 
 ## Key Patterns
 
-* **Mapbox SSR guard**: `mapbox-gl` uses `window` at import time. `MapLoader` wraps `MapView` with `next/dynamic({ ssr: false })` so it is never imported in the server bundle.
-* **Map init**: `MapView` holds the DOM container via `containerRef` and the `Map` instance via `mapRef` (not state). Initialised once in `useEffect([], [])` with cleanup `map.remove()`.
-* **DB singleton**: `global._pgPool` prevents creating a new pool on every hot reload in dev. API routes import `query` from `@/lib/db`.
-* **GeoJSON API**: `GET /api/features?bbox=minLng,minLat,maxLng,maxLat` — validates bbox, queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`, returns `FeatureCollection`. Degrades gracefully (empty collection) when `DATABASE_URL` is absent.
-* **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style.
+- **Mapbox SSR guard**: `mapbox-gl` uses `window` at import time. `MapLoader` wraps `MapView` with `next/dynamic({ ssr: false })` so it is never imported in the server bundle.
+- **Map init**: `MapView` holds the DOM container via `containerRef` and the `Map` instance via `mapRef` (not state). Initialised once in `useEffect([], [])` with cleanup `map.remove()`.
+- **DB singleton**: `global._pgPool` prevents creating a new pool on every hot reload in dev. API routes import `query` from `@/lib/db`.
+- **GeoJSON API**: `GET /api/features?bbox=minLng,minLat,maxLng,maxLat` — validates bbox, queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`, returns `FeatureCollection`. Degrades gracefully (empty collection) when `DATABASE_URL` is absent.
+- **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style.
 
 ## Environment Variables
 
-| Variable | Where used |
-|----------|-----------|
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | `MapView.tsx` — `mapboxgl.accessToken` |
-| `DATABASE_URL` | `src/lib/db.ts` — `pg.Pool` connectionString |
+| Variable                   | Where used                                   |
+| -------------------------- | -------------------------------------------- |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | `MapView.tsx` — `mapboxgl.accessToken`       |
+| `DATABASE_URL`             | `src/lib/db.ts` — `pg.Pool` connectionString |
 
 Set both in `.env.local` (git-ignored).
 
 ## Data Architecture & Flow
 
-* **Base Map Layers (Terrain, General Roads, Elevation)**: Rendered natively via Mapbox's built-in standard vector tile APIs. No self-hosted tile server needed.
-* **Custom Overlay Layers (Cell Towers, Medical Facilities, Units, POIs)**: Fetched as GeoJSON from `/api/features?bbox=...` and rendered by Mapbox GL JS on the client.
-* **Dynamic Dashboard**: As the user pans/zooms, the frontend passes the bounding box to API routes to query PostGIS for summary statistics (population, bridge capacity, etc.).
+- **Base Map Layers (Terrain, General Roads, Elevation)**: Rendered natively via Mapbox's built-in standard vector tile APIs. No self-hosted tile server needed.
+- **Custom Overlay Layers (Cell Towers, Medical Facilities, Units, POIs)**: Fetched as GeoJSON from `/api/features?bbox=...` and rendered by Mapbox GL JS on the client.
+- **Dynamic Dashboard**: As the user pans/zooms, the frontend passes the bounding box to API routes to query PostGIS for summary statistics (population, bridge capacity, etc.).
 
 ## Key Features to Implement
 
@@ -64,8 +64,8 @@ Set both in `.env.local` (git-ignored).
 
 ## Primary Open-Source Data Sources
 
-* **Terrain & Topography**: National Land Survey of Finland (NLS) GeoPackages.
-* **Transportation (Roads/Bridges)**: Digiroad from the Finnish Transport Infrastructure Agency (FTIA).
-* **Weather**: Finnish Meteorological Institute (FMI) Open Data WFS.
-* **Demographics**: Statistics Finland (Paavo) 1km × 1km grid data.
-* **Space & Comm Signatures**: N2YO REST API for satellite groundtracks; OpenCelliD / CellMapper for cellular networks.
+- **Terrain & Topography**: National Land Survey of Finland (NLS) GeoPackages.
+- **Transportation (Roads/Bridges)**: Digiroad from the Finnish Transport Infrastructure Agency (FTIA).
+- **Weather**: Finnish Meteorological Institute (FMI) Open Data WFS.
+- **Demographics**: Statistics Finland (Paavo) 1km × 1km grid data.
+- **Space & Comm Signatures**: N2YO REST API for satellite groundtracks; OpenCelliD / CellMapper for cellular networks.

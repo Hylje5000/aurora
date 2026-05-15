@@ -154,28 +154,37 @@ _Updated after each phase._
 ## Journal
 
 ### Phase 0
+
 Node.js v23.11.0 (above 20.9 minimum), npm 10.9.2. No conflicting Next.js files in the repo.
 
 ### Phase 1
-Ran `create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --no-react-compiler`. Had to temporarily move existing files (.local/, claude.md, MODIFICATION_*.md) since create-next-app refuses to init in a non-empty directory. Restored them after. On macOS case-insensitive FS, our `claude.md` became `CLAUDE.md`; content is intact. Generated Next.js 16.2.6 with Turbopack. Dev server boots in 209ms. Lint and tsc clean.
+
+Ran `create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --no-react-compiler`. Had to temporarily move existing files (.local/, claude.md, MODIFICATION\_\*.md) since create-next-app refuses to init in a non-empty directory. Restored them after. On macOS case-insensitive FS, our `claude.md` became `CLAUDE.md`; content is intact. Generated Next.js 16.2.6 with Turbopack. Dev server boots in 209ms. Lint and tsc clean.
 
 ### Phase 2
+
 Installed `mapbox-gl` + `@types/mapbox-gl` and `pg` + `@types/pg`. The recurring `eslint-visitor-keys` engine warning (requires Node ^20.19 or ^22.13 or >=24, we have v23.11) is harmless — it's a transitive ESLint dep and does not affect functionality. tsc and lint both clean after install.
 
 ### Phase 3
+
 Created `.env.local` with `NEXT_PUBLIC_MAPBOX_TOKEN` and `DATABASE_URL` placeholders. Confirmed git-ignored by `.env*` rule. No `next.config.ts` changes needed — Turbopack + `next/dynamic ssr:false` handles mapbox-gl without webpack overrides.
 
 ### Phase 4
+
 Created `src/lib/db.ts` with a `pg.Pool` singleton guarded by `global._pgPool` to survive Next.js hot reloads in dev. Exports a generic `query<T>` helper. Removed an unnecessary `eslint-disable-next-line no-var` comment (ESLint config doesn't flag `var` in `declare global` blocks). tsc and lint clean.
 
 ### Phase 5
+
 Created `MapView.tsx` (`'use client'`, mapboxgl init via useRef/useEffect, NavigationControl added, cleanup on unmount) and `MapLoader.tsx` (next/dynamic ssr:false wrapper with dark fallback). eslint-disable comment on the exhaustive-deps rule is justified — center/zoom are one-shot init props. tsc and lint clean.
 
 ### Phase 6
+
 Set dark military background (#0d1117) as default in globals.css (removed light/dark media query — always dark for ops tool). Added `html, body { height: 100% }` for full-screen map support. Updated layout.tsx metadata to "Aurora IPB". Replaced boilerplate page.tsx with a `h-screen` main wrapping MapLoader. Dev server starts cleanly in 261ms and picks up .env.local. Map container renders; tiles won't load until a real Mapbox token is set.
 
 ### Phase 7
+
 Created `src/app/api/features/route.ts` with bbox validation (parseBbox returns null on bad input → 400), graceful degradation when DATABASE_URL is absent (returns empty FeatureCollection with X-Aurora-Warning header), and a PostGIS stub query using ST_MakeEnvelope/ST_Intersects/ST_AsGeoJSON. The SQL targets a `poi` table as a placeholder — real table names will be wired in as data is ingested. tsc and lint clean.
 
 ### Phase 8
+
 Rewrote README.md with project description, prerequisites, setup steps, file structure table, API docs, and scripts table. Updated CLAUDE.md with the implemented file layout, key patterns (SSR guard, map init, DB singleton, GeoJSON API), environment variable table, and corrected tech stack (Next.js 16, Tailwind v4, Mapbox GL JS — no MapLibre). Final lint + tsc both clean. No outstanding TODOs in code — remaining features (clustering, milsymbol, chokepoint analysis, explainability panel) are tracked in CLAUDE.md as future work.
