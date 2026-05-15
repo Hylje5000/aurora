@@ -8,6 +8,7 @@ export const pool =
   global._pgPool ??
   (global._pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
   }));
 
 export async function query<T extends QueryResultRow = QueryResultRow>(
