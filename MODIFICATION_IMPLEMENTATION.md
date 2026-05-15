@@ -3,15 +3,24 @@
 ## Journal
 
 ### Phase 0 — 2026-05-15
+
 - Git status was clean except for the two modification doc files (MODIFICATION_DESIGN.md, MODIFICATION_IMPLEMENTATION.md) as expected.
 - `npm test` produced "Missing script: test" — confirmed no test runner existed.
 - Original scripts: `dev`, `build`, `start`, `lint`.
 
 ### Phase 1 — 2026-05-15
-- Installed Vitest 3.2.4, @vitejs/plugin-react 6.0.2, @testing-library/* suite, jsdom 27, vite-tsconfig-paths 6.1.1.
+
+- Installed Vitest 3.2.4, @vitejs/plugin-react 6.0.2, @testing-library/\* suite, jsdom 27, vite-tsconfig-paths 6.1.1.
 - Discovered: Vitest 3.x bundles its own vendored Vite (rolldown-based), which conflicts with the outer Vite used by @vitejs/plugin-react when tsc type-checks `vitest.config.ts`. Fix: exclude `vitest.config.ts` from `tsconfig.json`. This is safe — the config is only consumed by Vitest, not the Next.js build.
 - `next lint` subcommand syntax changed in Next.js 16; `npm run lint` (which runs `eslint`) works correctly.
 - Runner confirmed operational: `npm test` exits with code 1 and message "No test files found" — expected.
+
+### Phase 2 — 2026-05-15
+
+- Exported `parseBbox` from `route.ts` to allow direct unit testing.
+- Wrote 11 tests: 6 for `parseBbox` (null cases + valid tuple) and 5 for the `GET` handler (400 missing, 400 malformed, 200 empty+warning, 200 with features, 500 on DB error).
+- `console.error` fires in the 500 test (route logs the error) — this appears in stderr during `npm test` but is not a failure; it's correct behavior.
+- All 11 tests pass. Lint and tsc clean.
 
 ---
 
