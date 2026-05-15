@@ -67,12 +67,12 @@ _Updated after each phase._
 
 ## Phase 4 — Database Client
 
-- [ ] Create `src/lib/db.ts` — singleton `pg.Pool` using `DATABASE_URL`, with the global dev-reload guard.
-- [ ] Export a typed `query` helper for convenience.
-- [ ] Run `tsc --noEmit` — fix any type errors.
-- [ ] Run `npm run lint` — fix any lint issues.
-- [ ] Run `prettier --write .` — fix formatting.
-- [ ] Update journal.
+- [x] Create `src/lib/db.ts` — singleton `pg.Pool` using `DATABASE_URL`, with the global dev-reload guard.
+- [x] Export a typed `query` helper for convenience.
+- [x] Run `tsc --noEmit` — fix any type errors.
+- [x] Run `npm run lint` — fix any lint issues.
+- [x] Run `prettier --write .` — fix formatting.
+- [x] Update journal.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -166,7 +166,7 @@ Installed `mapbox-gl` + `@types/mapbox-gl` and `pg` + `@types/pg`. The recurring
 Created `.env.local` with `NEXT_PUBLIC_MAPBOX_TOKEN` and `DATABASE_URL` placeholders. Confirmed git-ignored by `.env*` rule. No `next.config.ts` changes needed — Turbopack + `next/dynamic ssr:false` handles mapbox-gl without webpack overrides.
 
 ### Phase 4
-_Not yet started._
+Created `src/lib/db.ts` with a `pg.Pool` singleton guarded by `global._pgPool` to survive Next.js hot reloads in dev. Exports a generic `query<T>` helper. Removed an unnecessary `eslint-disable-next-line no-var` comment (ESLint config doesn't flag `var` in `declare global` blocks). tsc and lint clean.
 
 ### Phase 5
 _Not yet started._
