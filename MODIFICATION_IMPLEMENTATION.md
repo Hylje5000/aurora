@@ -38,13 +38,13 @@ _Updated after each phase._
 
 ## Phase 2 — Install Dependencies
 
-- [ ] Install Mapbox GL JS: `npm install mapbox-gl`
-- [ ] Install Mapbox GL JS types: `npm install --save-dev @types/mapbox-gl`
-- [ ] Install PostgreSQL client: `npm install pg`
-- [ ] Install pg types: `npm install --save-dev @types/pg`
-- [ ] Run `tsc --noEmit` — fix any type errors introduced by new packages.
-- [ ] Run `npm run lint --fix` — fix any lint issues.
-- [ ] Update journal.
+- [x] Install Mapbox GL JS: `npm install mapbox-gl`
+- [x] Install Mapbox GL JS types: `npm install --save-dev @types/mapbox-gl`
+- [x] Install PostgreSQL client: `npm install pg`
+- [x] Install pg types: `npm install --save-dev @types/pg`
+- [x] Run `tsc --noEmit` — fix any type errors introduced by new packages.
+- [x] Run `npm run lint --fix` — fix any lint issues.
+- [x] Update journal.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -160,7 +160,7 @@ Node.js v23.11.0 (above 20.9 minimum), npm 10.9.2. No conflicting Next.js files 
 Ran `create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --no-react-compiler`. Had to temporarily move existing files (.local/, claude.md, MODIFICATION_*.md) since create-next-app refuses to init in a non-empty directory. Restored them after. On macOS case-insensitive FS, our `claude.md` became `CLAUDE.md`; content is intact. Generated Next.js 16.2.6 with Turbopack. Dev server boots in 209ms. Lint and tsc clean.
 
 ### Phase 2
-_Not yet started._
+Installed `mapbox-gl` + `@types/mapbox-gl` and `pg` + `@types/pg`. The recurring `eslint-visitor-keys` engine warning (requires Node ^20.19 or ^22.13 or >=24, we have v23.11) is harmless — it's a transitive ESLint dep and does not affect functionality. tsc and lint both clean after install.
 
 ### Phase 3
 _Not yet started._
