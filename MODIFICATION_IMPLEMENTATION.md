@@ -35,6 +35,14 @@
 - `MapLoader`: 2 tests — renders without crash, dynamic stub visible. Mocked `next/dynamic` to return a plain stub component.
 - All 20 tests pass. Lint and tsc clean.
 
+### Phase 6 — 2026-05-15
+
+- `@vitest/coverage-v8` must match Vitest's major version. Installing v4 (latest) while Vitest is v3 broke the module graph — `@vitejs/plugin-react` lost its `vite` peer dep. Fix: pin coverage-v8 to `^3`, then install `vite` explicitly as a dev dependency to satisfy the peer dep.
+- ESLint scanned the generated `coverage/` directory and emitted a spurious warning. Fix: add `"coverage/**"` to `eslint.config.mjs` ignores.
+- Final coverage summary (v8): `api/features/route.ts` 100%, `lib/db.ts` 100%, `components/MapView.tsx` 100% stmts/lines (one branch gap at line 22 — the guard `if (!containerRef.current || mapRef.current)` second condition is never true in tests), `components/MapLoader.tsx` 100% stmts/lines (0% funcs — expected, `next/dynamic` is mocked out entirely).
+- Updated README.md with Testing section and extended Scripts table.
+- Updated CLAUDE.md with test file layout, testing patterns, mock strategy, and coverage gotchas.
+
 ### Phase 5 — 2026-05-15
 
 - Replaced the hedging `"npm test or npx jest or npx vitest run, whichever is configured"` line in `modify.md` with `npm test` and explicit hard-blocker language.

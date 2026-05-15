@@ -62,13 +62,38 @@ Returns a GeoJSON `FeatureCollection` of POIs intersecting the given bounding bo
 - **400** — missing or malformed `bbox`
 - **200** — `FeatureCollection` (empty if `DATABASE_URL` is not configured)
 
+## Testing
+
+The project uses [Vitest](https://vitest.dev/) with React Testing Library and jsdom.
+
+```bash
+npm test                  # run all tests once
+npm run test:watch        # watch mode
+npm run test:coverage     # run with v8 coverage report
+```
+
+Tests live under `src/test/` mirroring the `src/` structure:
+
+```
+src/test/
+├── setup.ts              # jest-dom matchers
+├── api/features.test.ts  # parseBbox + GET handler
+├── lib/db.test.ts        # pool singleton
+└── components/
+    ├── MapView.test.tsx
+    └── MapLoader.test.tsx
+```
+
 ## Scripts
 
-| Command         | Description                  |
-| --------------- | ---------------------------- |
-| `npm run dev`   | Start dev server (Turbopack) |
-| `npm run build` | Production build             |
-| `npm run lint`  | Run ESLint                   |
+| Command                 | Description                  |
+| ----------------------- | ---------------------------- |
+| `npm run dev`           | Start dev server (Turbopack) |
+| `npm run build`         | Production build             |
+| `npm run lint`          | Run ESLint                   |
+| `npm test`              | Run test suite               |
+| `npm run test:watch`    | Vitest watch mode            |
+| `npm run test:coverage` | Tests with v8 coverage       |
 
 ## Tech Stack
 
