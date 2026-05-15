@@ -1,188 +1,121 @@
-# Implementation Plan: AOI Navigation & Highlighting
+# Implementation Plan: Cell Tower Overlay — Viewport-Driven API + Map Layer
+
+## Journal
+
+*(Updated after each phase)*
+
+---
+
+## Phase 0 — Baseline health check
+
+- [ ] Run `npm test` and confirm all existing tests pass. Record count in journal.
+
+---
+
+## Phase 1 — API route `/api/cell-towers`
+
+### Tasks
+
+- [ ] Create `src/app/api/cell-towers/route.ts`:
+  - Import `parseBbox` from `@/app/api/features/route`.
+  - Accept `GET ?bbox=minLng,minLat,maxLng,maxLat`.
+  - Return `400` if bbox missing or invalid.
+  - Return empty `FeatureCollection` + `X-Aurora-Warning` header if `DATABASE_URL` is absent.
+  - Query `cell_towers` with `ST_Intersects` + `ST_MakeEnvelope($1,$2,$3,$4,4326)` `LIMIT 2000`.
+  - Map each row to a GeoJSON `Feature` with properties: `id, radio, aoi_id, range_m, avg_signal, samples`.
+  - Return `500` with `{ error: "Database query failed" }` on DB error.
+- [ ] Create `src/test/api/cell-towers.test.ts`:
+  - Mirror the structure of `src/test/api/features.test.ts`.
+  - `parseBbox` is already tested — import and test only the `GET` handler here.
+  - Cover: missing bbox (400), invalid bbox (400), no `DATABASE_URL` (200 + warning header + empty collection), DB returns rows (200 + correct FeatureCollection shape), DB throws (500).
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read this plan; update it if anything changed.
+- [ ] Update journal below with findings.
+- [ ] Present `git diff` summary and commit message to user for approval. Wait for approval before committing.
+
+---
+
+## Phase 2 — MapView: clustered cell tower layer + fetch
+
+### Tasks
+
+- [ ] Modify `src/components/MapView.tsx`:
+  - Add a `fetchCellTowers(map: mapboxgl.Map): Promise<void>` helper inside the component file (not exported):
+    - Reads `map.getBounds()` → builds bbox string `minLng,minLat,maxLng,maxLat`.
+    - Calls `fetch('/api/cell-towers?bbox=...')`.
+    - Parses response JSON as a GeoJSON `FeatureCollection`.
+    - Calls `(map.getSource('cell-towers-source') as mapboxgl.GeoJSONSource).setData(data)`.
+    - Catches errors with `console.error`.
+  - On `style.load`, after adding AOI layers:
+    - Add GeoJSON source `cell-towers-source` with empty `FeatureCollection`, `cluster: true`, `clusterMaxZoom: 14`, `clusterRadius: 50`.
+    - Add layer `cell-towers-clusters` (type `circle`) for clustered points.
+    - Add layer `cell-towers-cluster-count` (type `symbol`) showing cluster count text.
+    - Add layer `cell-towers-unclustered` (type `circle`) for individual towers, with a `match` expression on `["get", "radio"]` to color by type: GSM→`#facc15`, UMTS→`#f97316`, LTE→`#22c55e`, CDMA→`#a78bfa`, fallback→`#94a3b8`.
+    - Register `map.on('click', 'cell-towers-unclustered', ...)` popup handler.
+    - Register `map.on('mouseenter', 'cell-towers-unclustered', ...)` and `map.on('mouseleave', 'cell-towers-unclustered', ...)` for cursor changes.
+    - Register `map.on('moveend', () => fetchCellTowers(map))`.
+    - Call `fetchCellTowers(map)` immediately after all layers are added (initial load).
+  - Popup content: radio type, AOI, estimated range (m), average signal (dBm).
+- [ ] Modify `src/test/components/MapView.test.tsx`:
+  - Extend the `vi.hoisted` mock to include: `mockGetBounds`, `mockGetSource`, `mockSetData`, `mockPopup` (`setLngLat`, `setHTML`, `addTo`), `MockPopup`.
+  - Add to the `mapbox-gl` mock: `Popup: MockPopup`, and wire `getSource` to return `{ setData: mockSetData }`.
+  - Add test: `style.load` callback registers `moveend` listener.
+  - Add test: `style.load` callback adds `cell-towers-source` with `cluster: true`.
+  - Add test: `style.load` callback adds `cell-towers-clusters`, `cell-towers-cluster-count`, `cell-towers-unclustered` layers.
+  - Add test: `style.load` callback calls `fetch` (mock global `fetch`) for initial tower load.
+  - Add test: `moveend` callback calls `fetch` with updated bbox.
+  - Add test: clicking `cell-towers-unclustered` (simulate by invoking the registered click handler) creates and shows a `Popup`.
+  - Note: `global.fetch` must be mocked with `vi.fn().mockResolvedValue(...)` returning a valid FeatureCollection.
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read this plan; update it if anything changed.
+- [ ] Update journal below.
+- [ ] Present `git diff` summary and commit message to user for approval. Wait for approval before committing.
+- [ ] After committing, verify the change hot-reloads correctly in the browser (confirm towers appear when navigating to a tower-dense AOI).
+
+---
+
+## Phase 3 — Final polish & wrap-up
+
+- [ ] Run `npm run test:coverage` and record the summary in the journal.
+- [ ] Update `README.md` if one exists with relevant information about the cell tower overlay.
+- [ ] Update `CLAUDE.md` to reflect:
+  - New API route `GET /api/cell-towers?bbox=...`.
+  - New Mapbox layers: `cell-towers-source`, `cell-towers-clusters`, `cell-towers-cluster-count`, `cell-towers-unclustered`.
+  - `fetchCellTowers` helper in `MapView.tsx`.
+  - New test file `src/test/api/cell-towers.test.ts`.
+- [ ] After completing any task, if TODOs remain in the code or anything is partially implemented, add tasks here to track them.
+- [ ] Ask the user to inspect the running app and confirm they are satisfied, or if any modifications are needed.
+
+---
 
 ## Journal
 
 ### Phase 0 — 2026-05-15
-
-- Git clean (only MODIFICATION_DESIGN.md and MODIFICATION_IMPLEMENTATION.md modified — expected).
-- 20 tests passing across 4 test files before any changes.
+- `npm install` required (node_modules not present). All 48 pre-existing tests passed after install.
 
 ### Phase 1 — 2026-05-15
-
-- Created `src/lib/areas.ts` with `AreaOfInterest` interface and `AREAS_OF_INTEREST` array (3 areas: Lappi, Karjala, Turku).
-- Created `src/test/lib/areas.test.ts` — 15 tests covering count, unique ids, bbox validity, center validity, center-within-bbox, and description length.
-- All 35 tests passing. tsc clean. prettier applied.
+- Created `src/app/api/cell-towers/route.ts` — imports `parseBbox` from the features route to avoid duplication.
+- Created `src/test/api/cell-towers.test.ts` — 7 tests, all passing (55 total after phase).
+- `next lint --fix` flag not supported in this Next.js version; used `eslint` directly via `npm run lint`.
 
 ### Phase 2 — 2026-05-15
-
-- Created `src/components/AreaNav.tsx` — horizontal button strip, absolute top-center overlay, active area highlighted with inline `borderColor` + `boxShadow` using the area's hex color.
-- Created `src/test/components/AreaNav.test.tsx` — 4 tests: all buttons render, click triggers correct id, active styling applied, sequential clicks work.
-- All 39 tests passing. tsc clean. prettier applied.
+- Updated `MapView.tsx` with `fetchCellTowers` helper, clustered GeoJSON source, 3 new layers, `moveend` listener, click popup, and cursor handlers.
+- Extended `MapView.test.tsx` mock with `getBounds`, `getSource`, `setData`, `Popup`, and `global.fetch`; added 11 new tests (66 total after phase, all passing).
+- Removed an unused `EMPTY_FC` constant caught by lint.
 
 ### Phase 3 — 2026-05-15
-
-- Extended `MapView.tsx`: added `selectedAreaId` prop, `buildAoiCollection()` helper, `map.on('style.load', ...)` registers aoi-source + aoi-fill + aoi-outline layers, second `useEffect([selectedAreaId])` calls `fitBounds` with padding 60 / duration 1200.
-- `buildAoiCollection` returns a typed FeatureCollection using `as const` — no external `geojson` type import needed.
-- Extended `MapView.test.tsx` with 4 new tests: style.load listener registered, addSource/addLayer called after triggering it, fitBounds called with correct bbox, fitBounds skipped when null.
-- All 43 tests passing. tsc clean. prettier no-op.
-
-### Phase 4 — 2026-05-15
-
-- Created `src/components/MapWithNav.tsx` — `'use client'` wrapper, owns `selectedAreaId` state, renders `AreaNav` + `MapView` inside `relative w-full h-full` container.
-- Updated `MapLoader.tsx` to dynamically import `MapWithNav` instead of `MapView` (one-line change).
-- Created `src/test/components/MapWithNav.test.tsx` — 5 tests using stubbed AreaNav/MapView to verify: renders, children present, initial null state, selection propagation, selection change.
-- All 48 tests passing. tsc clean. prettier no-op.
-
-### Phase 5 — 2026-05-15
-
-- Coverage summary (48 tests, v8 provider):
-  - `src/lib/areas.ts`: 100% stmts / 100% branch / 100% funcs / 100% lines
-  - `src/lib/db.ts`: 100% / 100% / 100% / 100%
-  - `src/app/api/features/route.ts`: 100% / 100% / 100% / 100%
-  - `src/components/AreaNav.tsx`: 100% / 100% / 100% / 100%
-  - `src/components/MapWithNav.tsx`: 100% / 100% / 100% / 100%
-  - `src/components/MapView.tsx`: 100% stmts / 80% branch / 100% funcs / 100% lines (branch gaps at null-guard inside style.load callback and unknown-area guard — unreachable in normal use)
-  - `src/components/MapLoader.tsx`: 100% stmts / 100% branch / 0% funcs / 100% lines (0% funcs expected — dynamic import mocked out entirely)
-- Updated README.md with Areas of Interest table, updated project structure, updated test tree.
-- Updated CLAUDE.md with new file structure, AOI patterns, updated mock strategy notes, coverage summary.
-
----
-
-## Phase 0 — Baseline Verification
-
-- [ ] Run all tests to ensure the project is in a good state before starting modifications.
-- [ ] Confirm git status is clean.
-- [ ] Note findings in journal.
-
----
-
-## Phase 1 — Create `src/lib/areas.ts` AOI Data Module
-
-- [ ] Create `src/lib/areas.ts` with the `AreaOfInterest` interface and `AREAS_OF_INTEREST` constant.
-  - 3 areas: Lappi (red), Karjala (blue), Turku (green)
-  - Each has: `id`, `name`, `bbox: [minLng, minLat, maxLng, maxLat]`, `center`, `color`, `description`
-  - Descriptions should be detailed enough to guide future DB ingestion queries.
-- [ ] Create `src/test/lib/areas.test.ts`:
-  - All 3 areas present
-  - `id` values are unique
-  - Each `bbox` is a 4-tuple of numbers where `bbox[0] < bbox[2]` and `bbox[1] < bbox[3]`
-  - Each `center` is a 2-tuple of numbers
-- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
-- [ ] Run `next lint --fix` and fix any issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
-- [ ] Run `prettier --write .` for formatting.
-- [ ] Re-read this file and update as needed.
-- [ ] Update journal with actions taken, learnings, surprises, deviations.
-- [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval. Do not commit or move to Phase 2 until approved.
-- [ ] After committing, verify the dev server hot-reload shows no errors in the browser.
-
----
-
-## Phase 2 — Create `AreaNav` Component
-
-- [ ] Create `src/components/AreaNav.tsx`:
-  - `'use client'` directive
-  - Props: `selectedAreaId: string | null`, `onSelect: (id: string) => void`
-  - Renders a horizontal flex row of buttons, one per AOI
-  - Positioned `absolute top-4 left-1/2 -translate-x-1/2 z-10`
-  - Buttons: dark semi-transparent background, rounded, gap between buttons
-  - Active button: colored ring/border using the area's color
-  - Import `AREAS_OF_INTEREST` from `@/lib/areas`
-- [ ] Create `src/test/components/AreaNav.test.tsx`:
-  - Renders 3 buttons with correct labels (Lappi, Karjala, Turku)
-  - Clicking a button calls `onSelect` with the correct `id`
-  - Active button has a distinguishing class/attribute when `selectedAreaId` matches
-- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
-- [ ] Run `next lint --fix` and fix any issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
-- [ ] Run `prettier --write .` for formatting.
-- [ ] Re-read this file and update as needed.
-- [ ] Update journal with actions taken, learnings, surprises, deviations.
-- [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval. Do not commit or move to Phase 3 until approved.
-- [ ] After committing, verify the dev server hot-reload shows no errors in the browser.
-
----
-
-## Phase 3 — Extend `MapView` with AOI Layers + `selectedAreaId` Prop
-
-- [ ] Modify `src/components/MapView.tsx`:
-  - Add `selectedAreaId?: string | null` to `MapViewProps`
-  - On `map.on('style.load', ...)` (not `map.on('load', ...)`):
-    - Build a `GeoJSON.FeatureCollection` with 3 `Feature<Polygon>` entries
-    - Each polygon is the closed bbox ring: `[minLng,minLat] → [maxLng,minLat] → [maxLng,maxLat] → [minLng,maxLat] → [minLng,minLat]`
-    - `properties: { color, name }` per feature
-    - `map.addSource("aoi-source", { type: "geojson", data: featureCollection })`
-    - `map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi-source", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.12 } })`
-    - `map.addLayer({ id: "aoi-outline", type: "line", source: "aoi-source", paint: { "line-color": ["get", "color"], "line-width": 2 } })`
-  - Add `useEffect([selectedAreaId])`:
-    - If `selectedAreaId` is null or map not ready, return
-    - Find matching area in `AREAS_OF_INTEREST`
-    - Call `mapRef.current.fitBounds(area.bbox, { padding: 60, duration: 1200 })`
-  - Use `mapRef.current?.isStyleLoaded()` guard or store a `styleLoaded` flag to avoid calling `addSource` before style is ready
-- [ ] Modify `src/test/components/MapView.test.tsx`:
-  - Extend the existing mapbox-gl mock so the mock Map has `on`, `addSource`, `addLayer`, `fitBounds`, `isStyleLoaded` methods
-  - Test: `addSource` and `addLayer` are called after the `'style.load'` event fires
-  - Test: `fitBounds` is called with the correct bbox when `selectedAreaId` prop is set
-  - Test: `fitBounds` is not called when `selectedAreaId` is null
-- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
-- [ ] Run `next lint --fix` and fix any issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
-- [ ] Run `prettier --write .` for formatting.
-- [ ] Re-read this file and update as needed.
-- [ ] Update journal with actions taken, learnings, surprises, deviations.
-- [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval. Do not commit or move to Phase 4 until approved.
-- [ ] After committing, verify the dev server hot-reload shows no errors in the browser.
-
----
-
-## Phase 4 — Create `MapWithNav` and Update `MapLoader`
-
-- [ ] Create `src/components/MapWithNav.tsx`:
-  - `'use client'` directive
-  - `useState<string | null>(null)` for `selectedAreaId`
-  - Renders: `<div className="relative w-full h-full">` containing `<AreaNav>` and `<MapView>`
-- [ ] Modify `src/components/MapLoader.tsx`:
-  - Change dynamic import from `"./MapView"` to `"./MapWithNav"`
-  - Keep `ssr: false` and loading placeholder unchanged
-- [ ] Create `src/test/components/MapWithNav.test.tsx`:
-  - Stub both `AreaNav` and `MapView` to capture their props
-  - Test: clicking a button in `AreaNav` changes `selectedAreaId` passed to `MapView`
-  - Test: `MapWithNav` renders without crashing
-- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
-- [ ] Run `next lint --fix` and fix any issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
-- [ ] Run `prettier --write .` for formatting.
-- [ ] Re-read this file and update as needed.
-- [ ] Update journal with actions taken, learnings, surprises, deviations.
-- [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval. Do not commit or move to Phase 5 until approved.
-- [ ] After committing, verify the dev server hot-reload: 3 buttons appear at top-center, clicking animates the map, AOI polygons are visible.
-
----
-
-## Phase 5 — Final Cleanup & Documentation
-
-- [ ] Run `npm run test:coverage` and record the coverage summary in the journal.
-- [ ] Update `README.md` with any relevant information about the AOI navigation feature.
-- [ ] Update `CLAUDE.md` to reflect the new files, component structure, and AOI data module.
-- [ ] Ask the user to inspect the running app and confirm they are satisfied, or note any modifications needed.
-- [ ] Run `npm test` one final time — all tests must pass.
-- [ ] Update journal with final notes.
-- [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval before committing.
-
----
-
-## Notes
-
-- After completing any task, if you added TODOs to code or left anything partially implemented, add new tasks here immediately.
-- A failing `npm test` is a hard blocker — do not proceed to the next phase until all tests pass.
-- The `selectedAreaId` `useEffect` in `MapView` must guard against calling `fitBounds` before the Mapbox style is loaded.
-- Use `map.on('style.load', ...)` (not `map.on('load', ...)`) for the Mapbox Standard style, as `'load'` may fire before style tiles are ready.
+Coverage summary (66 tests):
+- `cell-towers/route.ts`: 100% stmts/branch/funcs/lines
+- `features/route.ts`: 100% stmts/branch/funcs/lines
+- `areas.ts`: 100% stmts/branch/funcs/lines
+- `db.ts`: 100% stmts/branch/funcs/lines
+- `AreaNav.tsx`: 100% stmts/branch/funcs/lines
+- `MapWithNav.tsx`: 100% stmts/branch/funcs/lines
+- `MapView.tsx`: 98.97% stmts/lines, 73.07% branch (gaps at async null guards `if (!bounds) return` and `if (!res.ok) return` — expected, consistent with pre-existing pattern)
+- `MapLoader.tsx`: 100% stmts/lines
