@@ -79,7 +79,7 @@ _Updated after each phase._
 
 ## Phase 5 — MapView & MapLoader Components
 
-- [ ] Create `src/components/MapView.tsx`:
+- [x] Create `src/components/MapView.tsx`:
   - `'use client'` directive.
   - Imports `mapboxgl` and `mapbox-gl/dist/mapbox-gl.css`.
   - Sets `mapboxgl.accessToken` from `process.env.NEXT_PUBLIC_MAPBOX_TOKEN`.
@@ -87,13 +87,13 @@ _Updated after each phase._
   - Initializes map in `useEffect` (empty deps), cleans up with `map.remove()`.
   - Default center: `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7.
   - Container div is `w-full h-full`.
-- [ ] Create `src/components/MapLoader.tsx`:
+- [x] Create `src/components/MapLoader.tsx`:
   - Uses `next/dynamic` with `ssr: false` to wrap `MapView`.
   - Provides a loading fallback (`<div className="w-full h-full bg-gray-900" />`).
-- [ ] Run `tsc --noEmit` — fix any type errors.
-- [ ] Run `npm run lint` — fix any lint issues.
-- [ ] Run `prettier --write .`
-- [ ] Update journal.
+- [x] Run `tsc --noEmit` — fix any type errors.
+- [x] Run `npm run lint` — fix any lint issues.
+- [x] Run `prettier --write .`
+- [x] Update journal.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -169,7 +169,7 @@ Created `.env.local` with `NEXT_PUBLIC_MAPBOX_TOKEN` and `DATABASE_URL` placehol
 Created `src/lib/db.ts` with a `pg.Pool` singleton guarded by `global._pgPool` to survive Next.js hot reloads in dev. Exports a generic `query<T>` helper. Removed an unnecessary `eslint-disable-next-line no-var` comment (ESLint config doesn't flag `var` in `declare global` blocks). tsc and lint clean.
 
 ### Phase 5
-_Not yet started._
+Created `MapView.tsx` (`'use client'`, mapboxgl init via useRef/useEffect, NavigationControl added, cleanup on unmount) and `MapLoader.tsx` (next/dynamic ssr:false wrapper with dark fallback). eslint-disable comment on the exhaustive-deps rule is justified — center/zoom are one-shot init props. tsc and lint clean.
 
 ### Phase 6
 _Not yet started._
