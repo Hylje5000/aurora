@@ -13,6 +13,8 @@ const {
   mockGetSource,
   mockGetCanvas,
   mockSetConfigProperty,
+  mockSetLayoutProperty,
+  mockSetTerrain,
   mockSetLngLat,
   mockSetHTML,
   mockAddTo,
@@ -36,6 +38,8 @@ const {
   const mockGetSource = vi.fn(() => ({ setData: mockSetData }));
   const mockGetCanvas = vi.fn(() => ({ style: { cursor: "" } }));
   const mockSetConfigProperty = vi.fn();
+  const mockSetLayoutProperty = vi.fn();
+  const mockSetTerrain = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -57,6 +61,8 @@ const {
     getSource: mockGetSource,
     getCanvas: mockGetCanvas,
     setConfigProperty: mockSetConfigProperty,
+    setLayoutProperty: mockSetLayoutProperty,
+    setTerrain: mockSetTerrain,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -71,6 +77,8 @@ const {
     mockGetSource,
     mockGetCanvas,
     mockSetConfigProperty,
+    mockSetLayoutProperty,
+    mockSetTerrain,
     mockSetLngLat,
     mockSetHTML,
     mockAddTo,
@@ -118,6 +126,8 @@ describe("MapView", () => {
     mockGetSource.mockClear();
     mockGetCanvas.mockClear();
     mockSetConfigProperty.mockClear();
+    mockSetLayoutProperty.mockClear();
+    mockSetTerrain.mockClear();
     mockSetLngLat.mockClear();
     mockSetHTML.mockClear();
     mockAddTo.mockClear();
@@ -353,5 +363,196 @@ describe("MapView", () => {
     const url = (global.fetch as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as string;
     expect(url).toContain("bbox=20,59,22,61");
+  });
+
+  // ── Terrain & intelligence layer tests ────────────────────────────────
+
+  it("applies military config hardening after style.load", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+
+    expect(mockSetConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "showPointOfInterestLabels",
+      false,
+    );
+    expect(mockSetConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "showTransitLabels",
+      false,
+    );
+    expect(mockSetConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "show3dObjects",
+      false,
+    );
+    expect(mockSetConfigProperty).toHaveBeenCalledWith(
+      "basemap",
+      "colorWater",
+      "#0d2137",
+    );
+  });
+
+  it("adds mapbox-dem and terrain-v2 sources after style.load", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "mapbox-dem",
+      expect.objectContaining({ type: "raster-dem" }),
+    );
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "terrain-v2",
+      expect.objectContaining({ type: "vector" }),
+    );
+  });
+
+  it("adds hillshading, landcover-military, and contour layers after style.load", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "hillshading", type: "hillshade" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "landcover-military", type: "fill" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "contours-minor", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "contours-major", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "contours-labels", type: "symbol" }),
+    );
+  });
+
+  it("does not call setTerrain on style.load when terrain3d is false (default)", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+    expect(mockSetTerrain).not.toHaveBeenCalled();
+  });
+
+  it("calls setTerrain on style.load when terrain3d is initially true", async () => {
+    render(
+      <MapView
+        layerVisibility={{
+          terrain3d: true,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+        }}
+      />,
+    );
+    await act(async () => fireStyleLoad());
+    expect(mockSetTerrain).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
+    );
+  });
+
+  it("calls setLayoutProperty for hillshade layer when hillshade is toggled off", async () => {
+    const { rerender } = render(<MapView />);
+    await act(async () => fireStyleLoad());
+    mockSetLayoutProperty.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: false,
+          contours: true,
+          landcover: true,
+        }}
+      />,
+    );
+
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "hillshading",
+      "visibility",
+      "none",
+    );
+  });
+
+  it("calls setLayoutProperty for all contour layers when contours is toggled off", async () => {
+    const { rerender } = render(<MapView />);
+    await act(async () => fireStyleLoad());
+    mockSetLayoutProperty.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: true,
+          contours: false,
+          landcover: true,
+        }}
+      />,
+    );
+
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "contours-minor",
+      "visibility",
+      "none",
+    );
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "contours-major",
+      "visibility",
+      "none",
+    );
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "contours-labels",
+      "visibility",
+      "none",
+    );
+  });
+
+  it("calls setTerrain(null) when terrain3d is toggled off after style.load", async () => {
+    const { rerender } = render(
+      <MapView
+        layerVisibility={{
+          terrain3d: true,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+        }}
+      />,
+    );
+    await act(async () => fireStyleLoad());
+    mockSetTerrain.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+        }}
+      />,
+    );
+
+    expect(mockSetTerrain).toHaveBeenCalledWith(null);
+  });
+
+  it("calls setTerrain when terrain3d is toggled on after style.load", async () => {
+    const { rerender } = render(<MapView />);
+    await act(async () => fireStyleLoad());
+    mockSetTerrain.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: true,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+        }}
+      />,
+    );
+
+    expect(mockSetTerrain).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
+    );
   });
 });

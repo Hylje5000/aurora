@@ -4,6 +4,11 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { AREAS_OF_INTEREST } from "@/lib/areas";
+import {
+  DEFAULT_LAYER_VISIBILITY,
+  LAYER_GROUPS,
+  type LayerVisibility,
+} from "@/lib/layers";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -11,6 +16,7 @@ interface MapViewProps {
   center?: [number, number];
   zoom?: number;
   selectedAreaId?: string | null;
+  layerVisibility?: LayerVisibility;
 }
 
 function buildAoiCollection() {
@@ -64,9 +70,11 @@ export default function MapView({
   center = [21.5, 60.2],
   zoom = 7,
   selectedAreaId = null,
+  layerVisibility = DEFAULT_LAYER_VISIBILITY,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const styleLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -85,6 +93,12 @@ export default function MapView({
       if (!map) return;
 
       map.setConfigProperty("basemap", "lightPreset", "night");
+
+      // Military basemap hardening — suppress civilian noise
+      map.setConfigProperty("basemap", "showPointOfInterestLabels", false);
+      map.setConfigProperty("basemap", "showTransitLabels", false);
+      map.setConfigProperty("basemap", "show3dObjects", false);
+      map.setConfigProperty("basemap", "colorWater", "#0d2137");
 
       // AOI highlight layers
       map.addSource("aoi-source", {
@@ -221,15 +235,161 @@ export default function MapView({
       // Fetch on every pan/zoom and immediately on load
       map.on("moveend", () => fetchCellTowers(map));
       fetchCellTowers(map);
+
+      // ── Terrain & intelligence layers ──────────────────────────────────
+      const vis = layerVisibility;
+
+      map.addSource("mapbox-dem", {
+        type: "raster-dem",
+        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+        tileSize: 512,
+        maxzoom: 14,
+      });
+
+      map.addSource("terrain-v2", {
+        type: "vector",
+        url: "mapbox://mapbox.mapbox-terrain-v2",
+      });
+
+      map.addLayer({
+        id: "hillshading",
+        type: "hillshade",
+        source: "mapbox-dem",
+        slot: "bottom",
+        layout: { visibility: vis.hillshade ? "visible" : "none" },
+        paint: {
+          "hillshade-exaggeration": 0.7,
+          "hillshade-illumination-direction": 335,
+          "hillshade-shadow-color": "#0d1520",
+          "hillshade-highlight-color": "#3a6080",
+          "hillshade-accent-color": "#000000",
+        },
+      });
+
+      map.addLayer({
+        id: "landcover-military",
+        type: "fill",
+        source: "terrain-v2",
+        "source-layer": "landcover",
+        slot: "bottom",
+        layout: { visibility: vis.landcover ? "visible" : "none" },
+        paint: {
+          "fill-color": [
+            "match",
+            ["get", "class"],
+            "wood",
+            "rgba(20,83,45,0.55)",
+            "scrub",
+            "rgba(54,83,20,0.35)",
+            "grass",
+            "rgba(74,108,42,0.22)",
+            "crop",
+            "rgba(74,108,42,0.22)",
+            "snow",
+            "rgba(180,210,255,0.3)",
+            "rgba(0,0,0,0)",
+          ],
+        },
+      });
+
+      map.addLayer({
+        id: "contours-minor",
+        type: "line",
+        source: "terrain-v2",
+        "source-layer": "contour",
+        slot: "bottom",
+        filter: ["!=", ["get", "index"], 5],
+        layout: { visibility: vis.contours ? "visible" : "none" },
+        paint: {
+          "line-color": "rgba(100,160,120,0.45)",
+          "line-width": 0.5,
+        },
+      });
+
+      map.addLayer({
+        id: "contours-major",
+        type: "line",
+        source: "terrain-v2",
+        "source-layer": "contour",
+        slot: "bottom",
+        filter: [
+          "any",
+          ["==", ["get", "index"], 5],
+          ["==", ["get", "index"], 10],
+        ],
+        layout: { visibility: vis.contours ? "visible" : "none" },
+        paint: {
+          "line-color": "rgba(130,200,150,0.75)",
+          "line-width": 1.2,
+        },
+      });
+
+      map.addLayer({
+        id: "contours-labels",
+        type: "symbol",
+        source: "terrain-v2",
+        "source-layer": "contour",
+        slot: "middle",
+        filter: [
+          "any",
+          ["==", ["get", "index"], 5],
+          ["==", ["get", "index"], 10],
+        ],
+        layout: {
+          visibility: vis.contours ? "visible" : "none",
+          "symbol-placement": "line",
+          "text-field": ["concat", ["to-string", ["get", "ele"]], "m"],
+          "text-size": 10,
+          "text-font": ["DIN Pro Regular", "Arial Unicode MS Regular"],
+        },
+        paint: {
+          "text-color": "#8acd9a",
+          "text-halo-color": "rgba(0,0,0,0.6)",
+          "text-halo-width": 1.5,
+        },
+      });
+
+      if (vis.terrain3d) {
+        map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+      }
+
+      styleLoadedRef.current = true;
     });
 
     return () => {
       mapRef.current?.remove();
       mapRef.current = null;
+      styleLoadedRef.current = false;
     };
-    // center and zoom are intentionally excluded — map init is one-shot
+    // center, zoom, and layerVisibility are intentionally excluded — map init is one-shot
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync layer visibility changes to the live map after style has loaded
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    for (const [key, layerIds] of Object.entries(LAYER_GROUPS) as [
+      keyof typeof LAYER_GROUPS,
+      string[],
+    ][]) {
+      const visible = layerVisibility[key];
+      for (const layerId of layerIds) {
+        map.setLayoutProperty(
+          layerId,
+          "visibility",
+          visible ? "visible" : "none",
+        );
+      }
+    }
+
+    if (layerVisibility.terrain3d) {
+      map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+    } else {
+      map.setTerrain(null);
+    }
+  }, [layerVisibility]);
 
   useEffect(() => {
     if (!selectedAreaId || !mapRef.current) return;
