@@ -17,7 +17,7 @@ const EMPTY_COLLECTION: GeoJSONFeatureCollection = {
   features: [],
 };
 
-function parseBbox(
+export function parseBbox(
   raw: string | null,
 ): [number, number, number, number] | null {
   if (!raw) return null;
