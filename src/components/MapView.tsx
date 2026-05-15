@@ -38,6 +38,28 @@ function buildAoiCollection() {
   };
 }
 
+async function fetchCellTowers(map: mapboxgl.Map): Promise<void> {
+  const bounds = map.getBounds();
+  if (!bounds) return;
+  const bbox = [
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth(),
+  ].join(",");
+
+  try {
+    const res = await fetch(`/api/cell-towers?bbox=${bbox}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
+      data,
+    );
+  } catch (err) {
+    console.error("[cell-towers] fetch failed", err);
+  }
+}
+
 export default function MapView({
   center = [21.5, 60.2],
   zoom = 7,
@@ -61,6 +83,8 @@ export default function MapView({
     mapRef.current.on("style.load", () => {
       const map = mapRef.current;
       if (!map) return;
+
+      // AOI highlight layers
       map.addSource("aoi-source", {
         type: "geojson",
         data: buildAoiCollection(),
@@ -83,6 +107,108 @@ export default function MapView({
           "line-width": 2,
         },
       });
+
+      // Cell tower clustered source
+      map.addSource("cell-towers-source", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
+      });
+
+      // Cluster circles
+      map.addLayer({
+        id: "cell-towers-clusters",
+        type: "circle",
+        source: "cell-towers-source",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": "#64748b",
+          "circle-radius": [
+            "step",
+            ["get", "point_count"],
+            14,
+            10,
+            18,
+            100,
+            24,
+          ],
+          "circle-opacity": 0.85,
+        },
+      });
+
+      // Cluster count labels
+      map.addLayer({
+        id: "cell-towers-cluster-count",
+        type: "symbol",
+        source: "cell-towers-source",
+        filter: ["has", "point_count"],
+        layout: {
+          "text-field": "{point_count_abbreviated}",
+          "text-size": 11,
+        },
+        paint: { "text-color": "#ffffff" },
+      });
+
+      // Individual tower dots colored by radio type
+      map.addLayer({
+        id: "cell-towers-unclustered",
+        type: "circle",
+        source: "cell-towers-source",
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": [
+            "match",
+            ["get", "radio"],
+            "GSM",
+            "#facc15",
+            "UMTS",
+            "#f97316",
+            "LTE",
+            "#22c55e",
+            "CDMA",
+            "#a78bfa",
+            "#94a3b8",
+          ],
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#1e293b",
+        },
+      });
+
+      // Popup on click
+      map.on("click", "cell-towers-unclustered", (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const { radio, aoi_id, range_m, avg_signal } =
+          feature.properties as Record<string, unknown>;
+        const coords = (
+          feature.geometry as GeoJSON.Point
+        ).coordinates.slice() as [number, number];
+        new mapboxgl.Popup()
+          .setLngLat(coords)
+          .setHTML(
+            `<div style="font-size:13px;line-height:1.6">
+              <strong>${radio}</strong><br/>
+              AOI: ${aoi_id}<br/>
+              Range: ${range_m != null ? `${range_m} m` : "—"}<br/>
+              Signal: ${avg_signal != null ? `${avg_signal} dBm` : "—"}
+            </div>`,
+          )
+          .addTo(map);
+      });
+
+      map.on("mouseenter", "cell-towers-unclustered", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "cell-towers-unclustered", () => {
+        map.getCanvas().style.cursor = "";
+      });
+
+      // Fetch on every pan/zoom and immediately on load
+      map.on("moveend", () => fetchCellTowers(map));
+      fetchCellTowers(map);
     });
 
     return () => {
