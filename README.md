@@ -35,6 +35,18 @@ Automated Intelligence Preparation of the Battlespace — open-source situationa
 
 4. Open [http://localhost:3000](http://localhost:3000) — you should see a full-screen map centred on the Archipelago Sea, Finland.
 
+## Areas of Interest
+
+Three operational areas are pre-defined in `src/lib/areas.ts` and visible on the map:
+
+| Area    | Description |
+|---------|-------------|
+| **Lappi** | Northern Lapland — E8/E75 corridors, Saariselkä highlands, Inari lake system |
+| **Karjala** | North Karelia — Finnish-Russian border zone, Joensuu hub, Niirala crossing |
+| **Turku** | Archipelago Sea — maritime chokepoints, Turku port, Stockholm/Tallinn ferry links |
+
+Use the buttons at the top of the map to animate to each area. The bounding boxes are in `[minLng, minLat, maxLng, maxLat]` EPSG:4326 format — directly usable in PostGIS `ST_MakeEnvelope` queries.
+
 ## Project Structure
 
 ```
@@ -47,9 +59,12 @@ src/
 │       └── features/
 │           └── route.ts    # GET /api/features?bbox=... → GeoJSON FeatureCollection
 ├── components/
-│   ├── MapView.tsx         # 'use client' Mapbox GL JS component
+│   ├── MapWithNav.tsx      # State wrapper — owns selectedAreaId, composes AreaNav + MapView
+│   ├── AreaNav.tsx         # Top-centered AOI navigation button strip
+│   ├── MapView.tsx         # 'use client' Mapbox GL JS — map init, AOI layers, fitBounds
 │   └── MapLoader.tsx       # next/dynamic ssr:false wrapper
 └── lib/
+    ├── areas.ts            # AOI definitions (bbox, color, description) — single source of truth
     └── db.ts               # pg Pool singleton + typed query helper
 ```
 
@@ -76,12 +91,16 @@ Tests live under `src/test/` mirroring the `src/` structure:
 
 ```
 src/test/
-├── setup.ts              # jest-dom matchers
-├── api/features.test.ts  # parseBbox + GET handler
-├── lib/db.test.ts        # pool singleton
+├── setup.ts                    # jest-dom matchers
+├── api/features.test.ts        # parseBbox + GET handler
+├── lib/
+│   ├── db.test.ts              # pool singleton
+│   └── areas.test.ts           # AOI bbox/center validation
 └── components/
-    ├── MapView.test.tsx
-    └── MapLoader.test.tsx
+    ├── MapView.test.tsx        # mapbox-gl mock, layer setup, fitBounds
+    ├── MapWithNav.test.tsx     # state wiring (stubbed children)
+    ├── AreaNav.test.tsx        # button render + click callbacks
+    └── MapLoader.test.tsx      # next/dynamic stub
 ```
 
 ## Scripts

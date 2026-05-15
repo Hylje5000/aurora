@@ -25,18 +25,24 @@ src/
 │       └── features/
 │           └── route.ts        # GET /api/features?bbox=... → GeoJSON FeatureCollection
 ├── components/
-│   ├── MapView.tsx             # 'use client' Mapbox GL JS — useRef/useEffect init, cleanup
-│   └── MapLoader.tsx           # next/dynamic(MapView, {ssr:false}) — SSR guard
+│   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, composes AreaNav + MapView
+│   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
+│   ├── MapView.tsx             # 'use client' Mapbox GL JS — useRef/useEffect init, AOI layers, fitBounds
+│   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
 ├── lib/
+│   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
 │   └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
 └── test/
     ├── setup.ts                # @testing-library/jest-dom global matchers
     ├── api/
     │   └── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
     ├── lib/
-    │   └── db.test.ts          # pool singleton guard + query passthrough
+    │   ├── db.test.ts          # pool singleton guard + query passthrough
+    │   └── areas.test.ts       # AOI bbox validity, center-within-bbox, description presence
     └── components/
-        ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), mount/unmount assertions
+        ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), AOI layer setup, fitBounds assertions
+        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView)
+        ├── AreaNav.test.tsx    # button render + onSelect callback tests
         └── MapLoader.test.tsx  # next/dynamic stub
 ```
 
@@ -45,16 +51,21 @@ src/
 - **Framework**: Vitest 3 + `@testing-library/react` + jsdom. Config: `vitest.config.ts` (excluded from `tsconfig.json` to avoid Vite version conflicts).
 - **Scripts**: `npm test` (run once), `npm run test:watch`, `npm run test:coverage` (v8 provider).
 - **Mock strategy**:
-  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error.
+  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `fitBounds`.
   - `@/lib/db` — `vi.mock("@/lib/db", () => ({ query: vi.fn() }))` in API route tests.
   - `pg` — `vi.mock("pg")` + `vi.resetModules()` / `delete globalThis._pgPool` in db tests.
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
+  - Child components (`AreaNav`, `MapView`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
+- **Coverage summary (last run — 48 tests)**: `areas.ts` 100%, `db.ts` 100%, `route.ts` 100%, `AreaNav.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` 100% stmts/lines (branch gaps at null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
-- **Mapbox SSR guard**: `mapbox-gl` uses `window` at import time. `MapLoader` wraps `MapView` with `next/dynamic({ ssr: false })` so it is never imported in the server bundle.
+- **Mapbox SSR guard**: `mapbox-gl` uses `window` at import time. `MapLoader` wraps `MapWithNav` with `next/dynamic({ ssr: false })` so it is never imported in the server bundle.
 - **Map init**: `MapView` holds the DOM container via `containerRef` and the `Map` instance via `mapRef` (not state). Initialised once in `useEffect([], [])` with cleanup `map.remove()`.
+- **AOI layers**: On `map.on('style.load', ...)`, `MapView` adds a single GeoJSON source (`aoi-source`) with all three AOI bounding-box polygons, then an `aoi-fill` layer (opacity 0.12) and `aoi-outline` layer (width 2), both using `["get", "color"]` data-driven expressions.
+- **AOI navigation**: `MapWithNav` owns `selectedAreaId` state. When it changes, a `useEffect` in `MapView` calls `map.fitBounds(area.bbox, { padding: 60, duration: 1200 })`.
+- **AOI data module**: `src/lib/areas.ts` exports `AREAS_OF_INTEREST` — the single source of truth for bbox, color, and description. Bboxes are `[minLng, minLat, maxLng, maxLat]` EPSG:4326, directly usable in PostGIS `ST_MakeEnvelope`.
 - **DB singleton**: `global._pgPool` prevents creating a new pool on every hot reload in dev. API routes import `query` from `@/lib/db`.
 - **GeoJSON API**: `GET /api/features?bbox=minLng,minLat,maxLng,maxLat` — validates bbox, queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`, returns `FeatureCollection`. Degrades gracefully (empty collection) when `DATABASE_URL` is absent.
 - **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style.
