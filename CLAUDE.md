@@ -61,7 +61,7 @@ src/
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
   - Child components (`AreaNav`, `MapView`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 66 tests)**: `areas.ts` 100%, `db.ts` 100%, `features/route.ts` 100%, `cell-towers/route.ts` 100%, `AreaNav.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` ~99% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 67 tests)**: `areas.ts` 100%, `db.ts` 100%, `features/route.ts` 100%, `cell-towers/route.ts` 100%, `AreaNav.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` ~99% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -75,7 +75,8 @@ src/
 - **Cell tower API**: `GET /api/cell-towers?bbox=minLng,minLat,maxLng,maxLat` — queries `cell_towers` table (PostGIS GIST index on `geom`), returns up to 2000 features with properties `id, radio, aoi_id, range_m, avg_signal, samples`. Same bbox validation and graceful degradation as the features route. `parseBbox` is imported from `@/app/api/features/route`.
 - **Cell tower overlay**: On `style.load`, `MapView` adds `cell-towers-source` (GeoJSON, `cluster:true`, `clusterMaxZoom:14`, `clusterRadius:50`) and three layers: `cell-towers-clusters` (circle), `cell-towers-cluster-count` (symbol), `cell-towers-unclustered` (circle with `match` expression coloring by radio type — GSM amber, UMTS orange, LTE green, CDMA purple). A `fetchCellTowers(map)` helper is called immediately after `style.load` and on every `moveend` event; it reads `map.getBounds()`, fetches `/api/cell-towers?bbox=...`, and calls `source.setData()`.
 - **Cell tower popup**: Clicking `cell-towers-unclustered` opens a `mapboxgl.Popup` showing radio type, AOI, estimated range (m), and average signal (dBm). Cursor changes to `pointer` on hover.
-- **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style.
+- **Dark theme**: On `style.load`, `map.setConfigProperty("basemap", "lightPreset", "night")` switches the Mapbox Standard basemap to night mode. `globals.css` overrides `.mapboxgl-ctrl-group` styles to match the slate dark palette (`#1e293b` bg, `#334155` borders, inverted SVG icons). AreaNav inactive buttons use `border-white/30`.
+- **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style (night preset).
 
 ## Environment Variables
 
