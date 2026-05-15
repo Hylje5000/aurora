@@ -23,21 +23,21 @@ The repository is currently an empty git repo with only a `claude.md` context fi
 
 ### Map Library
 
-| Option | Pros | Cons |
-|--------|------|-------|
+| Option                    | Pros                                                              | Cons                                                        |
+| ------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
 | **Mapbox GL JS (direct)** | Full Mapbox API surface, authoritative docs, no abstraction leaks | SSR-incompatible — requires `'use client'` + dynamic import |
-| react-map-gl | React-idiomatic, same underlying engine | Extra abstraction layer, version lag, more opaque |
-| MapLibre GL JS | Open-source, no license concerns | Mapbox Standard Style tokens not usable without Mapbox SDK |
+| react-map-gl              | React-idiomatic, same underlying engine                           | Extra abstraction layer, version lag, more opaque           |
+| MapLibre GL JS            | Open-source, no license concerns                                  | Mapbox Standard Style tokens not usable without Mapbox SDK  |
 
 **Decision**: Mapbox GL JS directly. The user selected it and the project explicitly uses Mapbox vector tiles.
 
 ### Database Client
 
-| Option | Pros | Cons |
-|--------|------|-------|
-| **`pg` (node-postgres)** | Mature, battle-tested, full PostGIS type support | Verbose raw SQL |
-| Drizzle ORM | Type-safe, lightweight | PostGIS spatial types need raw SQL anyway |
-| Prisma | Great DX | Heavy, poor PostGIS support |
+| Option                   | Pros                                             | Cons                                      |
+| ------------------------ | ------------------------------------------------ | ----------------------------------------- |
+| **`pg` (node-postgres)** | Mature, battle-tested, full PostGIS type support | Verbose raw SQL                           |
+| Drizzle ORM              | Type-safe, lightweight                           | PostGIS spatial types need raw SQL anyway |
+| Prisma                   | Great DX                                         | Heavy, poor PostGIS support               |
 
 **Decision**: `pg` with a thin connection pool wrapper. The queries will be mostly raw SQL for ST_AsGeoJSON / ST_Intersects, so an ORM adds no value.
 
@@ -80,35 +80,39 @@ aurora/
 ### Key Component: MapView
 
 `MapView.tsx` is a client component (`'use client'`) that:
+
 - Holds a `mapContainerRef` (the DOM node Mapbox will attach to).
 - Holds a `mapRef` for the Mapbox `Map` instance (not React state — mutations must not trigger re-renders).
 - Initializes the map in a `useEffect` with empty deps, returns `map.remove()` as cleanup.
 - Exposes a prop for the initial center/zoom (defaulting to the Archipelago Sea area of Finland: `[21.5, 60.2]`, zoom 7).
 
 ```tsx
-'use client'
-import { useEffect, useRef } from 'react'
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
+"use client";
+import { useEffect, useRef } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 
 export default function MapView() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
+    if (!containerRef.current || mapRef.current) return;
     mapRef.current = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/standard',
+      style: "mapbox://styles/mapbox/standard",
       center: [21.5, 60.2],
       zoom: 7,
-    })
-    return () => { mapRef.current?.remove(); mapRef.current = null }
-  }, [])
+    });
+    return () => {
+      mapRef.current?.remove();
+      mapRef.current = null;
+    };
+  }, []);
 
-  return <div ref={containerRef} className="w-full h-full" />
+  return <div ref={containerRef} className="w-full h-full" />;
 }
 ```
 
@@ -117,9 +121,9 @@ export default function MapView() {
 Because `mapbox-gl` references `window` at module load time, it cannot be imported in the server bundle. We wrap `MapView` with `next/dynamic` and `ssr: false`:
 
 ```tsx
-import dynamic from 'next/dynamic'
-const MapLoader = dynamic(() => import('./MapView'), { ssr: false })
-export default MapLoader
+import dynamic from "next/dynamic";
+const MapLoader = dynamic(() => import("./MapView"), { ssr: false });
+export default MapLoader;
 ```
 
 The home page (`app/page.tsx`) imports `MapLoader`, not `MapView` directly.
@@ -130,11 +134,11 @@ A stub that accepts a `bbox` query param (`minLng,minLat,maxLng,maxLat`) and ret
 
 ```ts
 // src/app/api/features/route.ts
-import { NextRequest, NextResponse } from 'next/server'
-import { pool } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server";
+import { pool } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
-  const bbox = req.nextUrl.searchParams.get('bbox')
+  const bbox = req.nextUrl.searchParams.get("bbox");
   // Parse bbox, query PostGIS with ST_MakeEnvelope / ST_Intersects
   // Return GeoJSON FeatureCollection
 }
@@ -145,16 +149,21 @@ export async function GET(req: NextRequest) {
 A singleton `pg.Pool` that reuses the connection across hot reloads in dev:
 
 ```ts
-import { Pool } from 'pg'
-declare global { var _pgPool: Pool | undefined }
-export const pool = global._pgPool ?? (global._pgPool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-}))
+import { Pool } from "pg";
+declare global {
+  var _pgPool: Pool | undefined;
+}
+export const pool =
+  global._pgPool ??
+  (global._pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  }));
 ```
 
 ### Environment Variables
 
 `.env.local` (git-ignored):
+
 ```
 NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1Ijoi...
 DATABASE_URL=postgresql://user:pass@localhost:5432/aurora

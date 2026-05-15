@@ -11,20 +11,24 @@ Automated Intelligence Preparation of the Battlespace — open-source situationa
 ## Setup
 
 1. Install dependencies:
+
    ```bash
    npm install
    ```
 
 2. Copy the environment template and fill in your values:
+
    ```bash
    cp .env.local.example .env.local   # or create .env.local manually
    ```
+
    ```env
    NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_token_here
    DATABASE_URL=postgresql://user:password@localhost:5432/aurora
    ```
 
 3. Start the development server:
+
    ```bash
    npm run dev
    ```
@@ -60,11 +64,11 @@ Returns a GeoJSON `FeatureCollection` of POIs intersecting the given bounding bo
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start dev server (Turbopack) |
-| `npm run build` | Production build |
-| `npm run lint` | Run ESLint |
+| Command         | Description                  |
+| --------------- | ---------------------------- |
+| `npm run dev`   | Start dev server (Turbopack) |
+| `npm run build` | Production build             |
+| `npm run lint`  | Run ESLint                   |
 
 ## Tech Stack
 
