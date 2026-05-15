@@ -1,190 +1,190 @@
-# Implementation Plan: Next.js Project Initialization (IPB Aurora)
+# Implementation Plan: Testing Infrastructure for Aurora IPB
 
 ## Journal
 
-_Updated after each phase._
+### Phase 0 — 2026-05-15
+- Git status was clean except for the two modification doc files (MODIFICATION_DESIGN.md, MODIFICATION_IMPLEMENTATION.md) as expected.
+- `npm test` produced "Missing script: test" — confirmed no test runner existed.
+- Original scripts: `dev`, `build`, `start`, `lint`.
+
+### Phase 1 — 2026-05-15
+- Installed Vitest 3.2.4, @vitejs/plugin-react 6.0.2, @testing-library/* suite, jsdom 27, vite-tsconfig-paths 6.1.1.
+- Discovered: Vitest 3.x bundles its own vendored Vite (rolldown-based), which conflicts with the outer Vite used by @vitejs/plugin-react when tsc type-checks `vitest.config.ts`. Fix: exclude `vitest.config.ts` from `tsconfig.json`. This is safe — the config is only consumed by Vitest, not the Next.js build.
+- `next lint` subcommand syntax changed in Next.js 16; `npm run lint` (which runs `eslint`) works correctly.
+- Runner confirmed operational: `npm test` exits with code 1 and message "No test files found" — expected.
 
 ---
 
-## Phase 0 — Pre-flight Checks
+## Phase 0 — Baseline Verification
 
-- [x] Verify Node.js version meets the ≥20.9 requirement (`node --version`).
-- [x] Verify `npm` is available.
-- [x] Confirm no conflicting files exist in the working directory that `create-next-app` would overwrite.
-- [x] Note: There are no existing tests to run (empty repo), so skip the "run tests" step this phase.
-- [x] Update journal.
+- [ ] Confirm git status is clean (no uncommitted changes).
+- [ ] Confirm no existing test runner is configured (`npm test` should fail or be absent).
+- [ ] Note current `package.json` scripts for the journal.
 
----
+After completing Phase 0:
 
-## Phase 1 — Bootstrap with create-next-app
-
-- [x] Run `create-next-app@latest` in the current directory (`.`) with the recommended defaults:
-  - TypeScript
-  - Tailwind CSS
-  - ESLint
-  - App Router
-  - `src/` directory
-  - Import alias `@/*`
-  - AGENTS.md / CLAUDE.md guidance file
-  - **No** React Compiler (keep it simple for hackathon speed)
-- [x] Verify the generated directory structure matches the design doc.
-- [x] Run `npm run dev` briefly to confirm the default app starts without errors, then stop it.
-- [x] Run `npm run lint` to confirm baseline linting passes.
-- [x] Run `tsc --noEmit` to confirm baseline TypeScript passes.
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Update journal with findings.
 
 ---
 
-## Phase 2 — Install Dependencies
+## Phase 1 — Install Dependencies & Configure Vitest
 
-- [x] Install Mapbox GL JS: `npm install mapbox-gl`
-- [x] Install Mapbox GL JS types: `npm install --save-dev @types/mapbox-gl`
-- [x] Install PostgreSQL client: `npm install pg`
-- [x] Install pg types: `npm install --save-dev @types/pg`
-- [x] Run `tsc --noEmit` — fix any type errors introduced by new packages.
-- [x] Run `npm run lint --fix` — fix any lint issues.
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
-
----
-
-## Phase 3 — Environment & Config
-
-- [x] Create `.env.local` with placeholder values:
+- [ ] Install dev dependencies:
   ```
-  NEXT_PUBLIC_MAPBOX_TOKEN=pk.YOUR_TOKEN_HERE
-  DATABASE_URL=postgresql://user:password@localhost:5432/aurora
+  npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/dom @testing-library/user-event @testing-library/jest-dom vite-tsconfig-paths jsdom
   ```
-- [x] Confirm `.env.local` is git-ignored (should already be in default `.gitignore`).
-- [x] Add a `next.config.ts` note if any Webpack/Turbopack config is needed for mapbox-gl (check if `mapbox-gl` requires any special handling in Next.js 15).
-- [x] Run `tsc --noEmit` — no errors expected.
-- [x] Run `npm run lint` — no errors expected.
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Create `vitest.config.ts` at project root:
+
+  ```typescript
+  import { defineConfig } from "vitest/config";
+  import react from "@vitejs/plugin-react";
+  import tsconfigPaths from "vite-tsconfig-paths";
+
+  export default defineConfig({
+    plugins: [react(), tsconfigPaths()],
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: ["./src/test/setup.ts"],
+    },
+  });
+  ```
+
+- [ ] Create `src/test/setup.ts` with `import "@testing-library/jest-dom";`
+- [ ] Add scripts to `package.json`:
+  - `"test": "vitest run"`
+  - `"test:watch": "vitest"`
+  - `"test:coverage": "vitest run --coverage"`
+- [ ] Run `npm test` — expect "no test files found" (zero failures, zero passes) to confirm the runner starts correctly.
+
+After completing Phase 1:
+
+- [ ] Run `next lint --fix` and fix any issues.
+- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
+- [ ] Run `npm test` to confirm runner is operational.
+- [ ] Run `prettier --write .` for formatting.
+- [ ] Re-read this file and update as needed.
+- [ ] Update journal with actions taken, learnings, surprises.
+- [ ] Run `git diff` and draft a commit message; present to user for approval.
+- [ ] Wait for user approval before committing or moving to Phase 2.
 
 ---
 
-## Phase 4 — Database Client
+## Phase 2 — Write Tests for `parseBbox` and `GET /api/features`
 
-- [x] Create `src/lib/db.ts` — singleton `pg.Pool` using `DATABASE_URL`, with the global dev-reload guard.
-- [x] Export a typed `query` helper for convenience.
-- [x] Run `tsc --noEmit` — fix any type errors.
-- [x] Run `npm run lint` — fix any lint issues.
-- [x] Run `prettier --write .` — fix formatting.
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Create `src/test/api/features.test.ts`.
+- [ ] Export `parseBbox` from `src/app/api/features/route.ts` (currently unexported) so it can be tested directly.
+- [ ] Write `parseBbox` unit tests:
+  - Returns `null` for missing input.
+  - Returns `null` for wrong number of parts.
+  - Returns `null` for non-numeric values.
+  - Returns `null` when `minLng >= maxLng` or `minLat >= maxLat`.
+  - Returns the correct 4-tuple for a valid bbox string.
+- [ ] Write `GET` handler tests (mock `@/lib/db` with `vi.mock`):
+  - Returns 400 with error message when `bbox` param is missing.
+  - Returns 400 when bbox is malformed.
+  - Returns empty `FeatureCollection` with `X-Aurora-Warning` header when `DATABASE_URL` is absent.
+  - Returns `FeatureCollection` with features when DB returns rows.
+  - Returns 500 when DB throws.
+- [ ] If any TODOs arise, add them as new tasks below.
 
----
+After completing Phase 2:
 
-## Phase 5 — MapView & MapLoader Components
-
-- [x] Create `src/components/MapView.tsx`:
-  - `'use client'` directive.
-  - Imports `mapboxgl` and `mapbox-gl/dist/mapbox-gl.css`.
-  - Sets `mapboxgl.accessToken` from `process.env.NEXT_PUBLIC_MAPBOX_TOKEN`.
-  - Uses `useRef` for the container DOM node and the `Map` instance.
-  - Initializes map in `useEffect` (empty deps), cleans up with `map.remove()`.
-  - Default center: `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7.
-  - Container div is `w-full h-full`.
-- [x] Create `src/components/MapLoader.tsx`:
-  - Uses `next/dynamic` with `ssr: false` to wrap `MapView`.
-  - Provides a loading fallback (`<div className="w-full h-full bg-gray-900" />`).
-- [x] Run `tsc --noEmit` — fix any type errors.
-- [x] Run `npm run lint` — fix any lint issues.
-- [x] Run `prettier --write .`
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Run `next lint --fix` and fix any issues.
+- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .` for formatting.
+- [ ] Re-read this file and update as needed.
+- [ ] Update journal.
+- [ ] Run `git diff`, draft commit message, present to user for approval.
+- [ ] Wait for user approval before committing or moving to Phase 3.
 
 ---
 
-## Phase 6 — Home Page & Root Layout
+## Phase 3 — Write Tests for `db.ts` Pool Singleton
 
-- [x] Update `src/app/globals.css`:
-  - Keep Tailwind directives.
-  - Ensure `html, body, #__next` are set to `height: 100%` so the full-screen map works.
-- [x] Update `src/app/layout.tsx`:
-  - Set `<html>` and `<body>` to `h-full` (Tailwind).
-  - Include a minimal dark theme appropriate for a military ops tool.
-- [x] Update `src/app/page.tsx`:
-  - Import `MapLoader` from `@/components/MapLoader`.
-  - Render a full-screen container (`w-full h-screen`) with `MapLoader` inside.
-  - Remove the default Next.js boilerplate content.
-- [x] Start dev server, visually verify map renders over Finland, stop server.
-- [x] Run `tsc --noEmit` — fix any type errors.
-- [x] Run `npm run lint` — fix any lint issues.
-- [x] Run `prettier --write .`
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Create `src/test/lib/db.test.ts`.
+- [ ] Mock the `pg` module with `vi.mock("pg")` so no real connection is attempted.
+- [ ] Test that importing `pool` twice returns the same instance (singleton guard).
+- [ ] Test that `query` calls `pool.query` with the correct arguments.
+- [ ] If any TODOs arise, add them as new tasks below.
 
----
+After completing Phase 3:
 
-## Phase 7 — GeoJSON API Route Stub
-
-- [x] Create `src/app/api/features/route.ts`:
-  - `GET` handler accepts `bbox` query param (`minLng,minLat,maxLng,maxLat`).
-  - Validates the param; returns 400 if missing or malformed.
-  - Queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`.
-  - Returns a `FeatureCollection` JSON response.
-  - If `DATABASE_URL` is not set, returns an empty `FeatureCollection` with a warning (graceful degradation for demo without DB).
-- [x] Run `tsc --noEmit` — fix any type errors.
-- [x] Run `npm run lint` — fix any lint issues.
-- [x] Run `prettier --write .`
-- [x] Update journal.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Run `next lint --fix` and fix any issues.
+- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .` for formatting.
+- [ ] Re-read this file and update as needed.
+- [ ] Update journal.
+- [ ] Run `git diff`, draft commit message, present to user for approval.
+- [ ] Wait for user approval before committing or moving to Phase 4.
 
 ---
 
-## Phase 8 — Final Cleanup & Documentation
+## Phase 4 — Write Tests for `MapView` and `MapLoader` Components
 
-- [x] Update `README.md` with:
-  - Project name and description (IPB Aurora).
-  - Prerequisites (Node 20+, Mapbox token, PostgreSQL + PostGIS).
-  - Setup instructions (`npm install`, `.env.local` configuration, `npm run dev`).
-  - Overview of key files/directories.
-- [x] Update `CLAUDE.md` (project's `claude.md`) to reflect the current file structure, tech decisions, and any implementation notes.
-- [x] Run full lint + type-check + prettier one final time.
-- [ ] Ask the user to inspect the running app and confirm satisfaction.
-- [ ] After completing a task, if any TODOs remain in the code or anything was not fully implemented, add new tasks here to track them.
-- [x] Update journal with final notes.
-- [ ] Present commit diff to user and wait for approval before committing.
+- [ ] Create `src/test/components/MapView.test.tsx`.
+  - Mock `mapbox-gl` at module level with `vi.mock`.
+  - Assert that the container `<div>` with `w-full h-full` is rendered.
+  - Assert that `mapboxgl.Map` constructor is called once on mount.
+  - Assert that `map.remove()` is called on unmount (cleanup).
+- [ ] Create `src/test/components/MapLoader.test.tsx`.
+  - Mock `next/dynamic` to return a simple stub component.
+  - Assert that `MapLoader` renders without crashing.
+- [ ] If any TODOs arise, add them as new tasks below.
+
+After completing Phase 4:
+
+- [ ] Run `next lint --fix` and fix any issues.
+- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .` for formatting.
+- [ ] Re-read this file and update as needed.
+- [ ] Update journal.
+- [ ] Run `git diff`, draft commit message, present to user for approval.
+- [ ] Wait for user approval before committing or moving to Phase 5.
 
 ---
 
-## Journal
+## Phase 5 — Update `modify.md` PDCA Loop
 
-### Phase 0
+- [ ] Open `.claude/commands/modify.md`.
+- [ ] Remove the `"or npx jest or npx vitest run, whichever is configured"` hedging language from every test run step — replace with `npm test`.
+- [ ] Change wording so a non-zero test exit is an explicit blocker (not optional).
+- [ ] Add a step to the final phase: "Run `npm run test:coverage` and record the coverage summary in the journal."
+- [ ] Verify the file reads cleanly end-to-end.
 
-Node.js v23.11.0 (above 20.9 minimum), npm 10.9.2. No conflicting Next.js files in the repo.
+After completing Phase 5:
 
-### Phase 1
+- [ ] Run `next lint --fix` and fix any issues.
+- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .` for formatting.
+- [ ] Re-read this file and update as needed.
+- [ ] Update journal.
+- [ ] Run `git diff`, draft commit message, present to user for approval.
+- [ ] Wait for user approval before committing or moving to Phase 6.
 
-Ran `create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --no-react-compiler`. Had to temporarily move existing files (.local/, claude.md, MODIFICATION\_\*.md) since create-next-app refuses to init in a non-empty directory. Restored them after. On macOS case-insensitive FS, our `claude.md` became `CLAUDE.md`; content is intact. Generated Next.js 16.2.6 with Turbopack. Dev server boots in 209ms. Lint and tsc clean.
+---
 
-### Phase 2
+## Phase 6 — Final Cleanup
 
-Installed `mapbox-gl` + `@types/mapbox-gl` and `pg` + `@types/pg`. The recurring `eslint-visitor-keys` engine warning (requires Node ^20.19 or ^22.13 or >=24, we have v23.11) is harmless — it's a transitive ESLint dep and does not affect functionality. tsc and lint both clean after install.
+- [ ] Run `npm run test:coverage` and record the coverage summary in the journal.
+- [ ] Update `README.md` with a "Testing" section: framework, how to run tests, how to run coverage.
+- [ ] Update `CLAUDE.md` to document the test infrastructure: framework, test file layout, mock strategy, and the `npm test` / `npm run test:watch` / `npm run test:coverage` scripts.
+- [ ] Ask the user to inspect the test suite and confirm they are satisfied, or note any further modifications needed.
 
-### Phase 3
+After completing Phase 6:
 
-Created `.env.local` with `NEXT_PUBLIC_MAPBOX_TOKEN` and `DATABASE_URL` placeholders. Confirmed git-ignored by `.env*` rule. No `next.config.ts` changes needed — Turbopack + `next/dynamic ssr:false` handles mapbox-gl without webpack overrides.
+- [ ] Run `npm test` one final time — all tests must pass.
+- [ ] Update journal with final notes.
+- [ ] Run `git diff`, draft commit message, present to user for approval.
+- [ ] Wait for user approval before committing.
 
-### Phase 4
+---
 
-Created `src/lib/db.ts` with a `pg.Pool` singleton guarded by `global._pgPool` to survive Next.js hot reloads in dev. Exports a generic `query<T>` helper. Removed an unnecessary `eslint-disable-next-line no-var` comment (ESLint config doesn't flag `var` in `declare global` blocks). tsc and lint clean.
+## Notes
 
-### Phase 5
-
-Created `MapView.tsx` (`'use client'`, mapboxgl init via useRef/useEffect, NavigationControl added, cleanup on unmount) and `MapLoader.tsx` (next/dynamic ssr:false wrapper with dark fallback). eslint-disable comment on the exhaustive-deps rule is justified — center/zoom are one-shot init props. tsc and lint clean.
-
-### Phase 6
-
-Set dark military background (#0d1117) as default in globals.css (removed light/dark media query — always dark for ops tool). Added `html, body { height: 100% }` for full-screen map support. Updated layout.tsx metadata to "Aurora IPB". Replaced boilerplate page.tsx with a `h-screen` main wrapping MapLoader. Dev server starts cleanly in 261ms and picks up .env.local. Map container renders; tiles won't load until a real Mapbox token is set.
-
-### Phase 7
-
-Created `src/app/api/features/route.ts` with bbox validation (parseBbox returns null on bad input → 400), graceful degradation when DATABASE_URL is absent (returns empty FeatureCollection with X-Aurora-Warning header), and a PostGIS stub query using ST_MakeEnvelope/ST_Intersects/ST_AsGeoJSON. The SQL targets a `poi` table as a placeholder — real table names will be wired in as data is ingested. tsc and lint clean.
-
-### Phase 8
-
-Rewrote README.md with project description, prerequisites, setup steps, file structure table, API docs, and scripts table. Updated CLAUDE.md with the implemented file layout, key patterns (SSR guard, map init, DB singleton, GeoJSON API), environment variable table, and corrected tech stack (Next.js 16, Tailwind v4, Mapbox GL JS — no MapLibre). Final lint + tsc both clean. No outstanding TODOs in code — remaining features (clustering, milsymbol, chokepoint analysis, explainability panel) are tracked in CLAUDE.md as future work.
+- After completing any task, if you added TODOs to the code or left anything partially implemented, add new tasks here immediately.
+- A failing `npm test` is a hard blocker — do not proceed to the next phase until all tests pass.

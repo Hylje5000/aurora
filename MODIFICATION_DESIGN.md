@@ -1,173 +1,144 @@
-# Design Document: Next.js Project Initialization (IPB Aurora)
+# Design Document: Testing Infrastructure for Aurora IPB
 
 ## Overview
 
-Initialize the Aurora project as a production-ready Next.js 15 application tailored for the Automated IPB (Intelligence Preparation of the Battlespace) hackathon tool. The scaffold will wire up the full tech stack described in CLAUDE.md: Next.js App Router + TypeScript + Tailwind CSS + Mapbox GL JS + PostGIS database client, all in a state ready for feature development.
+Set up Vitest as the testing framework for the Aurora Next.js 16 project, write an initial suite of unit tests for existing code, and update the `/modify` command's PDCA loop in `.claude/commands/modify.md` to make testing a first-class step in the Act and Check phases.
 
 ---
 
-## Detailed Analysis of the Goal
+## Detailed Analysis
 
-The repository is currently an empty git repo with only a `claude.md` context file. We need to:
+### Current State
 
-1. Bootstrap a Next.js 15 project using `create-next-app` defaults (App Router, TypeScript, Tailwind CSS, ESLint, Turbopack).
-2. Integrate Mapbox GL JS safely in a Next.js SSR environment (Mapbox manipulates the DOM directly and cannot run server-side).
-3. Wire up a PostgreSQL/PostGIS database client for the API routes that will serve GeoJSON overlays.
-4. Create a minimal but working home page that renders a full-screen Mapbox map (centered on Finland).
-5. Create a stub Next.js API route (`/api/features`) that queries PostGIS and returns GeoJSON — ready for data population.
-6. Set up environment variable conventions (`.env.local`) for secrets.
+The project has no test runner, no test files, and no `test` script in `package.json`. The PDCA loop in `modify.md` mentions running tests, but since no framework exists those steps are always no-ops. This creates a gap where code can regress silently.
+
+### Files to Test (Existing Code)
+
+| File                            | Testable Surface                                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `src/app/api/features/route.ts` | `parseBbox` (pure logic), `GET` handler (mock DB, mock env)                      |
+| `src/lib/db.ts`                 | Pool singleton initialisation (guard against double-create), `query` passthrough |
+| `src/components/MapLoader.tsx`  | Renders without crashing; renders the loading placeholder on first paint         |
+| `src/components/MapView.tsx`    | Mounts container div; skips map init when `mapboxgl` is mocked                   |
+
+### Constraints
+
+- `mapbox-gl` accesses `window` at module import time — must be mocked at the Vitest module level before any import of `MapView`.
+- Async Server Components (Next.js App Router) cannot be rendered by Vitest/RTL; only Client Components (`'use client'`) are tested here.
+- `src/lib/db.ts` creates a real `pg.Pool` at import time when `DATABASE_URL` is set; tests must run with `DATABASE_URL` unset or mock the `pg` module.
 
 ---
 
 ## Alternatives Considered
 
-### Map Library
-
-| Option                    | Pros                                                              | Cons                                                        |
-| ------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Mapbox GL JS (direct)** | Full Mapbox API surface, authoritative docs, no abstraction leaks | SSR-incompatible — requires `'use client'` + dynamic import |
-| react-map-gl              | React-idiomatic, same underlying engine                           | Extra abstraction layer, version lag, more opaque           |
-| MapLibre GL JS            | Open-source, no license concerns                                  | Mapbox Standard Style tokens not usable without Mapbox SDK  |
-
-**Decision**: Mapbox GL JS directly. The user selected it and the project explicitly uses Mapbox vector tiles.
-
-### Database Client
-
-| Option                   | Pros                                             | Cons                                      |
-| ------------------------ | ------------------------------------------------ | ----------------------------------------- |
-| **`pg` (node-postgres)** | Mature, battle-tested, full PostGIS type support | Verbose raw SQL                           |
-| Drizzle ORM              | Type-safe, lightweight                           | PostGIS spatial types need raw SQL anyway |
-| Prisma                   | Great DX                                         | Heavy, poor PostGIS support               |
-
-**Decision**: `pg` with a thin connection pool wrapper. The queries will be mostly raw SQL for ST_AsGeoJSON / ST_Intersects, so an ORM adds no value.
-
-### `src/` Directory
-
-Using `src/` to separate application code from config files — consistent with `create-next-app` defaults and keeps the root clean.
+| Option                    | Pros                                                                                             | Cons                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| **Jest**                  | Next.js official docs, huge ecosystem                                                            | Slow (CJS transform), complex ESM config, extra `jest.config.js` boilerplate    |
+| **Vitest** (chosen)       | Native ESM, `vite-tsconfig-paths` handles `@/` aliases, very fast cold start, same `vi.mock` API | Slightly newer; mapbox-gl canvas mock needed                                    |
+| **Playwright** (E2E only) | Tests real browser, catches visual regressions                                                   | Slow, overkill for pure-logic unit tests; good complement but not a replacement |
 
 ---
 
 ## Detailed Design
 
-### Directory Structure
+### Package Changes
 
 ```
-aurora/
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx          # Root layout (html/body, global imports)
-│   │   ├── page.tsx            # Home page — full-screen map
-│   │   ├── globals.css         # Tailwind directives + mapbox-gl CSS import
-│   │   └── api/
-│   │       └── features/
-│   │           └── route.ts    # GET /api/features?bbox=... → GeoJSON
-│   ├── components/
-│   │   ├── MapView.tsx         # 'use client' Mapbox component
-│   │   └── MapLoader.tsx       # next/dynamic wrapper (ssr: false)
-│   └── lib/
-│       └── db.ts               # pg Pool singleton
-├── public/
-├── .env.local                  # NEXT_PUBLIC_MAPBOX_TOKEN, DATABASE_URL
-├── next.config.ts
-├── tsconfig.json
-├── tailwind.config.ts          # (auto-generated by create-next-app)
-├── package.json
-├── CLAUDE.md
-├── MODIFICATION_DESIGN.md
-└── MODIFICATION_IMPLEMENTATION.md
+devDependencies added:
+  vitest
+  @vitejs/plugin-react
+  @testing-library/react
+  @testing-library/dom
+  @testing-library/user-event
+  @testing-library/jest-dom     ← custom matchers (toBeInTheDocument, etc.)
+  vite-tsconfig-paths           ← resolves @/ path alias
+  jsdom                         ← browser-like env for component tests
 ```
 
-### Key Component: MapView
+### `vitest.config.ts` (project root)
 
-`MapView.tsx` is a client component (`'use client'`) that:
+```typescript
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+import tsconfigPaths from "vite-tsconfig-paths";
 
-- Holds a `mapContainerRef` (the DOM node Mapbox will attach to).
-- Holds a `mapRef` for the Mapbox `Map` instance (not React state — mutations must not trigger re-renders).
-- Initializes the map in a `useEffect` with empty deps, returns `map.remove()` as cleanup.
-- Exposes a prop for the initial center/zoom (defaulting to the Archipelago Sea area of Finland: `[21.5, 60.2]`, zoom 7).
-
-```tsx
-"use client";
-import { useEffect, useRef } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
-
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
-
-export default function MapView() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    mapRef.current = new mapboxgl.Map({
-      container: containerRef.current,
-      style: "mapbox://styles/mapbox/standard",
-      center: [21.5, 60.2],
-      zoom: 7,
-    });
-    return () => {
-      mapRef.current?.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
-  return <div ref={containerRef} className="w-full h-full" />;
-}
+export default defineConfig({
+  plugins: [react(), tsconfigPaths()],
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+  },
+});
 ```
 
-### Key Component: MapLoader (SSR Guard)
+### `src/test/setup.ts` (global test setup)
 
-Because `mapbox-gl` references `window` at module load time, it cannot be imported in the server bundle. We wrap `MapView` with `next/dynamic` and `ssr: false`:
-
-```tsx
-import dynamic from "next/dynamic";
-const MapLoader = dynamic(() => import("./MapView"), { ssr: false });
-export default MapLoader;
+```typescript
+import "@testing-library/jest-dom";
 ```
 
-The home page (`app/page.tsx`) imports `MapLoader`, not `MapView` directly.
+### `package.json` scripts added
 
-### API Route: /api/features
-
-A stub that accepts a `bbox` query param (`minLng,minLat,maxLng,maxLat`) and returns a GeoJSON `FeatureCollection` by querying PostGIS:
-
-```ts
-// src/app/api/features/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
-
-export async function GET(req: NextRequest) {
-  const bbox = req.nextUrl.searchParams.get("bbox");
-  // Parse bbox, query PostGIS with ST_MakeEnvelope / ST_Intersects
-  // Return GeoJSON FeatureCollection
-}
+```json
+"test": "vitest run",
+"test:watch": "vitest",
+"test:coverage": "vitest run --coverage"
 ```
 
-### Database Client: lib/db.ts
+### Mock Strategy
 
-A singleton `pg.Pool` that reuses the connection across hot reloads in dev:
+**`mapbox-gl`** — mocked at module level so `MapView` never touches `window.WebGLRenderingContext`:
 
-```ts
-import { Pool } from "pg";
-declare global {
-  var _pgPool: Pool | undefined;
-}
-export const pool =
-  global._pgPool ??
-  (global._pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  }));
+```typescript
+vi.mock("mapbox-gl", () => ({
+  default: {
+    Map: vi.fn(() => ({
+      addControl: vi.fn(),
+      remove: vi.fn(),
+    })),
+    NavigationControl: vi.fn(),
+    accessToken: "",
+  },
+}));
 ```
 
-### Environment Variables
+**`@/lib/db`** — mocked in API route tests so no real `pg.Pool` is created:
 
-`.env.local` (git-ignored):
+```typescript
+vi.mock("@/lib/db", () => ({ query: vi.fn() }));
+```
+
+**`next/dynamic`** — mocked in `MapLoader` tests to return a simple stub:
+
+```typescript
+vi.mock("next/dynamic", () => ({
+  default: () => () => <div data-testid="map-stub" />,
+}));
+```
+
+### Test File Layout
 
 ```
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1Ijoi...
-DATABASE_URL=postgresql://user:pass@localhost:5432/aurora
+src/
+└── test/
+    ├── setup.ts                             ← global jest-dom matchers
+    ├── api/
+    │   └── features.test.ts                 ← parseBbox + GET handler
+    ├── lib/
+    │   └── db.test.ts                       ← pool singleton guard
+    └── components/
+        ├── MapLoader.test.tsx               ← dynamic import stub
+        └── MapView.test.tsx                 ← mapbox-gl mock + mount
 ```
+
+### `modify.md` PDCA Loop Changes
+
+The `modify.md` command already lists test runs in the phase-end checklist. We will reinforce testing at two additional points:
+
+1. **Plan phase** — add an explicit "verify test suite is green" step at the top of phase 1 (already there as a checkbox, will confirm wording).
+2. **Check step wording** — change the passive `"if configured"` caveat to a hard requirement: tests must pass (non-zero exit = phase blocked).
+3. **Act phase (last phase)** — add a step: "Run `npm run test:coverage` and record coverage summary in the journal."
 
 ---
 
@@ -175,35 +146,38 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/aurora
 
 ```mermaid
 flowchart TD
-    Browser["Browser"] -->|"GET /"| NextServer["Next.js App Router"]
-    NextServer -->|"Server Component"| HomePage["page.tsx (Server)"]
-    HomePage -->|"dynamic import ssr:false"| MapLoader["MapLoader.tsx (Client boundary)"]
-    MapLoader -->|"renders"| MapView["MapView.tsx (Client)"]
-    MapView -->|"Mapbox SDK"| MapboxAPI["Mapbox Tile API"]
+    A["modify.md PDCA loop"] --> B["Phase start: npm test must pass"]
+    B --> C["Implement changes"]
+    C --> D["Create/update unit tests"]
+    D --> E["npm test — all pass?"]
+    E -->|No| C
+    E -->|Yes| F["lint + tsc + prettier"]
+    F --> G["Update journal, commit"]
+    G --> H["Last phase: npm run test:coverage"]
+    H --> I["Record coverage in journal"]
 
-    Browser -->|"GET /api/features?bbox=..."| APIRoute["app/api/features/route.ts"]
-    APIRoute -->|"SQL / ST_Intersects"| PostGIS["PostgreSQL + PostGIS"]
-    APIRoute -->|"GeoJSON FeatureCollection"| Browser
-
-    MapView -->|"fetch on moveend"| APIRoute
+    subgraph "Test Targets"
+        T1["parseBbox (pure fn)"]
+        T2["GET /api/features (mocked DB)"]
+        T3["MapLoader (dynamic stub)"]
+        T4["MapView (mapbox-gl mock)"]
+        T5["db.ts pool singleton"]
+    end
 ```
 
 ---
 
 ## Summary
 
-- **Bootstrapped** with `create-next-app@latest --yes` for zero-config TypeScript, Tailwind, ESLint, Turbopack.
-- **Mapbox GL JS** integrated safely via `'use client'` + `next/dynamic ssr:false` pattern, eliminating the `window is not defined` SSR crash.
-- **PostGIS client** is a pg Pool singleton, ready for spatial queries.
-- **API stub** at `/api/features` gives a clean, typed entry point for all GeoJSON overlay data.
-- **Home page** renders a full-screen map centered on Finland — ready for hackathon feature development.
+We install Vitest with React Testing Library and jsdom, configure `vite-tsconfig-paths` for `@/` alias resolution, write initial tests covering the key units of existing code, and update `modify.md` to make a green test suite a hard gate in every phase of the PDCA loop.
 
 ---
 
 ## References
 
-- [Next.js Installation Docs](https://nextjs.org/docs/app/getting-started/installation)
-- [Mapbox GL JS + React tutorial](https://docs.mapbox.com/help/tutorials/use-mapbox-gl-js-with-react/)
-- [Using mapbox-gl in React with Next.js (DEV.to)](https://dev.to/dqunbp/using-mapbox-gl-in-react-with-next-js-2glg)
-- [Next.js Dynamic Imports](https://nextjs.org/docs/app/guides/lazy-loading)
-- [node-postgres (pg) docs](https://node-postgres.com/)
+- [Next.js Vitest Testing Guide](https://nextjs.org/docs/app/guides/testing/vitest)
+- [Vitest docs — jsdom environment](https://vitest.dev/guide/environment)
+- [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/)
+- [@testing-library/jest-dom](https://github.com/testing-library/jest-dom)
+- [vite-tsconfig-paths](https://github.com/aleclarson/vite-tsconfig-paths)
+- [mapbox-gl-js-mock](https://github.com/mapbox/mapbox-gl-js-mock)
