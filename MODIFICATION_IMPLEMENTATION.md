@@ -28,6 +28,13 @@
 - 3 tests: Pool constructed with correct connectionString, singleton reuse (Pool called once across two imports), `query` delegates args correctly.
 - All 14 tests pass. Lint and tsc clean.
 
+### Phase 4 — 2026-05-15
+
+- Discovered Vitest hoisting gotcha: `vi.mock()` factory is hoisted above `const` declarations, so outer variables referenced inside the factory are not yet initialised. Fix: use `vi.hoisted()` to create mock fns in a block that runs before hoisting.
+- `MapView`: 4 tests — container div rendered, `Map` constructor called once with correct args, `NavigationControl` added, `remove()` called on unmount.
+- `MapLoader`: 2 tests — renders without crash, dynamic stub visible. Mocked `next/dynamic` to return a plain stub component.
+- All 20 tests pass. Lint and tsc clean.
+
 ---
 
 ## Phase 0 — Baseline Verification
