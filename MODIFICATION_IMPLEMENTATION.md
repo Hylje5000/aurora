@@ -100,21 +100,21 @@ _Updated after each phase._
 
 ## Phase 6 — Home Page & Root Layout
 
-- [ ] Update `src/app/globals.css`:
+- [x] Update `src/app/globals.css`:
   - Keep Tailwind directives.
   - Ensure `html, body, #__next` are set to `height: 100%` so the full-screen map works.
-- [ ] Update `src/app/layout.tsx`:
+- [x] Update `src/app/layout.tsx`:
   - Set `<html>` and `<body>` to `h-full` (Tailwind).
   - Include a minimal dark theme appropriate for a military ops tool.
-- [ ] Update `src/app/page.tsx`:
+- [x] Update `src/app/page.tsx`:
   - Import `MapLoader` from `@/components/MapLoader`.
   - Render a full-screen container (`w-full h-screen`) with `MapLoader` inside.
   - Remove the default Next.js boilerplate content.
-- [ ] Start dev server, visually verify map renders over Finland, stop server.
-- [ ] Run `tsc --noEmit` — fix any type errors.
-- [ ] Run `npm run lint` — fix any lint issues.
-- [ ] Run `prettier --write .`
-- [ ] Update journal.
+- [x] Start dev server, visually verify map renders over Finland, stop server.
+- [x] Run `tsc --noEmit` — fix any type errors.
+- [x] Run `npm run lint` — fix any lint issues.
+- [x] Run `prettier --write .`
+- [x] Update journal.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -172,7 +172,7 @@ Created `src/lib/db.ts` with a `pg.Pool` singleton guarded by `global._pgPool` t
 Created `MapView.tsx` (`'use client'`, mapboxgl init via useRef/useEffect, NavigationControl added, cleanup on unmount) and `MapLoader.tsx` (next/dynamic ssr:false wrapper with dark fallback). eslint-disable comment on the exhaustive-deps rule is justified — center/zoom are one-shot init props. tsc and lint clean.
 
 ### Phase 6
-_Not yet started._
+Set dark military background (#0d1117) as default in globals.css (removed light/dark media query — always dark for ops tool). Added `html, body { height: 100% }` for full-screen map support. Updated layout.tsx metadata to "Aurora IPB". Replaced boilerplate page.tsx with a `h-screen` main wrapping MapLoader. Dev server starts cleanly in 261ms and picks up .env.local. Map container renders; tiles won't load until a real Mapbox token is set.
 
 ### Phase 7
 _Not yet started._
