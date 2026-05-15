@@ -1,0 +1,26 @@
+Ensure your Next.js project is in a healthy place (lint warnings and errors are addressed, types check out, tests pass) and prep a descriptive git commit.
+
+Time to clean up in preparation for commit. Please perform these tasks:
+
+1. Run `next lint --fix` (or `eslint --fix` if no next lint script is configured) to auto-fix lint issues, then run `prettier --write .` to format the code.
+2. Run `tsc --noEmit` one more time and fix any TypeScript type errors that remain.
+3. Run any tests (`npm test` or `npx jest` or `npx vitest run`, whichever is configured) to make sure they all pass.
+4. Use `git diff` to verify the changes that have been made, and create a suitable commit message for any changes, following any guidelines you have about commit messages. Be sure to properly escape dollar signs and backticks, and present the change message to the user for approval. Don't commit the changes until the user approves them.
+
+The commit message should follow the "Conventional Commits" spec:
+
+1. The first commit description line MUST be prefixed with a type, which consists of a noun, `feat`, `fix`, etc., followed by the OPTIONAL scope, OPTIONAL `!`, and REQUIRED terminal colon and space.
+2. The type `feat` MUST be used when a commit adds a new feature to your application or library.
+3. The type `fix` MUST be used when a commit represents a bug fix for your application.
+4. A scope MAY be provided after a type. A scope MUST consist of a noun describing a section of the codebase surrounded by parenthesis, e.g., `fix(parser):`
+5. A description MUST immediately follow the colon and space after the type/scope prefix. The description is a short summary of the code changes, e.g., _fix: array parsing issue when multiple spaces were contained in string_.
+6. A longer commit body MAY be provided after the short description, providing additional contextual information about the code changes. The body MUST begin one blank line after the description.
+7. A commit body is free-form and MAY consist of any number of newline separated paragraphs.
+8. One or more footers MAY be provided one blank line after the body. Each footer MUST consist of a word token, followed by either a `:<space>` or `<space>#` separator, followed by a string value.
+9. A footer's token MUST use `-` in place of whitespace characters, e.g., `Acked-by` (this helps differentiate the footer section from a multi-paragraph body).
+10. A footer's value MAY contain spaces and newlines, and parsing MUST terminate when the next valid footer token/separator pair is observed.
+11. Breaking changes MUST be indicated in the type/scope prefix of a commit, or as an entry in the footer.
+12. If included as a footer, a breaking change MUST consist of the uppercase text BREAKING-CHANGE, followed by a colon, space, and description, e.g., _BREAKING-CHANGE: environment variables now take precedence over config files_.
+13. If included in the type/scope prefix, breaking changes MUST be indicated by a `!` immediately before the `:`, and the commit description SHALL be used to describe the breaking change. e.g.: _fix(parser)!: Stop allowing env vars to override config files. Using env vars will break._
+14. Types other than `feat` and `fix` MAY be used in your commit messages, e.g., _docs: update ref docs._
+15. The units of information that make up Conventional Commits MUST NOT be treated as case sensitive, with the exception of BREAKING-CHANGE which MUST be uppercase.
