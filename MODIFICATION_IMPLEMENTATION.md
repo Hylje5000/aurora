@@ -121,16 +121,16 @@ _Updated after each phase._
 
 ## Phase 7 — GeoJSON API Route Stub
 
-- [ ] Create `src/app/api/features/route.ts`:
+- [x] Create `src/app/api/features/route.ts`:
   - `GET` handler accepts `bbox` query param (`minLng,minLat,maxLng,maxLat`).
   - Validates the param; returns 400 if missing or malformed.
   - Queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`.
   - Returns a `FeatureCollection` JSON response.
   - If `DATABASE_URL` is not set, returns an empty `FeatureCollection` with a warning (graceful degradation for demo without DB).
-- [ ] Run `tsc --noEmit` — fix any type errors.
-- [ ] Run `npm run lint` — fix any lint issues.
-- [ ] Run `prettier --write .`
-- [ ] Update journal.
+- [x] Run `tsc --noEmit` — fix any type errors.
+- [x] Run `npm run lint` — fix any lint issues.
+- [x] Run `prettier --write .`
+- [x] Update journal.
 - [ ] Present commit diff to user and wait for approval before committing.
 
 ---
@@ -175,7 +175,7 @@ Created `MapView.tsx` (`'use client'`, mapboxgl init via useRef/useEffect, Navig
 Set dark military background (#0d1117) as default in globals.css (removed light/dark media query — always dark for ops tool). Added `html, body { height: 100% }` for full-screen map support. Updated layout.tsx metadata to "Aurora IPB". Replaced boilerplate page.tsx with a `h-screen` main wrapping MapLoader. Dev server starts cleanly in 261ms and picks up .env.local. Map container renders; tiles won't load until a real Mapbox token is set.
 
 ### Phase 7
-_Not yet started._
+Created `src/app/api/features/route.ts` with bbox validation (parseBbox returns null on bad input → 400), graceful degradation when DATABASE_URL is absent (returns empty FeatureCollection with X-Aurora-Warning header), and a PostGIS stub query using ST_MakeEnvelope/ST_Intersects/ST_AsGeoJSON. The SQL targets a `poi` table as a placeholder — real table names will be wired in as data is ingested. tsc and lint clean.
 
 ### Phase 8
 _Not yet started._
