@@ -1,218 +1,145 @@
-# Implementation Plan: Testing Infrastructure for Aurora IPB
+# Implementation Plan: AOI Navigation & Highlighting
 
 ## Journal
 
 ### Phase 0 — 2026-05-15
 
-- Git status was clean except for the two modification doc files (MODIFICATION_DESIGN.md, MODIFICATION_IMPLEMENTATION.md) as expected.
-- `npm test` produced "Missing script: test" — confirmed no test runner existed.
-- Original scripts: `dev`, `build`, `start`, `lint`.
+- Git clean (only MODIFICATION_DESIGN.md and MODIFICATION_IMPLEMENTATION.md modified — expected).
+- 20 tests passing across 4 test files before any changes.
 
 ### Phase 1 — 2026-05-15
 
-- Installed Vitest 3.2.4, @vitejs/plugin-react 6.0.2, @testing-library/\* suite, jsdom 27, vite-tsconfig-paths 6.1.1.
-- Discovered: Vitest 3.x bundles its own vendored Vite (rolldown-based), which conflicts with the outer Vite used by @vitejs/plugin-react when tsc type-checks `vitest.config.ts`. Fix: exclude `vitest.config.ts` from `tsconfig.json`. This is safe — the config is only consumed by Vitest, not the Next.js build.
-- `next lint` subcommand syntax changed in Next.js 16; `npm run lint` (which runs `eslint`) works correctly.
-- Runner confirmed operational: `npm test` exits with code 1 and message "No test files found" — expected.
-
-### Phase 2 — 2026-05-15
-
-- Exported `parseBbox` from `route.ts` to allow direct unit testing.
-- Wrote 11 tests: 6 for `parseBbox` (null cases + valid tuple) and 5 for the `GET` handler (400 missing, 400 malformed, 200 empty+warning, 200 with features, 500 on DB error).
-- `console.error` fires in the 500 test (route logs the error) — this appears in stderr during `npm test` but is not a failure; it's correct behavior.
-- All 11 tests pass. Lint and tsc clean.
-
-### Phase 3 — 2026-05-15
-
-- Mocked `pg` at module level; used `vi.resetModules()` + `delete globalThis._pgPool` in `beforeEach` to reset the singleton between tests (required because the module caches the pool in a global).
-- 3 tests: Pool constructed with correct connectionString, singleton reuse (Pool called once across two imports), `query` delegates args correctly.
-- All 14 tests pass. Lint and tsc clean.
-
-### Phase 4 — 2026-05-15
-
-- Discovered Vitest hoisting gotcha: `vi.mock()` factory is hoisted above `const` declarations, so outer variables referenced inside the factory are not yet initialised. Fix: use `vi.hoisted()` to create mock fns in a block that runs before hoisting.
-- `MapView`: 4 tests — container div rendered, `Map` constructor called once with correct args, `NavigationControl` added, `remove()` called on unmount.
-- `MapLoader`: 2 tests — renders without crash, dynamic stub visible. Mocked `next/dynamic` to return a plain stub component.
-- All 20 tests pass. Lint and tsc clean.
-
-### Phase 6 — 2026-05-15
-
-- `@vitest/coverage-v8` must match Vitest's major version. Installing v4 (latest) while Vitest is v3 broke the module graph — `@vitejs/plugin-react` lost its `vite` peer dep. Fix: pin coverage-v8 to `^3`, then install `vite` explicitly as a dev dependency to satisfy the peer dep.
-- ESLint scanned the generated `coverage/` directory and emitted a spurious warning. Fix: add `"coverage/**"` to `eslint.config.mjs` ignores.
-- Final coverage summary (v8): `api/features/route.ts` 100%, `lib/db.ts` 100%, `components/MapView.tsx` 100% stmts/lines (one branch gap at line 22 — the guard `if (!containerRef.current || mapRef.current)` second condition is never true in tests), `components/MapLoader.tsx` 100% stmts/lines (0% funcs — expected, `next/dynamic` is mocked out entirely).
-- Updated README.md with Testing section and extended Scripts table.
-- Updated CLAUDE.md with test file layout, testing patterns, mock strategy, and coverage gotchas.
-
-### Phase 5 — 2026-05-15
-
-- Replaced the hedging `"npm test or npx jest or npx vitest run, whichever is configured"` line in `modify.md` with `npm test` and explicit hard-blocker language.
-- Added `npm run test:coverage` step to the last-phase checklist in `modify.md`.
-- No code changes; all 20 tests still pass.
+- Created `src/lib/areas.ts` with `AreaOfInterest` interface and `AREAS_OF_INTEREST` array (3 areas: Lappi, Karjala, Turku).
+- Created `src/test/lib/areas.test.ts` — 15 tests covering count, unique ids, bbox validity, center validity, center-within-bbox, and description length.
+- All 35 tests passing. tsc clean. prettier applied.
 
 ---
 
 ## Phase 0 — Baseline Verification
 
-- [ ] Confirm git status is clean (no uncommitted changes).
-- [ ] Confirm no existing test runner is configured (`npm test` should fail or be absent).
-- [ ] Note current `package.json` scripts for the journal.
-
-After completing Phase 0:
-
-- [ ] Update journal with findings.
+- [ ] Run all tests to ensure the project is in a good state before starting modifications.
+- [ ] Confirm git status is clean.
+- [ ] Note findings in journal.
 
 ---
 
-## Phase 1 — Install Dependencies & Configure Vitest
+## Phase 1 — Create `src/lib/areas.ts` AOI Data Module
 
-- [ ] Install dev dependencies:
-  ```
-  npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/dom @testing-library/user-event @testing-library/jest-dom vite-tsconfig-paths jsdom
-  ```
-- [ ] Create `vitest.config.ts` at project root:
-
-  ```typescript
-  import { defineConfig } from "vitest/config";
-  import react from "@vitejs/plugin-react";
-  import tsconfigPaths from "vite-tsconfig-paths";
-
-  export default defineConfig({
-    plugins: [react(), tsconfigPaths()],
-    test: {
-      environment: "jsdom",
-      globals: true,
-      setupFiles: ["./src/test/setup.ts"],
-    },
-  });
-  ```
-
-- [ ] Create `src/test/setup.ts` with `import "@testing-library/jest-dom";`
-- [ ] Add scripts to `package.json`:
-  - `"test": "vitest run"`
-  - `"test:watch": "vitest"`
-  - `"test:coverage": "vitest run --coverage"`
-- [ ] Run `npm test` — expect "no test files found" (zero failures, zero passes) to confirm the runner starts correctly.
-
-After completing Phase 1:
-
+- [ ] Create `src/lib/areas.ts` with the `AreaOfInterest` interface and `AREAS_OF_INTEREST` constant.
+  - 3 areas: Lappi (red), Karjala (blue), Turku (green)
+  - Each has: `id`, `name`, `bbox: [minLng, minLat, maxLng, maxLat]`, `center`, `color`, `description`
+  - Descriptions should be detailed enough to guide future DB ingestion queries.
+- [ ] Create `src/test/lib/areas.test.ts`:
+  - All 3 areas present
+  - `id` values are unique
+  - Each `bbox` is a 4-tuple of numbers where `bbox[0] < bbox[2]` and `bbox[1] < bbox[3]`
+  - Each `center` is a 2-tuple of numbers
+- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
 - [ ] Run `next lint --fix` and fix any issues.
 - [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` to confirm runner is operational.
+- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
 - [ ] Run `prettier --write .` for formatting.
 - [ ] Re-read this file and update as needed.
-- [ ] Update journal with actions taken, learnings, surprises.
-- [ ] Run `git diff` and draft a commit message; present to user for approval.
-- [ ] Wait for user approval before committing or moving to Phase 2.
-
----
-
-## Phase 2 — Write Tests for `parseBbox` and `GET /api/features`
-
-- [ ] Create `src/test/api/features.test.ts`.
-- [ ] Export `parseBbox` from `src/app/api/features/route.ts` (currently unexported) so it can be tested directly.
-- [ ] Write `parseBbox` unit tests:
-  - Returns `null` for missing input.
-  - Returns `null` for wrong number of parts.
-  - Returns `null` for non-numeric values.
-  - Returns `null` when `minLng >= maxLng` or `minLat >= maxLat`.
-  - Returns the correct 4-tuple for a valid bbox string.
-- [ ] Write `GET` handler tests (mock `@/lib/db` with `vi.mock`):
-  - Returns 400 with error message when `bbox` param is missing.
-  - Returns 400 when bbox is malformed.
-  - Returns empty `FeatureCollection` with `X-Aurora-Warning` header when `DATABASE_URL` is absent.
-  - Returns `FeatureCollection` with features when DB returns rows.
-  - Returns 500 when DB throws.
-- [ ] If any TODOs arise, add them as new tasks below.
-
-After completing Phase 2:
-
-- [ ] Run `next lint --fix` and fix any issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — all tests must pass.
-- [ ] Run `prettier --write .` for formatting.
-- [ ] Re-read this file and update as needed.
-- [ ] Update journal.
+- [ ] Update journal with actions taken, learnings, surprises, deviations.
 - [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval before committing or moving to Phase 3.
+- [ ] Wait for user approval. Do not commit or move to Phase 2 until approved.
+- [ ] After committing, verify the dev server hot-reload shows no errors in the browser.
 
 ---
 
-## Phase 3 — Write Tests for `db.ts` Pool Singleton
+## Phase 2 — Create `AreaNav` Component
 
-- [ ] Create `src/test/lib/db.test.ts`.
-- [ ] Mock the `pg` module with `vi.mock("pg")` so no real connection is attempted.
-- [ ] Test that importing `pool` twice returns the same instance (singleton guard).
-- [ ] Test that `query` calls `pool.query` with the correct arguments.
-- [ ] If any TODOs arise, add them as new tasks below.
-
-After completing Phase 3:
-
+- [ ] Create `src/components/AreaNav.tsx`:
+  - `'use client'` directive
+  - Props: `selectedAreaId: string | null`, `onSelect: (id: string) => void`
+  - Renders a horizontal flex row of buttons, one per AOI
+  - Positioned `absolute top-4 left-1/2 -translate-x-1/2 z-10`
+  - Buttons: dark semi-transparent background, rounded, gap between buttons
+  - Active button: colored ring/border using the area's color
+  - Import `AREAS_OF_INTEREST` from `@/lib/areas`
+- [ ] Create `src/test/components/AreaNav.test.tsx`:
+  - Renders 3 buttons with correct labels (Lappi, Karjala, Turku)
+  - Clicking a button calls `onSelect` with the correct `id`
+  - Active button has a distinguishing class/attribute when `selectedAreaId` matches
+- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
 - [ ] Run `next lint --fix` and fix any issues.
 - [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
 - [ ] Run `prettier --write .` for formatting.
 - [ ] Re-read this file and update as needed.
-- [ ] Update journal.
+- [ ] Update journal with actions taken, learnings, surprises, deviations.
 - [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval before committing or moving to Phase 4.
+- [ ] Wait for user approval. Do not commit or move to Phase 3 until approved.
+- [ ] After committing, verify the dev server hot-reload shows no errors in the browser.
 
 ---
 
-## Phase 4 — Write Tests for `MapView` and `MapLoader` Components
+## Phase 3 — Extend `MapView` with AOI Layers + `selectedAreaId` Prop
 
-- [ ] Create `src/test/components/MapView.test.tsx`.
-  - Mock `mapbox-gl` at module level with `vi.mock`.
-  - Assert that the container `<div>` with `w-full h-full` is rendered.
-  - Assert that `mapboxgl.Map` constructor is called once on mount.
-  - Assert that `map.remove()` is called on unmount (cleanup).
-- [ ] Create `src/test/components/MapLoader.test.tsx`.
-  - Mock `next/dynamic` to return a simple stub component.
-  - Assert that `MapLoader` renders without crashing.
-- [ ] If any TODOs arise, add them as new tasks below.
-
-After completing Phase 4:
-
+- [ ] Modify `src/components/MapView.tsx`:
+  - Add `selectedAreaId?: string | null` to `MapViewProps`
+  - On `map.on('style.load', ...)` (not `map.on('load', ...)`):
+    - Build a `GeoJSON.FeatureCollection` with 3 `Feature<Polygon>` entries
+    - Each polygon is the closed bbox ring: `[minLng,minLat] → [maxLng,minLat] → [maxLng,maxLat] → [minLng,maxLat] → [minLng,minLat]`
+    - `properties: { color, name }` per feature
+    - `map.addSource("aoi-source", { type: "geojson", data: featureCollection })`
+    - `map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi-source", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.12 } })`
+    - `map.addLayer({ id: "aoi-outline", type: "line", source: "aoi-source", paint: { "line-color": ["get", "color"], "line-width": 2 } })`
+  - Add `useEffect([selectedAreaId])`:
+    - If `selectedAreaId` is null or map not ready, return
+    - Find matching area in `AREAS_OF_INTEREST`
+    - Call `mapRef.current.fitBounds(area.bbox, { padding: 60, duration: 1200 })`
+  - Use `mapRef.current?.isStyleLoaded()` guard or store a `styleLoaded` flag to avoid calling `addSource` before style is ready
+- [ ] Modify `src/test/components/MapView.test.tsx`:
+  - Extend the existing mapbox-gl mock so the mock Map has `on`, `addSource`, `addLayer`, `fitBounds`, `isStyleLoaded` methods
+  - Test: `addSource` and `addLayer` are called after the `'style.load'` event fires
+  - Test: `fitBounds` is called with the correct bbox when `selectedAreaId` prop is set
+  - Test: `fitBounds` is not called when `selectedAreaId` is null
+- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
 - [ ] Run `next lint --fix` and fix any issues.
 - [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
 - [ ] Run `prettier --write .` for formatting.
 - [ ] Re-read this file and update as needed.
-- [ ] Update journal.
+- [ ] Update journal with actions taken, learnings, surprises, deviations.
 - [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval before committing or moving to Phase 5.
+- [ ] Wait for user approval. Do not commit or move to Phase 4 until approved.
+- [ ] After committing, verify the dev server hot-reload shows no errors in the browser.
 
 ---
 
-## Phase 5 — Update `modify.md` PDCA Loop
+## Phase 4 — Create `MapWithNav` and Update `MapLoader`
 
-- [ ] Open `.claude/commands/modify.md`.
-- [ ] Remove the `"or npx jest or npx vitest run, whichever is configured"` hedging language from every test run step — replace with `npm test`.
-- [ ] Change wording so a non-zero test exit is an explicit blocker (not optional).
-- [ ] Add a step to the final phase: "Run `npm run test:coverage` and record the coverage summary in the journal."
-- [ ] Verify the file reads cleanly end-to-end.
-
-After completing Phase 5:
-
+- [ ] Create `src/components/MapWithNav.tsx`:
+  - `'use client'` directive
+  - `useState<string | null>(null)` for `selectedAreaId`
+  - Renders: `<div className="relative w-full h-full">` containing `<AreaNav>` and `<MapView>`
+- [ ] Modify `src/components/MapLoader.tsx`:
+  - Change dynamic import from `"./MapView"` to `"./MapWithNav"`
+  - Keep `ssr: false` and loading placeholder unchanged
+- [ ] Create `src/test/components/MapWithNav.test.tsx`:
+  - Stub both `AreaNav` and `MapView` to capture their props
+  - Test: clicking a button in `AreaNav` changes `selectedAreaId` passed to `MapView`
+  - Test: `MapWithNav` renders without crashing
+- [ ] After completing tasks, if any TODOs were added to code or anything was left unfinished, add new tasks here.
 - [ ] Run `next lint --fix` and fix any issues.
 - [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `npm test` — **all tests must pass. A non-zero exit is a hard blocker.**
 - [ ] Run `prettier --write .` for formatting.
 - [ ] Re-read this file and update as needed.
-- [ ] Update journal.
+- [ ] Update journal with actions taken, learnings, surprises, deviations.
 - [ ] Run `git diff`, draft commit message, present to user for approval.
-- [ ] Wait for user approval before committing or moving to Phase 6.
+- [ ] Wait for user approval. Do not commit or move to Phase 5 until approved.
+- [ ] After committing, verify the dev server hot-reload: 3 buttons appear at top-center, clicking animates the map, AOI polygons are visible.
 
 ---
 
-## Phase 6 — Final Cleanup
+## Phase 5 — Final Cleanup & Documentation
 
 - [ ] Run `npm run test:coverage` and record the coverage summary in the journal.
-- [ ] Update `README.md` with a "Testing" section: framework, how to run tests, how to run coverage.
-- [ ] Update `CLAUDE.md` to document the test infrastructure: framework, test file layout, mock strategy, and the `npm test` / `npm run test:watch` / `npm run test:coverage` scripts.
-- [ ] Ask the user to inspect the test suite and confirm they are satisfied, or note any further modifications needed.
-
-After completing Phase 6:
-
+- [ ] Update `README.md` with any relevant information about the AOI navigation feature.
+- [ ] Update `CLAUDE.md` to reflect the new files, component structure, and AOI data module.
+- [ ] Ask the user to inspect the running app and confirm they are satisfied, or note any modifications needed.
 - [ ] Run `npm test` one final time — all tests must pass.
 - [ ] Update journal with final notes.
 - [ ] Run `git diff`, draft commit message, present to user for approval.
@@ -222,5 +149,7 @@ After completing Phase 6:
 
 ## Notes
 
-- After completing any task, if you added TODOs to the code or left anything partially implemented, add new tasks here immediately.
+- After completing any task, if you added TODOs to code or left anything partially implemented, add new tasks here immediately.
 - A failing `npm test` is a hard blocker — do not proceed to the next phase until all tests pass.
+- The `selectedAreaId` `useEffect` in `MapView` must guard against calling `fitBounds` before the Mapbox style is loaded.
+- Use `map.on('style.load', ...)` (not `map.on('load', ...)`) for the Mapbox Standard style, as `'load'` may fire before style tiles are ready.
