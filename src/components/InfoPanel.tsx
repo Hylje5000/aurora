@@ -39,7 +39,7 @@ export default function InfoPanel({
   if (!data) return null;
 
   return (
-    <div className="absolute right-4 top-20 z-20 w-72 max-h-[60vh] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/90 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm">
+    <div className="absolute right-4 top-10 z-20 w-72 max-h-[60vh] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/90 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm">
       {/* Header row — always visible */}
       <div className="flex items-center gap-2 px-4 py-3">
         <span className="text-sm font-bold tracking-wide text-white flex-1 truncate">
