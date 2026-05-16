@@ -31,6 +31,18 @@ const DRAW_MODE_MAP: Record<DrawingTool, string> = {
   Rectangle: "draw_rectangle",
 };
 
+// Layers that have their own click popups — elevation is suppressed when these are hit
+const INTERACTIVE_LAYER_IDS = new Set([
+  "cell-towers-gsm",
+  "cell-towers-umts",
+  "cell-towers-lte",
+  "cell-towers-cdma",
+  "roads-line",
+  "bridges-symbol",
+  "railways-line",
+  "municipalities-fill",
+]);
+
 interface MapViewProps {
   center?: [number, number];
   zoom?: number;
@@ -1147,10 +1159,24 @@ export default function MapView({
         // Elevation click — fires on every map click (general handler, no layer filter)
         map.on("click", async (e) => {
           const { lng, lat } = e.lngLat;
+
+          // Always clear the previous elevation context on any click
           elevationMarkerRef.current?.remove();
           elevationMarkerRef.current = null;
           elevationPopupRef.current?.remove();
           elevationPopupRef.current = null;
+
+          // Yield to layer-specific handlers (cell towers, roads, etc. and custom layers)
+          const hitInteractive = map
+            .queryRenderedFeatures(e.point)
+            .some(
+              (f) =>
+                f.layer != null &&
+                (INTERACTIVE_LAYER_IDS.has(f.layer.id) ||
+                  f.layer.id.startsWith("custom-layer-")),
+            );
+          if (hitInteractive) return;
+
           try {
             const res = await fetch(
               `/api/elevation?lng=${lng.toFixed(6)}&lat=${lat.toFixed(6)}`,

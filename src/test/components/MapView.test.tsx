@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, act, screen } from "@testing-library/react";
 
 const {
+  mockQueryRenderedFeatures,
   mockRemove,
   mockAddControl,
   mockOn,
@@ -33,6 +34,7 @@ const {
   mockMarkerAddTo,
   MockMarker,
 } = vi.hoisted(() => {
+  const mockQueryRenderedFeatures = vi.fn(() => [] as unknown[]);
   const mockRemove = vi.fn();
   const mockAddControl = vi.fn();
   const mockOn = vi.fn();
@@ -86,6 +88,7 @@ const {
     addControl: mockAddControl,
     remove: mockRemove,
     on: mockOn,
+    queryRenderedFeatures: mockQueryRenderedFeatures,
     addSource: mockAddSource,
     addLayer: mockAddLayer,
     addImage: mockAddImage,
@@ -105,6 +108,7 @@ const {
   }));
   const MockNavigationControl = vi.fn();
   return {
+    mockQueryRenderedFeatures,
     mockRemove,
     mockAddControl,
     mockOn,
@@ -271,6 +275,7 @@ describe("MapView", () => {
     mockDrawChangeMode.mockClear();
     mockDrawDelete.mockClear();
     mockDrawTrash.mockClear();
+    mockQueryRenderedFeatures.mockReturnValue([]);
     mockPopupRemove.mockClear();
     MockMarker.mockClear();
     mockMarkerRemove.mockClear();
@@ -877,5 +882,54 @@ describe("MapView", () => {
 
     expect(MockMarker).not.toHaveBeenCalled();
     expect(MockPopup).not.toHaveBeenCalled();
+  });
+
+  it("suppresses elevation when clicking on an interactive feature layer", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+    MockMarker.mockClear();
+
+    // Simulate clicking on a cell tower
+    mockQueryRenderedFeatures.mockReturnValue([
+      { layer: { id: "cell-towers-lte" } },
+    ]);
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({
+        lngLat: { lng: 22.27, lat: 60.45 },
+        point: { x: 100, y: 200 },
+      });
+    });
+
+    expect(MockMarker).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation"),
+    );
+  });
+
+  it("suppresses elevation when clicking on a custom drawing layer feature", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockMarker.mockClear();
+
+    // Simulate clicking on a custom layer
+    mockQueryRenderedFeatures.mockReturnValue([
+      { layer: { id: "custom-layer-abc123-fill" } },
+    ]);
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({
+        lngLat: { lng: 22.27, lat: 60.45 },
+        point: { x: 100, y: 200 },
+      });
+    });
+
+    expect(MockMarker).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation"),
+    );
   });
 });
