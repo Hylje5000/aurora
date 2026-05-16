@@ -906,6 +906,16 @@ export default function MapView({
       });
       // slot:"top" renders above Standard style night-mode color pipeline
       map.addLayer({
+        id: "municipality-highlight-fill",
+        type: "fill",
+        source: "municipality-highlight-source",
+        slot: "top",
+        paint: {
+          "fill-color": "#ffffff",
+          "fill-opacity": 0.08,
+        },
+      });
+      map.addLayer({
         id: "municipality-highlight-line",
         type: "line",
         source: "municipality-highlight-source",
