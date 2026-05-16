@@ -4,6 +4,7 @@ import {
   formatDistance,
   profileLabel,
   PROFILE_COLORS,
+  VEHICLE_PRESETS,
 } from "@/lib/routing";
 
 describe("formatDuration", () => {
@@ -49,6 +50,41 @@ describe("profileLabel", () => {
     expect(profileLabel("driving")).toBe("Driving");
     expect(profileLabel("walking")).toBe("Walking");
     expect(profileLabel("cycling")).toBe("Cycling");
+  });
+});
+
+describe("VEHICLE_PRESETS", () => {
+  it("has exactly 5 presets", () => {
+    expect(VEHICLE_PRESETS).toHaveLength(5);
+  });
+
+  it("Infantry has mass_t=0 so mass checks are skipped", () => {
+    const infantry = VEHICLE_PRESETS.find((v) => v.label === "Infantry");
+    expect(infantry).toBeDefined();
+    expect(infantry!.mass_t).toBe(0);
+    expect(infantry!.axle_mass_t).toBe(0);
+    expect(infantry!.bogie_mass_t).toBe(0);
+  });
+
+  it("MBT has mass_t=60 and bogie_mass_t=15", () => {
+    const mbt = VEHICLE_PRESETS.find((v) => v.label === "MBT (tank)");
+    expect(mbt).toBeDefined();
+    expect(mbt!.mass_t).toBe(60);
+    expect(mbt!.bogie_mass_t).toBe(15);
+  });
+
+  it("last preset is Custom", () => {
+    expect(VEHICLE_PRESETS[VEHICLE_PRESETS.length - 1].label).toBe("Custom");
+  });
+
+  it("all presets have non-negative numeric fields", () => {
+    for (const v of VEHICLE_PRESETS) {
+      expect(v.mass_t).toBeGreaterThanOrEqual(0);
+      expect(v.axle_mass_t).toBeGreaterThanOrEqual(0);
+      expect(v.bogie_mass_t).toBeGreaterThanOrEqual(0);
+      expect(v.height_m).toBeGreaterThan(0);
+      expect(v.width_m).toBeGreaterThan(0);
+    }
   });
 });
 
