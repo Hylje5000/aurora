@@ -11,6 +11,10 @@ import {
   type RouteProfile,
   type Waypoint,
   type PlannedRoute,
+  type VehicleProfile,
+  type RouteHazard,
+  type RouteIntelligence,
+  VEHICLE_PRESETS,
   PROFILE_COLORS,
   formatDuration,
   formatDistance,
@@ -28,6 +32,8 @@ interface RoutePanelProps {
     profile: RouteProfile,
     waypoints: Waypoint[],
   ) => void;
+  onHazardsChange?: (intel: RouteIntelligence | null) => void;
+  onHazardFocus?: (hazard: RouteHazard) => void;
   onClose: () => void;
 }
 
@@ -37,6 +43,18 @@ const PROFILE_ICONS: Record<RouteProfile, string> = {
   driving: "🚗",
   walking: "🚶",
   cycling: "🚴",
+};
+
+const SEVERITY_COLOR: Record<RouteHazard["severity"], string> = {
+  critical: "#ef4444",
+  warning: "#eab308",
+  info: "#94a3b8",
+};
+
+const SEVERITY_BG: Record<RouteHazard["severity"], string> = {
+  critical: "bg-red-900/30 hover:bg-red-900/50",
+  warning: "bg-amber-900/20 hover:bg-amber-900/40",
+  info: "hover:bg-slate-800/60",
 };
 
 function waypointLabel(index: number, total: number): string {
@@ -49,8 +67,48 @@ function relabel(wps: Waypoint[]): Waypoint[] {
   return wps.map((wp, i) => ({ ...wp, label: waypointLabel(i, wps.length) }));
 }
 
+function VehicleField({
+  label,
+  unit,
+  value,
+  onChange,
+}: {
+  label: string;
+  unit: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">
+        {label} ({unit})
+      </span>
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        value={value}
+        onChange={(e) => {
+          const n = parseFloat(e.target.value);
+          if (!isNaN(n) && n >= 0) onChange(n);
+        }}
+        className="w-full rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-200 px-1.5 py-0.5 focus:outline-none focus:border-slate-500"
+      />
+    </label>
+  );
+}
+
 export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
-  function RoutePanel({ onAddingWaypointChange, onRouteChange, onClose }, ref) {
+  function RoutePanel(
+    {
+      onAddingWaypointChange,
+      onRouteChange,
+      onHazardsChange,
+      onHazardFocus,
+      onClose,
+    },
+    ref,
+  ) {
     const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
     const [profile, setProfile] = useState<RouteProfile>("driving");
     const [route, setRoute] = useState<PlannedRoute | null>(null);
@@ -58,14 +116,32 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const [error, setError] = useState<string | null>(null);
     const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
 
+    // Vehicle state — index into VEHICLE_PRESETS + editable fields
+    const [presetIndex, setPresetIndex] = useState(0);
+    const [vehicle, setVehicle] = useState<VehicleProfile>({
+      ...VEHICLE_PRESETS[0],
+    });
+
+    // Intelligence state
+    const [intelligence, setIntelligence] = useState<RouteIntelligence | null>(
+      null,
+    );
+    const [intelligenceLoading, setIntelligenceLoading] = useState(false);
+
     // Drag-and-drop state
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
     const abortRef = useRef<AbortController | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const intelAbortRef = useRef<AbortController | null>(null);
+    const intelDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onRouteChangeRef = useRef(onRouteChange);
+    // eslint-disable-next-line react-hooks/refs
     onRouteChangeRef.current = onRouteChange;
+    const onHazardsChangeRef = useRef(onHazardsChange);
+    // eslint-disable-next-line react-hooks/refs
+    onHazardsChangeRef.current = onHazardsChange;
 
     useImperativeHandle(ref, () => ({
       addWaypoint(coords: [number, number]) {
@@ -90,7 +166,6 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     function handleDragStart(e: React.DragEvent, index: number) {
       setDragIndex(index);
       e.dataTransfer.effectAllowed = "move";
-      // Required for Firefox
       e.dataTransfer.setData("text/plain", String(index));
     }
 
@@ -123,7 +198,21 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       setWaypoints([]);
       setRoute(null);
       setError(null);
+      setIntelligence(null);
       onRouteChangeRef.current(null, profile, []);
+      onHazardsChangeRef.current?.(null);
+    }
+
+    function applyPreset(index: number) {
+      setPresetIndex(index);
+      setVehicle({ ...VEHICLE_PRESETS[index] });
+    }
+
+    function updateVehicleField(field: keyof VehicleProfile, value: number) {
+      // Switch to Custom preset (last one) when user edits a field
+      const customIndex = VEHICLE_PRESETS.length - 1;
+      setPresetIndex(customIndex);
+      setVehicle((prev) => ({ ...prev, [field]: value }));
     }
 
     // Auto-fetch route, debounced 400 ms
@@ -132,9 +221,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
       if (waypoints.length < 2) {
         abortRef.current?.abort();
+        /* eslint-disable react-hooks/set-state-in-effect */
         setRoute(null);
         setError(null);
         setLoading(false);
+        /* eslint-enable react-hooks/set-state-in-effect */
         onRouteChangeRef.current(null, profile, waypoints);
         return;
       }
@@ -179,8 +270,48 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       return () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
       };
-      // waypoints and profile are the only triggers; onRouteChange is stable via ref
     }, [waypoints, profile]);
+
+    // Fetch route intelligence, debounced 600 ms after route or vehicle changes.
+    useEffect(() => {
+      if (intelDebounceRef.current) clearTimeout(intelDebounceRef.current);
+      if (!route) {
+        onHazardsChangeRef.current?.(null);
+        return;
+      }
+
+      intelDebounceRef.current = setTimeout(async () => {
+        intelAbortRef.current?.abort();
+        const controller = new AbortController();
+        intelAbortRef.current = controller;
+
+        setIntelligenceLoading(true);
+        setIntelligence(null);
+
+        try {
+          const res = await fetch("/api/route-intelligence", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ routeGeometry: route.geometry, vehicle }),
+            signal: controller.signal,
+          });
+
+          if (!res.ok) return;
+
+          const intel = (await res.json()) as RouteIntelligence;
+          setIntelligence(intel);
+          onHazardsChangeRef.current?.(intel);
+        } catch (err) {
+          if ((err as { name?: string }).name === "AbortError") return;
+        } finally {
+          setIntelligenceLoading(false);
+        }
+      }, 600);
+
+      return () => {
+        if (intelDebounceRef.current) clearTimeout(intelDebounceRef.current);
+      };
+    }, [route, vehicle]);
 
     return (
       <div
@@ -225,6 +356,60 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             ))}
           </div>
 
+          {/* Vehicle selector */}
+          <div className="flex flex-col gap-1.5 border border-slate-700/60 rounded p-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                Vehicle
+              </span>
+            </div>
+            <select
+              value={presetIndex}
+              onChange={(e) => applyPreset(Number(e.target.value))}
+              className="w-full rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-200 px-1.5 py-1 focus:outline-none focus:border-slate-500"
+              aria-label="Vehicle preset"
+              data-testid="vehicle-preset-select"
+            >
+              {VEHICLE_PRESETS.map((v, i) => (
+                <option key={v.label} value={i}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-1.5">
+              <VehicleField
+                label="Mass"
+                unit="t"
+                value={vehicle.mass_t}
+                onChange={(v) => updateVehicleField("mass_t", v)}
+              />
+              <VehicleField
+                label="Axle"
+                unit="t"
+                value={vehicle.axle_mass_t}
+                onChange={(v) => updateVehicleField("axle_mass_t", v)}
+              />
+              <VehicleField
+                label="Bogie"
+                unit="t"
+                value={vehicle.bogie_mass_t}
+                onChange={(v) => updateVehicleField("bogie_mass_t", v)}
+              />
+              <VehicleField
+                label="Height"
+                unit="m"
+                value={vehicle.height_m}
+                onChange={(v) => updateVehicleField("height_m", v)}
+              />
+              <VehicleField
+                label="Width"
+                unit="m"
+                value={vehicle.width_m}
+                onChange={(v) => updateVehicleField("width_m", v)}
+              />
+            </div>
+          </div>
+
           {/* Waypoint list */}
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center justify-between mb-0.5">
@@ -265,7 +450,6 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                 ].join(" ")}
                 data-testid={`waypoint-row-${i}`}
               >
-                {/* Drag handle */}
                 <span
                   className="cursor-grab text-slate-600 hover:text-slate-400 text-[11px] flex-shrink-0 leading-none"
                   aria-hidden="true"
@@ -273,21 +457,15 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                 >
                   ⠿
                 </span>
-
-                {/* Index badge */}
                 <span
                   className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
                   style={{ backgroundColor: PROFILE_COLORS[profile] }}
                 >
                   {i + 1}
                 </span>
-
-                {/* Label */}
                 <span className="flex-1 text-[10px] font-mono text-slate-300 truncate">
                   {wp.label}
                 </span>
-
-                {/* Remove */}
                 <button
                   onClick={() => removeWaypoint(wp.id)}
                   className="text-slate-600 hover:text-red-400 transition-colors text-[9px] flex-shrink-0"
@@ -341,7 +519,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                 {formatDuration(route.total_duration_s)}
               </p>
 
-              <div className="flex flex-col gap-0.5 mt-1 max-h-40 overflow-y-auto">
+              <div className="flex flex-col gap-0.5 mt-1 max-h-32 overflow-y-auto">
                 {route.legs.map((leg, i) => (
                   <div key={i}>
                     <button
@@ -379,6 +557,90 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Route Assessment */}
+          {route && !loading && (
+            <div
+              className="border-t border-slate-700/60 pt-1.5 flex flex-col gap-1"
+              data-testid="route-assessment"
+            >
+              <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                Route Assessment
+              </span>
+
+              {intelligenceLoading && (
+                <p
+                  className="text-[9px] font-mono text-slate-500"
+                  data-testid="intel-loading"
+                >
+                  Analysing route…
+                </p>
+              )}
+
+              {!intelligenceLoading && intelligence && (
+                <>
+                  {/* Summary line */}
+                  {intelligence.summary.passable ? (
+                    <p
+                      className="text-[10px] font-mono font-semibold text-green-400"
+                      data-testid="assessment-passable"
+                    >
+                      ✓ Route passable ({vehicle.label})
+                      {intelligence.summary.warning > 0 ||
+                      intelligence.summary.info > 0
+                        ? ` · ${intelligence.summary.warning + intelligence.summary.info} notice${intelligence.summary.warning + intelligence.summary.info > 1 ? "s" : ""}`
+                        : ""}
+                    </p>
+                  ) : (
+                    <p
+                      className="text-[10px] font-mono font-semibold text-red-400"
+                      data-testid="assessment-impassable"
+                    >
+                      ✗ IMPASSABLE — {intelligence.summary.critical} critical
+                      hazard{intelligence.summary.critical > 1 ? "s" : ""}
+                    </p>
+                  )}
+
+                  {/* Hazard list */}
+                  {intelligence.hazards.length > 0 && (
+                    <div
+                      className="flex flex-col gap-0.5 max-h-48 overflow-y-auto"
+                      data-testid="hazard-list"
+                    >
+                      {intelligence.hazards.map((hazard) => (
+                        <button
+                          key={hazard.id}
+                          onClick={() => onHazardFocus?.(hazard)}
+                          className={[
+                            "flex items-start gap-1.5 text-left rounded px-1.5 py-1 transition-colors w-full",
+                            SEVERITY_BG[hazard.severity],
+                          ].join(" ")}
+                          data-testid={`hazard-row-${hazard.id}`}
+                        >
+                          <span
+                            className="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
+                            style={{
+                              backgroundColor: SEVERITY_COLOR[hazard.severity],
+                            }}
+                            aria-hidden="true"
+                          />
+                          <span className="text-[9px] font-mono text-slate-300 leading-relaxed">
+                            {hazard.message}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {!intelligenceLoading && !intelligence && (
+                <p className="text-[9px] font-mono text-slate-600">
+                  No infrastructure data available.
+                </p>
+              )}
             </div>
           )}
         </div>
