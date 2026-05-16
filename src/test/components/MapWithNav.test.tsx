@@ -566,13 +566,17 @@ describe("MapWithNav", () => {
     expect(screen.getByTestId("route-panel")).toBeInTheDocument();
   });
 
-  it("hides RoutePanel when Plan a Route button is clicked again", async () => {
+  it("hides RoutePanel and restores button when CloseRoutePanel is clicked", async () => {
     render(<MapWithNav />);
     await act(async () => {});
     await userEvent.click(screen.getByTestId("route-toggle-btn"));
     expect(screen.getByTestId("route-panel")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.queryByTestId("route-toggle-btn")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "CloseRoutePanel" }),
+    );
     expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
+    expect(screen.getByTestId("route-toggle-btn")).toBeInTheDocument();
   });
 
   it("sets addingWaypoint=true on MapView when RoutePanel starts waypoint adding", async () => {

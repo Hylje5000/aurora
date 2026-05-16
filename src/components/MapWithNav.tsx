@@ -181,27 +181,21 @@ export default function MapWithNav() {
     <div className="relative w-full h-full">
       <AreaNav selectedAreaId={selectedAreaId} onSelect={setSelectedAreaId} />
 
-      {/* Route toggle button */}
-      <button
-        onClick={() => {
-          const opening = !routePanelOpen;
-          setRoutePanelOpen(opening);
-          if (opening) {
+      {/* Route toggle button — only shown when RoutePanel is not mounted */}
+      {!routePanelOpen && (
+        <button
+          onClick={() => {
+            setRoutePanelOpen(true);
             setRoutePanelExpanded(true);
             setInfoPanelCollapsed(true);
-          }
-        }}
-        className={[
-          "absolute top-4 right-4 z-10 rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-white transition-all backdrop-blur-sm",
-          routePanelOpen
-            ? "bg-blue-700 border border-blue-400 shadow-[0_0_0_2px_#60a5fa]"
-            : "bg-blue-600 hover:bg-blue-700 border border-blue-500",
-        ].join(" ")}
-        aria-label="Toggle route planning panel"
-        data-testid="route-toggle-btn"
-      >
-        Plan a Route
-      </button>
+          }}
+          className="absolute bottom-10 right-4 z-10 rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-white bg-blue-600 hover:bg-blue-700 border border-blue-500 transition-all backdrop-blur-sm"
+          aria-label="Toggle route planning panel"
+          data-testid="route-toggle-btn"
+        >
+          Plan a Route
+        </button>
+      )}
 
       <MapView
         selectedAreaId={selectedAreaId}
