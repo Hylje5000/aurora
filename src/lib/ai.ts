@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 
-export const CM_MODEL = process.env.CM_MODEL_NAME ?? "google/gemma-4-31B-it";
+export const CM_MODEL =
+  process.env.CM_MODEL_NAME ?? "Gemma 4-fovcnlriirydcgilvaix";
 
 export function createAIClient(): OpenAI {
   const baseURL = process.env.CM_BASE_URL;

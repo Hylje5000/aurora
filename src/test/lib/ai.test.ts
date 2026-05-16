@@ -47,8 +47,8 @@ describe("createAIClient", () => {
 });
 
 describe("CM_MODEL", () => {
-  it("falls back to google/gemma-4-31B-it when CM_MODEL_NAME is not set", () => {
-    expect(CM_MODEL).toBe("google/gemma-4-31B-it");
+  it("falls back to Gemma 4-fovcnlriirydcgilvaix when CM_MODEL_NAME is not set", () => {
+    expect(CM_MODEL).toBe("Gemma 4-fovcnlriirydcgilvaix");
   });
 
   it("uses CM_MODEL_NAME when set", async () => {
