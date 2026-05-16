@@ -1,125 +1,154 @@
-# Implementation Plan: NATO Milsymbol Cell Tower Markers
+# Implementation Plan: Collaborative Custom Drawing Layers
 
 ## Journal
 
-_Updated after each phase._
+**Phase 0 (2026-05-16):** All 119 pre-existing tests passed. Clean baseline.
+
+**Phase 1 (2026-05-16):** Created `.local/setup_custom_layers.sql` (gitignored, for manual DB setup), `src/lib/customLayers.ts` (types + palette), and 10 unit tests. 129 tests pass. Discovered `.local/` is in `.gitignore` — SQL script will not be committed, only lives locally for the user to run.
 
 ---
 
 ## Phase 0 — Baseline health check
 
-- [x] Run `npm test` and confirm all tests pass before starting.
+- [ ] Run `npm test` and confirm all existing tests pass before touching any code.
 
 ---
 
-## Phase 1 — Install milsymbol
+## Phase 1 — Database setup & types
 
-- [x] Run `npm install milsymbol` to add the package.
-- [x] Verify `milsymbol` appears in `package.json` dependencies and that TypeScript types are included (milsymbol ships its own `.d.ts`).
-- [x] Run `tsc --noEmit` to confirm no type errors introduced by the new package.
-- [x] Run `npm test` — all tests must still pass (no code changed yet).
-- [x] Run `next lint --fix`.
-- [x] Run `prettier --write .`.
-- [x] Update MODIFICATION_IMPLEMENTATION.md Journal with findings.
-- [ ] Present the following commit for user approval:
-  ```
-  chore(deps): add milsymbol for NATO military symbology rendering
-  ```
-- [ ] Wait for approval, then commit.
+- [ ] Create `.local/` directory if it doesn't exist.
+- [ ] Write `.local/setup_custom_layers.sql` with the PostGIS schema (custom_layers + custom_features tables, indexes).
+- [ ] Create `src/lib/customLayers.ts` with:
+  - `CustomLayer` type
+  - `CustomFeature` type
+  - `DrawingTool` union type (`'point' | 'line_string' | 'polygon' | 'rectangle'`)
+  - `COLOUR_PALETTE` constant (8 hex colours with labels)
+  - `DEFAULT_LAYER_COLOUR` constant
 
----
-
-## Phase 2 — Add `src/lib/milsymbol.ts` utility
-
-- [x] Create `src/lib/milsymbol.ts` with `createMilsymbolImage(opts)` as designed:
-  - Accepts `{ sidc, size?, fillColor?, uniqueDesignation? }`
-  - Instantiates `new ms.Symbol(sidc, options)`
-  - Calls `.asSVG()` to get the SVG string
-  - Returns a `Promise<HTMLImageElement>` via data URL → `<img onload>`
-- [x] Create `src/test/lib/milsymbol.test.ts`:
-  - `vi.mock("milsymbol")` — mock `Symbol` class with `.asSVG()` returning a minimal SVG string
-  - Mock the global `Image` class so `onload` fires synchronously
-  - Assert `img.src` contains `data:image/svg+xml`
-  - Assert the returned value is the `HTMLImageElement`
-  - Assert that error path (`onerror`) rejects the promise
-- [x] Run `tsc --noEmit` — fix any type errors.
-- [x] Run `npm test` — all tests must pass (including the new milsymbol tests).
-- [x] Run `next lint --fix`.
-- [x] Run `prettier --write .`.
-- [x] Update MODIFICATION_IMPLEMENTATION.md Journal.
-- [x] Present commit for user approval:
-  ```
-  feat(lib): add createMilsymbolImage utility for NATO symbol generation
-  ```
-- [ ] Wait for approval, then commit.
+**Phase 1 wrap-up:**
+- [ ] Write unit tests for `src/lib/customLayers.ts` (palette completeness, type guards if any).
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read MODIFICATION_IMPLEMENTATION.md for any changes.
+- [ ] Update journal with learnings.
+- [ ] `git diff` → draft commit message → present to user for approval.
+- [ ] Wait for user approval before committing.
+- [ ] After commit, verify hot-reload in browser if dev server is running.
 
 ---
 
-## Phase 3 — Replace circle layers with symbol layers in `MapView.tsx`
+## Phase 2 — API routes
 
-- [x] Import `createMilsymbolImage` from `@/lib/milsymbol` in `MapView.tsx`.
-- [x] Define `TOWER_CONFIGS` array (id, radio, color, visible) — replaces the existing inline `towerLayers` array.
-- [x] Define `SIDC = "SFGPUUSR-------"`.
-- [x] Wrap the `style.load` callback as `async`.
-- [x] Inside `style.load`, after adding cluster layers:
-  - `await Promise.all(TOWER_CONFIGS.map(...))` — generate and register one milsymbol image per radio type via `map.addImage()`.
-- [x] Replace the existing `circle`-type `addLayer` calls with `symbol`-type layers:
-  - `type: "symbol"`
-  - `layout`: `"icon-image": "${id}-icon"`, `"icon-size": 0.6`, `"icon-allow-overlap": true`, `"visibility": ...`
-  - Remove all `paint` properties (no `circle-radius`, `circle-color`, etc.)
-- [x] Verify the popup and hover handlers reference the same layer IDs — no changes needed there.
-- [x] Verify `LAYER_GROUPS` in `src/lib/layers.ts` — layer IDs are unchanged, so no edits required.
-- [x] After completing tasks above, add any TODOs as new tasks if anything was skipped or left incomplete.
-- [x] Update `src/test/components/MapView.test.tsx`:
-  - Mock `createMilsymbolImage` from `@/lib/milsymbol` using `vi.mock` — return a resolved promise with a stub `HTMLImageElement`.
-  - Assert `map.addImage` is called 4 times (once per radio type icon).
-  - Update layer assertions from `type: "circle"` to `type: "symbol"` for the four per-radio layers.
-  - Assert `icon-image` is set in the layout (not `circle-radius` in paint).
-- [x] Run `tsc --noEmit` — fix any type errors.
-- [x] Run `npm test` — all tests must pass (hard blocker if not).
-- [x] Run `next lint --fix`.
-- [x] Run `prettier --write .`.
-- [x] Re-read MODIFICATION_IMPLEMENTATION.md to check for any missed tasks.
-- [x] Update MODIFICATION_IMPLEMENTATION.md Journal.
-- [ ] `git diff` — review changes, draft commit message, present to user:
-  ```
-  feat(map): replace circle cell-tower markers with NATO milsymbol icons
-  ```
-- [ ] Wait for approval, then commit.
-- [ ] Verify hot-reload in browser — NATO symbols should appear on the map in place of the dots.
+- [ ] `src/app/api/custom-layers/route.ts` — GET (list all layers) + POST (create layer).
+- [ ] `src/app/api/custom-layers/[id]/route.ts` — DELETE layer (CASCADE handled by DB).
+- [ ] `src/app/api/custom-layers/[id]/features/route.ts` — GET (bbox-scoped) + POST (create feature). Reuse `parseBbox` from the features route. Store geometry via `ST_GeomFromGeoJSON`.
+- [ ] `src/app/api/custom-layers/[id]/features/[fid]/route.ts` — PUT (update name/description/color) + DELETE (single feature).
+- [ ] All routes degrade gracefully when `DATABASE_URL` is absent (return empty/404 with message).
+- [ ] After adding any TODOs or incomplete items, add new tasks here.
+
+**Phase 2 wrap-up:**
+- [ ] Write unit tests for all four route files (mock `@/lib/db`).
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read MODIFICATION_IMPLEMENTATION.md for any changes.
+- [ ] Update journal.
+- [ ] `git diff` → draft commit message → present to user for approval.
+- [ ] Wait for user approval before committing.
 
 ---
 
-## Phase 4 — Final checks, docs, coverage
+## Phase 3 — UI components
 
-- [x] Run `npm run test:coverage` and record the coverage summary in the Journal below.
-- [x] Update `CLAUDE.md` to reflect:
-  - `milsymbol` is now a dependency
-  - `src/lib/milsymbol.ts` exists and what it does
-  - Cell tower individual markers are now `symbol` layers using NATO APP-6 icons (SIDC `SFGPUUSR-------`)
-- [x] Check if `README.md` exists and needs updating (unlikely; update only if relevant).
-- [ ] Ask the user to inspect the running app and confirm they are satisfied, or note any modifications needed.
+- [ ] Install dependencies: `npm install @mapbox/mapbox-gl-draw mapbox-gl-draw-rectangle-mode` and `npm install -D @types/mapbox__mapbox-gl-draw`.
+- [ ] Create `src/components/FeatureDialog.tsx` — modal with Name + Description fields; `onSave(name, description)` + `onDiscard()` callbacks.
+- [ ] Create `src/components/DrawingToolbar.tsx` — tool buttons (point/line/polygon/rectangle) + 8-colour swatch palette + Cancel button. Receives `activeDrawingLayerName`, `activeTool`, `activeColour`, `onToolChange`, `onColourChange`, `onCancel`, `onDeleteSelected`.
+- [ ] Create `src/components/CustomLayerPanel.tsx` — collapsible dark-slate floating panel (bottom-right). Shows layer list with toggle checkbox, colour dot, active-drawing-layer selector, delete button with inline confirm. Inline "New Layer" form (name input + colour swatches + Create button). Calls `onCreateLayer`, `onDeleteLayer`, `onToggleLayer`, `onSetActiveDrawingLayer` callbacks.
+- [ ] After adding any TODOs or incomplete items, add new tasks here.
+
+**Phase 3 wrap-up:**
+- [ ] Write unit tests for `FeatureDialog`, `DrawingToolbar`, `CustomLayerPanel` (mock callbacks, check render).
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read MODIFICATION_IMPLEMENTATION.md for any changes.
+- [ ] Update journal.
+- [ ] `git diff` → draft commit message → present to user for approval.
+- [ ] Wait for user approval before committing.
+- [ ] After commit, verify components render correctly in the browser.
 
 ---
 
-## Journal
+## Phase 4 — MapView integration
 
-### Phase 0
+- [ ] Import `MapboxDraw` and `DrawRectangle` mode (dynamic import inside `useEffect` to avoid SSR issues — or add to mapbox-gl mock).
+- [ ] Initialise `drawRef` after map `load`; register `draw.create`, `draw.update`, `draw.delete`, `draw.selectionchange` event handlers on the map.
+- [ ] Accept new props from `MapWithNav`: `customLayers`, `enabledCustomLayerIds`, `activeDrawingLayerId`, `activeDrawingTool`, `activeDrawingColour`, `onDrawCreate`, `onDrawDelete`, `onDrawUpdate`, `onDrawSelectionChange`.
+- [ ] On `style.load`, register per-layer Mapbox sources (`custom-layer-<id>`) and three layers each: fill (polygons/rectangles), line (lines/polygon outlines), circle (points).
+- [ ] On `enabledCustomLayerIds` change: for newly enabled layers, fetch features from the API (current bbox); for disabled layers, clear source data.
+- [ ] On `moveend`, re-fetch features for all enabled custom layers.
+- [ ] Show `FeatureDialog` when `draw.create` fires; on save, POST to API then update source data; on discard, delete the drawn feature from the Draw control.
+- [ ] When `activeDrawingLayerId` changes or `activeDrawingTool` changes, call `draw.changeMode(...)`.
+- [ ] Apply per-feature colour using Mapbox data-driven expressions `["get", "color"]` on fill-color/line-color/circle-color.
+- [ ] `draw.selectionchange` → call `onDrawSelectionChange` so toolbar can show "Delete selected" button.
+- [ ] Handle `draw.delete` for features that were already persisted (DELETE to API).
+- [ ] After adding any TODOs or incomplete items, add new tasks here.
 
-114 tests pass. Baseline green.
+**Phase 4 wrap-up:**
+- [ ] Update/extend `MapView` tests to cover: Draw control init, custom layer source registration, `draw.create` flow, `draw.delete` flow, moveend re-fetch for custom layers.
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read MODIFICATION_IMPLEMENTATION.md for any changes.
+- [ ] Update journal.
+- [ ] `git diff` → draft commit message → present to user for approval.
+- [ ] Wait for user approval before committing.
+- [ ] After commit, verify the full drawing flow works end-to-end in the browser.
 
-### Phase 1
+---
 
-`milsymbol@3.0.4` installed. Types ship with the package at `node_modules/milsymbol/index.d.ts` — no separate `@types/milsymbol` needed. `tsc --noEmit` clean. All 114 tests still pass. Note: `next lint --fix` does not accept `--fix`; use `npm run lint` (calls `eslint` directly) instead in future phases.
+## Phase 5 — MapWithNav wiring
 
-### Phase 2
+- [ ] Add state to `MapWithNav`:
+  - `customLayers: CustomLayer[]` (fetched from GET `/api/custom-layers` on mount)
+  - `enabledCustomLayerIds: Set<string>`
+  - `activeDrawingLayerId: string | null`
+  - `activeDrawingTool: DrawingTool | null`
+  - `activeDrawingColour: string` (default first palette colour)
+  - `selectedFeatureIds: string[]`
+- [ ] Implement handlers: `handleCreateLayer`, `handleDeleteLayer`, `handleToggleLayer`, `handleSetActiveDrawingLayer`, `handleToolChange`, `handleColourChange`, `handleDrawCreate`, `handleDrawDelete`, `handleDrawUpdate`, `handleDrawSelectionChange`.
+- [ ] Wire `CustomLayerPanel` and `DrawingToolbar` into the layout (absolutely positioned).
+- [ ] Pass all draw-related props to `MapView`.
+- [ ] After adding any TODOs or incomplete items, add new tasks here.
 
-`src/lib/milsymbol.ts` created — thin wrapper: `ms.Symbol(sidc, opts).asSVG()` → data URL → `HTMLImageElement` promise. 4 unit tests added covering: data URL format, option passthrough, default size, and `onerror` rejection path. 118 tests pass. `tsc` clean. Lint clean.
+**Phase 5 wrap-up:**
+- [ ] Update/extend `MapWithNav` tests to cover new state wiring.
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit` and fix any type errors.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read MODIFICATION_IMPLEMENTATION.md for any changes.
+- [ ] Update journal.
+- [ ] `git diff` → draft commit message → present to user for approval.
+- [ ] Wait for user approval before committing.
+- [ ] After commit, do a full end-to-end browser test: create layer → draw polygon → save → reload page → confirm drawing persists.
 
-### Phase 3
+---
 
-`MapView.tsx`: imported `createMilsymbolImage`, made `style.load` callback async, replaced the `circle`-type tower layers with `symbol`-type layers using `map.addImage()` + `icon-image`. SIDC `SFGPUUSR-------` (Friendly, Ground, Signal — Radio Unit). `LAYER_GROUPS`, popup, hover, and visibility sync `useEffect` untouched — layer IDs unchanged. Tests: added `mockAddImage` to the Map mock, mocked `@/lib/milsymbol`, made `fireStyleLoad` properly async, replaced the old circle-layer test with two new tests (addImage × 4, symbol layers with icon-image). 119 tests pass. `tsc` and lint clean.
+## Phase 6 — Polish & finalisation
 
-### Phase 4 — Coverage summary
+- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal section below.
+- [ ] Update `README.md` (if it exists) with relevant information.
+- [ ] Update `CLAUDE.md` to reflect new components, API routes, DB tables, and drawing system.
+- [ ] Ask the user to inspect the running app and confirm they are satisfied, or request further modifications.
 
-119 tests, all pass. `milsymbol.ts` 100% across all metrics. `MapView.tsx` 99.52% stmts/lines (branch gaps at async null guards — expected, same as before). Overall 94.47% stmts. CLAUDE.md updated: tech stack, file structure, mock strategy, coverage count, cell tower overlay pattern, Key Features status.
+---
+
+## After completing any task
+
+If you added TODOs to the code or didn't fully implement something, add a new task to the relevant phase so it gets addressed before moving on.
