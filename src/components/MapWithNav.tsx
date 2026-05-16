@@ -2,12 +2,15 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import AreaNav from "./AreaNav";
-import MapView from "./MapView";
+import MapView, { type MapViewHandle } from "./MapView";
 import LayerPanel from "./LayerPanel";
 import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
 import DatePicker from "./DatePicker";
 import RoutePanel, { type RoutePanelHandle } from "./RoutePanel";
+import SummaryModal from "./SummaryModal";
+import { pdf } from "@react-pdf/renderer";
+import { RoutePDF } from "./RoutePDF";
 import { AREAS_OF_INTEREST } from "@/lib/areas";
 import {
   DEFAULT_LAYER_VISIBILITY,
@@ -20,6 +23,7 @@ import type {
   RouteHazard,
   RouteIntelligence,
   RouteProfile,
+  VehicleProfile,
   Waypoint,
 } from "@/lib/routing";
 
@@ -57,22 +61,19 @@ export default function MapWithNav() {
   const [routeWaypoints, setRouteWaypoints] = useState<Waypoint[]>([]);
   const [addingWaypoint, setAddingWaypoint] = useState(false);
   const routePanelRef = useRef<RoutePanelHandle | null>(null);
+  const mapViewRef = useRef<MapViewHandle | null>(null);
 
   // Route intelligence state
   const [routeIntelligence, setRouteIntelligence] =
     useState<RouteIntelligence | null>(null);
   const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
 
-  // Whenever infoPanelData becomes non-null (any municipality/elevation click),
-  // guarantee the panel is uncollapsed and route panel is collapsed.
-  useEffect(() => {
-    if (infoPanelData) {
-      setInfoPanelCollapsed(false);
-      setRoutePanelExpanded(false);
-    }
-  }, [infoPanelData]);
+  // AI Summary state
+  const [routeSummary, setRouteSummary] = useState<string | null>(null);
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
-  // Fetch all custom layers on mount
+  // Panel collapse coordination
+
   useEffect(() => {
     fetch("/api/custom-layers")
       .then((r) => (r.ok ? r.json() : []))
@@ -118,6 +119,10 @@ export default function MapWithNav() {
 
   function handleInfoPanel(data: InfoPanelData | null) {
     setInfoPanelData(data);
+    if (data) {
+      setInfoPanelCollapsed(false);
+      setRoutePanelExpanded(false);
+    }
   }
 
   function handleInfoPanelCollapsedChange(collapsed: boolean) {
@@ -153,12 +158,51 @@ export default function MapWithNav() {
 
   function handleHazardsChange(intel: RouteIntelligence | null) {
     setRouteIntelligence(intel);
-    if (!intel) setFocusedHazard(null);
+    if (!intel) {
+      setFocusedHazard(null);
+      setRouteSummary(null);
+    }
   }
 
   function handleHazardFocus(hazard: RouteHazard) {
     setFocusedHazard(hazard);
     // Details shown in a map popup at the marker — no InfoPanel needed.
+  }
+
+  async function handleExportPDF(
+    vehicle: VehicleProfile,
+    intel: RouteIntelligence,
+  ) {
+    if (!plannedRoute || !mapViewRef.current) return;
+
+    const screenshot = mapViewRef.current.getMapScreenshot();
+    if (!screenshot) return;
+
+    try {
+      const blob = await pdf(
+        <RoutePDF
+          plannedRoute={plannedRoute}
+          routeIntelligence={intel}
+          routeSummary={routeSummary}
+          routeProfile={routeProfile}
+          vehicle={vehicle}
+          mapScreenshot={screenshot}
+        />,
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Aurora_Route_Report_${
+        new Date().toISOString().split("T")[0]
+      }.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export PDF:", err);
+    }
   }
 
   async function handleDeleteLayer(id: string) {
@@ -177,6 +221,15 @@ export default function MapWithNav() {
       setActiveDrawingLayerId(null);
     }
   }
+
+  const handleCloseRoutePanel = useCallback(() => {
+    setRoutePanelOpen(false);
+    setAddingWaypoint(false);
+  }, []);
+
+  const handleSummaryModalOpen = useCallback(() => {
+    setSummaryModalOpen(true);
+  }, []);
 
   return (
     <div className="relative w-full h-full">
@@ -199,6 +252,7 @@ export default function MapWithNav() {
       )}
 
       <MapView
+        ref={mapViewRef}
         selectedAreaId={selectedAreaId}
         layerVisibility={layerVisibility}
         customLayers={customLayers}
@@ -236,12 +290,14 @@ export default function MapWithNav() {
           onRouteChange={handleRouteChange}
           onHazardsChange={handleHazardsChange}
           onHazardFocus={handleHazardFocus}
+          onExportPDF={handleExportPDF}
           expanded={routePanelExpanded}
           onExpandedChange={handleRoutePanelExpandedChange}
-          onClose={() => {
-            setRoutePanelOpen(false);
-            setAddingWaypoint(false);
-          }}
+          onClose={handleCloseRoutePanel}
+          onSummaryLoadingChange={() => {}}
+          routeSummary={routeSummary}
+          onSummaryChange={setRouteSummary}
+          onSummaryModalOpen={handleSummaryModalOpen}
         />
       )}
       <InfoPanel
@@ -282,6 +338,11 @@ export default function MapWithNav() {
           />
         </div>
       )}
+      <SummaryModal
+        open={summaryModalOpen}
+        summary={routeSummary}
+        onClose={() => setSummaryModalOpen(false)}
+      />
     </div>
   );
 }

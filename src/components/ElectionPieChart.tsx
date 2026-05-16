@@ -79,7 +79,8 @@ export default function ElectionPieChart({ data }: Props) {
   }
 
   let currentAngle = 0;
-  const paths = slices.map((sl) => {
+  const paths = [];
+  for (const sl of slices) {
     const sweep = (sl.share / total) * 360;
     const start = polarToXY(currentAngle, R);
     const end = polarToXY(currentAngle + sweep, R);
@@ -90,9 +91,9 @@ export default function ElectionPieChart({ data }: Props) {
       `A ${R} ${R} 0 ${largeArc} 1 ${end.x.toFixed(3)} ${end.y.toFixed(3)}`,
       "Z",
     ].join(" ");
+    paths.push(<path key={sl.party} d={d} fill={sl.color} />);
     currentAngle += sweep;
-    return <path key={sl.party} d={d} fill={sl.color} />;
-  });
+  }
 
   return (
     <div className="mt-3">

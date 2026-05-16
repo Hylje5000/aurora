@@ -1,4 +1,5 @@
-![Aurora Header Image](img/header.png) 
+![Aurora Header Image](img/header.png)
+
 > Aurora takes military operations from planning to execution faster and more efficiently than ever.
 
 Aurora makes military operational planning faster and easier, so that you can make the right decisions before your enemy does.
@@ -10,18 +11,20 @@ Built for the **Aalto Defence Hackathon 2026**, challenge by 61N.
 ---
 
 ## Architecture
+
 ![Aurora Architecture diagram](img/architecture.png)
+
 > Aurora is designed to run in a TL II / NATO SECRET -environment, with a dedicated Data Lakehouse for ingesting data from public data sources.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16 |
-| Map | Mapbox, NATO APP-6 icons from milsymbol |
-| Backend | Next.js API Routes |
-| Database | PostgreSQL 14+ |
-| AI | Gemma 4 from ConfidentialMind|
+| Layer    | Technology                              |
+| -------- | --------------------------------------- |
+| Frontend | Next.js 16                              |
+| Map      | Mapbox, NATO APP-6 icons from milsymbol |
+| Backend  | Next.js API Routes                      |
+| Database | PostgreSQL 14+                          |
+| AI       | Gemma 4 from ConfidentialMind           |
 
 ---
 
@@ -83,17 +86,17 @@ npm run dev
 
 ## API Reference
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/features?bbox=...` | GeoJSON FeatureCollection from PostGIS |
-| `GET` | `/api/cell-towers?bbox=...` | Cell tower overlay (up to 2 000 features) |
-| `GET` | `/api/municipalities` | All municipalities with demographics + election data |
-| `GET` | `/api/weather?region&month&day` | Historical climatology aggregate |
-| `POST` | `/api/ai` | AI chat completions via ConfidentialMind |
-| `GET/POST` | `/api/custom-layers` | List / create drawing layers |
-| `DELETE` | `/api/custom-layers/[id]` | Delete layer (cascades features) |
-| `GET/POST` | `/api/custom-layers/[id]/features` | Fetch / create features |
-| `PUT/DELETE` | `/api/custom-layers/[id]/features/[fid]` | Update / delete a single feature |
+| Method       | Endpoint                                 | Description                                          |
+| ------------ | ---------------------------------------- | ---------------------------------------------------- |
+| `GET`        | `/api/features?bbox=...`                 | GeoJSON FeatureCollection from PostGIS               |
+| `GET`        | `/api/cell-towers?bbox=...`              | Cell tower overlay (up to 2 000 features)            |
+| `GET`        | `/api/municipalities`                    | All municipalities with demographics + election data |
+| `GET`        | `/api/weather?region&month&day`          | Historical climatology aggregate                     |
+| `POST`       | `/api/ai`                                | AI chat completions via ConfidentialMind             |
+| `GET/POST`   | `/api/custom-layers`                     | List / create drawing layers                         |
+| `DELETE`     | `/api/custom-layers/[id]`                | Delete layer (cascades features)                     |
+| `GET/POST`   | `/api/custom-layers/[id]/features`       | Fetch / create features                              |
+| `PUT/DELETE` | `/api/custom-layers/[id]/features/[fid]` | Update / delete a single feature                     |
 
 All routes degrade gracefully — returning empty collections or 503 — when `DATABASE_URL` or AI credentials are absent.
 
@@ -101,15 +104,15 @@ All routes degrade gracefully — returning empty collections or 503 — when `D
 
 ## Data Sources
 
-| Dataset | Source | Coverage |
-|---------|--------|----------|
-| Cell towers | OpenCelliD / CellMapper | Finland |
-| Municipality boundaries | National Land Survey of Finland | 308 municipalities |
-| Demographics | Statistics Finland (Tilastokeskus) | 2025, all municipalities |
-| Election results | Statistics Finland | 2023 parliamentary, 22 parties |
-| Weather observations | Finnish Meteorological Institute (FMI) | 2016–2026, 3 regions |
-| Roads & railways | Finnish Transport Infrastructure Agency (Väylävirasto) | All infrastructure on the 3 focus regions |
-|Topographic data|National Land Survey of Finland (Maanmittauslaitos)|10m x 10m dataset on the 3 focus regions|
+| Dataset                 | Source                                                 | Coverage                                  |
+| ----------------------- | ------------------------------------------------------ | ----------------------------------------- |
+| Cell towers             | OpenCelliD / CellMapper                                | Finland                                   |
+| Municipality boundaries | National Land Survey of Finland                        | 308 municipalities                        |
+| Demographics            | Statistics Finland (Tilastokeskus)                     | 2025, all municipalities                  |
+| Election results        | Statistics Finland                                     | 2023 parliamentary, 22 parties            |
+| Weather observations    | Finnish Meteorological Institute (FMI)                 | 2016–2026, 3 regions                      |
+| Roads & railways        | Finnish Transport Infrastructure Agency (Väylävirasto) | All infrastructure on the 3 focus regions |
+| Topographic data        | National Land Survey of Finland (Maanmittauslaitos)    | 10m x 10m dataset on the 3 focus regions  |
 
 ---
 
@@ -127,13 +130,13 @@ Tests live under `src/test/`, mirroring `src/`. All API routes ≥ 96% coverage,
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Dev server with Turbopack |
-| `npm run build` | Production build |
-| `npm run lint` | ESLint |
-| `npm test` | Vitest test suite |
-| `npm run test:coverage` | Tests + v8 coverage |
+| Command                                 | Description                    |
+| --------------------------------------- | ------------------------------ |
+| `npm run dev`                           | Dev server with Turbopack      |
+| `npm run build`                         | Production build               |
+| `npm run lint`                          | ESLint                         |
+| `npm test`                              | Vitest test suite              |
+| `npm run test:coverage`                 | Tests + v8 coverage            |
 | `python scripts/ingest_demographics.py` | Load municipality demographics |
-| `python scripts/ingest_elections.py` | Load 2023 election results |
-| `python scripts/ingest_weather.py` | Load FMI weather observations |
+| `python scripts/ingest_elections.py`    | Load 2023 election results     |
+| `python scripts/ingest_weather.py`      | Load FMI weather observations  |

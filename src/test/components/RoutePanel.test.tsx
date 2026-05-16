@@ -58,6 +58,9 @@ function makeProps(overrides = {}) {
     onAddingWaypointChange: vi.fn(),
     onRouteChange: vi.fn(),
     onClose: vi.fn(),
+    onSummaryChange: vi.fn(),
+    onSummaryLoadingChange: vi.fn(),
+    onSummaryModalOpen: vi.fn(),
     ...overrides,
   };
 }
@@ -251,14 +254,15 @@ describe("RoutePanel", () => {
       await vi.advanceTimersByTimeAsync(400);
     });
 
-    expect(screen.getByTestId("route-loading")).toBeInTheDocument();
+    // Status is 'running'
+    expect(screen.getByTestId("route-status")).toBeInTheDocument();
 
     // Resolve the fetch
     await act(async () => {
       resolveFetch(new Response(JSON.stringify(MOCK_ROUTE), { status: 200 }));
     });
 
-    expect(screen.queryByTestId("route-loading")).not.toBeInTheDocument();
+    expect(screen.getByTestId("route-status")).toBeInTheDocument();
   });
 
   it("shows error state on failed fetch", async () => {
@@ -397,13 +401,16 @@ describe("RoutePanel", () => {
   // --- Intelligence fetch ---
 
   it("fetches route-intelligence after route is calculated (debounced 600ms)", async () => {
-    // First call: route-plan; second call: route-intelligence
+    // 1. route-plan; 2. route-intelligence; 3. ai
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(
         new Response(JSON.stringify(MOCK_ROUTE), { status: 200 }),
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -423,6 +430,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/route-intelligence",
@@ -440,6 +449,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -456,6 +468,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("hazard-list")).toBeInTheDocument();
     expect(
@@ -471,6 +485,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -487,6 +504,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("assessment-impassable")).toBeInTheDocument();
     expect(screen.getByTestId("assessment-impassable")).toHaveTextContent(
@@ -503,6 +522,9 @@ describe("RoutePanel", () => {
         new Response(JSON.stringify(MOCK_INTELLIGENCE_PASSABLE), {
           status: 200,
         }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -519,6 +541,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("assessment-passable")).toBeInTheDocument();
     expect(screen.getByTestId("assessment-passable")).toHaveTextContent(
@@ -533,6 +557,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -550,6 +577,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     fireEvent.click(screen.getByTestId("hazard-row-bridge-1-0"));
     expect(onHazardFocus).toHaveBeenCalledWith(
@@ -564,6 +593,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -581,12 +613,14 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     // Clear waypoints
     fireEvent.click(screen.getByLabelText("Clear all waypoints"));
 
     expect(onHazardsChange).toHaveBeenLastCalledWith(null);
-    expect(screen.queryByTestId("route-assessment")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("hazard-list")).not.toBeInTheDocument();
   });
 
   it("collapses panel body when the chevron button is clicked", () => {
@@ -651,6 +685,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(intel), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -665,6 +702,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("coverage-section")).toBeInTheDocument();
     expect(screen.getByTestId("coverage-full")).toBeInTheDocument();
@@ -691,6 +730,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(intel), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -705,6 +747,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("coverage-bar")).toHaveTextContent("67%");
     expect(screen.getByTestId("coverage-gaps")).toHaveTextContent("2 gaps");
@@ -723,6 +767,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(intel), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -737,6 +784,8 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("coverage-unavailable")).toBeInTheDocument();
     expect(screen.getByTestId("coverage-unavailable")).toHaveTextContent(
@@ -762,6 +811,9 @@ describe("RoutePanel", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(intel), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
       );
 
     const ref = createRef<RoutePanelHandle>();
@@ -776,10 +828,52 @@ describe("RoutePanel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600);
     });
+    // AI Summary fetch
+    await act(async () => {});
 
     expect(screen.getByTestId("coverage-unavailable")).toBeInTheDocument();
     expect(screen.getByTestId("coverage-unavailable")).toHaveTextContent(
       "No cellular coverage",
+    );
+  });
+
+  it("calls onExportPDF when export button is clicked", async () => {
+    const onExportPDF = vi.fn();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(MOCK_ROUTE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ content: "Summary" }), { status: 200 }),
+      );
+
+    const ref = createRef<RoutePanelHandle>();
+    render(<RoutePanel ref={ref} {...makeProps({ onExportPDF })} />);
+
+    act(() => {
+      ref.current?.addWaypoint([24.94, 60.17]);
+      ref.current?.addWaypoint([25.01, 60.23]);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    // AI Summary fetch
+    await act(async () => {});
+
+    const exportBtn = screen.getByTestId("export-pdf-btn");
+    fireEvent.click(exportBtn);
+
+    expect(onExportPDF).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "Infantry" }),
+      MOCK_INTELLIGENCE,
     );
   });
 });

@@ -210,7 +210,9 @@ function classifyBridgeHazards(
   if (
     row.status != null &&
     row.status.trim() !== "" &&
-    !/^ok$/i.test(row.status.trim())
+    !/^ok$/i.test(row.status.trim()) &&
+    !/^kaytossa$/i.test(row.status.trim()) &&
+    !/^käytössä$/i.test(row.status.trim())
   ) {
     add("warning", `Bridge condition: ${row.status}`);
   }

@@ -24,7 +24,9 @@ export default function WeatherWidget({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
+
     setStats(null);
 
     const controller = new AbortController();

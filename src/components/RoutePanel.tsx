@@ -34,10 +34,15 @@ interface RoutePanelProps {
   ) => void;
   onHazardsChange?: (intel: RouteIntelligence | null) => void;
   onHazardFocus?: (hazard: RouteHazard) => void;
+  onExportPDF?: (vehicle: VehicleProfile, intel: RouteIntelligence) => void;
   onClose: () => void;
   /** When provided, expanded state is controlled externally. */
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  onSummaryLoadingChange?: (loading: boolean) => void;
+  routeSummary?: string | null;
+  onSummaryChange?: (summary: string | null) => void;
+  onSummaryModalOpen?: () => void;
 }
 
 const PROFILES: RouteProfile[] = ["driving", "walking", "cycling"];
@@ -60,6 +65,20 @@ const SEVERITY_BG: Record<RouteHazard["severity"], string> = {
   info: "hover:bg-slate-800/60",
 };
 
+type StepStatus = "pending" | "running" | "complete" | "error";
+
+interface PlanningFlow {
+  navigation: StepStatus;
+  intelligence: StepStatus;
+  summary: StepStatus;
+}
+
+const INITIAL_FLOW: PlanningFlow = {
+  navigation: "pending",
+  intelligence: "pending",
+  summary: "pending",
+};
+
 function waypointLabel(index: number, total: number): string {
   if (index === 0) return "Start";
   if (index === total - 1) return "Destination";
@@ -68,6 +87,47 @@ function waypointLabel(index: number, total: number): string {
 
 function relabel(wps: Waypoint[]): Waypoint[] {
   return wps.map((wp, i) => ({ ...wp, label: waypointLabel(i, wps.length) }));
+}
+
+function StatusItem({
+  label,
+  status,
+  testId,
+}: {
+  label: string;
+  status: StepStatus;
+  testId?: string;
+}) {
+  const icon = {
+    pending: (
+      <div className="w-2.5 h-2.5 rounded-full border border-slate-700" />
+    ),
+    running: (
+      <div className="w-2.5 h-2.5 rounded-full border border-blue-500 border-t-transparent animate-spin" />
+    ),
+    complete: (
+      <span className="text-emerald-500 text-[10px] leading-none">✓</span>
+    ),
+    error: <span className="text-red-500 text-[10px] leading-none">✕</span>,
+  }[status];
+
+  const textColor = {
+    pending: "text-slate-600",
+    running: "text-blue-400 font-bold",
+    complete: "text-slate-300",
+    error: "text-red-400",
+  }[status];
+
+  return (
+    <div className="flex items-center gap-2" data-testid={testId}>
+      <div className="w-3 flex items-center justify-center">{icon}</div>
+      <span
+        className={`text-[9px] font-mono uppercase tracking-widest ${textColor}`}
+      >
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function VehicleField({
@@ -108,16 +168,21 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       onRouteChange,
       onHazardsChange,
       onHazardFocus,
+      onExportPDF,
       onClose,
       expanded: expandedProp,
       onExpandedChange,
+      onSummaryLoadingChange,
+      routeSummary,
+      onSummaryChange,
+      onSummaryModalOpen,
     },
     ref,
   ) {
     const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
     const [profile, setProfile] = useState<RouteProfile>("driving");
     const [route, setRoute] = useState<PlannedRoute | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [flow, setFlow] = useState<PlanningFlow>(INITIAL_FLOW);
     const [error, setError] = useState<string | null>(null);
     const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
     const [panelExpandedLocal, setPanelExpandedLocal] = useState(true);
@@ -145,7 +210,6 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const [intelligence, setIntelligence] = useState<RouteIntelligence | null>(
       null,
     );
-    const [intelligenceLoading, setIntelligenceLoading] = useState(false);
 
     // Drag-and-drop state
     const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -155,6 +219,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const intelAbortRef = useRef<AbortController | null>(null);
     const intelDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const aiAbortRef = useRef<AbortController | null>(null);
+
     const onRouteChangeRef = useRef(onRouteChange);
     // eslint-disable-next-line react-hooks/refs
     onRouteChangeRef.current = onRouteChange;
@@ -218,8 +284,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       setRoute(null);
       setError(null);
       setIntelligence(null);
+      setFlow(INITIAL_FLOW);
       onRouteChangeRef.current(null, profile, []);
       onHazardsChangeRef.current?.(null);
+      onSummaryChange?.(null);
+      onSummaryLoadingChange?.(false);
     }
 
     function applyPreset(index: number) {
@@ -243,7 +312,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
         /* eslint-disable react-hooks/set-state-in-effect */
         setRoute(null);
         setError(null);
-        setLoading(false);
+        setFlow(INITIAL_FLOW);
         /* eslint-enable react-hooks/set-state-in-effect */
         onRouteChangeRef.current(null, profile, waypoints);
         return;
@@ -254,7 +323,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
         const controller = new AbortController();
         abortRef.current = controller;
 
-        setLoading(true);
+        setFlow({
+          navigation: "running",
+          intelligence: "pending",
+          summary: "pending",
+        });
         setError(null);
 
         try {
@@ -275,14 +348,14 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
           const planned = (await res.json()) as PlannedRoute;
           setRoute(planned);
+          setFlow((prev) => ({ ...prev, navigation: "complete" }));
           onRouteChangeRef.current(planned, profile, waypoints);
         } catch (err) {
           if ((err as { name?: string }).name === "AbortError") return;
           setError((err as Error).message ?? "Failed to fetch route");
           setRoute(null);
+          setFlow((prev) => ({ ...prev, navigation: "error" }));
           onRouteChangeRef.current(null, profile, waypoints);
-        } finally {
-          setLoading(false);
         }
       }, 400);
 
@@ -291,10 +364,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       };
     }, [waypoints, profile]);
 
-    // Fetch route intelligence, debounced 600 ms after route or vehicle changes.
+    // Fetch route intelligence, debounced 600 ms after navigation complete or vehicle changes.
     useEffect(() => {
       if (intelDebounceRef.current) clearTimeout(intelDebounceRef.current);
-      if (!route) {
+
+      if (flow.navigation !== "complete" || !route) {
         onHazardsChangeRef.current?.(null);
         return;
       }
@@ -304,7 +378,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
         const controller = new AbortController();
         intelAbortRef.current = controller;
 
-        setIntelligenceLoading(true);
+        setFlow((prev) => ({
+          ...prev,
+          intelligence: "running",
+          summary: "pending",
+        }));
         setIntelligence(null);
 
         try {
@@ -315,22 +393,137 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             signal: controller.signal,
           });
 
-          if (!res.ok) return;
+          if (!res.ok) {
+            setFlow((prev) => ({ ...prev, intelligence: "error" }));
+            return;
+          }
 
           const intel = (await res.json()) as RouteIntelligence;
           setIntelligence(intel);
+          setFlow((prev) => ({ ...prev, intelligence: "complete" }));
           onHazardsChangeRef.current?.(intel);
         } catch (err) {
           if ((err as { name?: string }).name === "AbortError") return;
-        } finally {
-          setIntelligenceLoading(false);
+          setFlow((prev) => ({ ...prev, intelligence: "error" }));
         }
       }, 600);
 
       return () => {
         if (intelDebounceRef.current) clearTimeout(intelDebounceRef.current);
       };
-    }, [route, vehicle]);
+    }, [flow.navigation, route, vehicle]);
+
+    // Fetch AI Summary when Intelligence finalized
+    useEffect(() => {
+      if (
+        flow.intelligence === "pending" ||
+        flow.intelligence === "running" ||
+        flow.summary === "running" ||
+        flow.summary === "complete"
+      ) {
+        return;
+      }
+
+      if (!route) {
+        onSummaryChange?.(null);
+        return;
+      }
+
+      aiAbortRef.current?.abort();
+      const controller = new AbortController();
+      aiAbortRef.current = controller;
+
+      const fetchAI = async () => {
+        setFlow((prev) => ({ ...prev, summary: "running" }));
+        onSummaryLoadingChange?.(true);
+
+        try {
+          const hazardsList = intelligence
+            ? intelligence.hazards
+                .map((h) => `- [${h.severity.toUpperCase()}] ${h.message}`)
+                .join("\n")
+            : "No hazard data available (intelligence analysis failed).";
+
+          const coverageInfo = intelligence?.coverage
+            ? `- Covered: ${intelligence.coverage.covered_pct}%\n- Gaps: ${intelligence.coverage.gap_count} (Max: ${intelligence.coverage.longest_gap_m}m)`
+            : "- No coverage data available";
+
+          const prompt = `You are a Senior Military Planning Officer (G3/S3). Provide a high-level tactical executive summary for the following route analysis.
+          
+          Route Overview:
+          - Profile: ${profileLabel(profile)}
+          - Distance: ${formatDistance(route.total_distance_m)}
+          - Duration: ${formatDuration(route.total_duration_s)}
+
+          Vehicle:
+          - Type: ${vehicle.label}
+          - Mass: ${vehicle.mass_t}t
+          - Dimensions: ${vehicle.width_m}m (W) x ${vehicle.height_m}m (H)
+
+          Hazards:
+          ${hazardsList}
+
+          Comms Coverage:
+          ${coverageInfo}
+
+          REQUIRED STRUCTURE:
+          
+          1. TACTICAL SCOREBOARD
+          (DO NOT use Markdown tables. Use only this plain text format:)
+          Route Suitability: [score]/10
+          Travel Speed Estimate: [value]
+          Obstacle Impact: [level]
+          Risk Level: [level]
+          Logistical Support: [maneuvers]
+
+          2. MOBILITY ASSESSMENT
+          (Concise explanation of the suitability score and speed estimate)
+
+          3. CRITICAL CONSTRAINTS & RISKS
+          (Detailed impact of obstacles and cellular gaps)
+
+          4. TACTICAL RECOMMENDATIONS
+          (Actionable advice for the planning officer)
+          
+          Keep it professional, tactical, and format nicely with markdown. Use a strict military tone.`;
+
+          const res = await fetch("/api/ai", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              messages: [{ role: "user", content: prompt }],
+              temperature: 0.1,
+            }),
+            signal: controller.signal,
+          });
+
+          if (!res.ok) {
+            setFlow((prev) => ({ ...prev, summary: "error" }));
+            return;
+          }
+
+          const data = await res.json();
+          onSummaryChange?.(data.content);
+          setFlow((prev) => ({ ...prev, summary: "complete" }));
+        } catch (err) {
+          if ((err as { name?: string }).name === "AbortError") return;
+          setFlow((prev) => ({ ...prev, summary: "error" }));
+        } finally {
+          onSummaryLoadingChange?.(false);
+        }
+      };
+
+      fetchAI();
+    }, [
+      flow.intelligence,
+      flow.summary,
+      intelligence,
+      route,
+      profile,
+      vehicle,
+      onSummaryChange,
+      onSummaryLoadingChange,
+    ]);
 
     return (
       <div
@@ -522,227 +715,259 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
               </button>
             </div>
 
-            {/* Loading / error */}
-            {loading && (
-              <p
-                className="text-[10px] font-mono text-slate-400 text-center py-1"
-                data-testid="route-loading"
-              >
-                Calculating route…
-              </p>
-            )}
-            {error && !loading && (
-              <p
-                className="text-[10px] font-mono text-red-400 py-0.5"
-                data-testid="route-error"
-              >
-                {error}
-              </p>
-            )}
-
-            {/* Route summary + legs */}
-            {route && !loading && (
+            {/* Planning Flow & Results */}
+            {waypoints.length >= 2 && (
               <div
-                className="border-t border-slate-700/60 pt-1.5"
-                data-testid="route-summary"
+                className="flex flex-col gap-3 border-t border-slate-700/60 pt-2 mt-1"
+                data-testid="planning-status"
               >
-                <p
-                  className="text-[10px] font-mono font-semibold"
-                  style={{ color: PROFILE_COLORS[profile] }}
-                >
-                  {formatDistance(route.total_distance_m)} ·{" "}
-                  {formatDuration(route.total_duration_s)}
-                </p>
+                {/* 1. Navigation Section */}
+                <div className="flex flex-col gap-1.5">
+                  <StatusItem
+                    label="1. Navigation"
+                    status={flow.navigation}
+                    testId="route-status"
+                  />
 
-                <div className="flex flex-col gap-0.5 mt-1 max-h-32 overflow-y-auto">
-                  {route.legs.map((leg, i) => (
-                    <div key={i}>
-                      <button
-                        onClick={() =>
-                          setExpandedLeg(expandedLeg === i ? null : i)
-                        }
-                        className="flex items-center gap-1 text-left text-[10px] font-mono text-slate-400 hover:text-white transition-colors w-full"
-                        aria-expanded={expandedLeg === i}
-                        aria-label={`Toggle leg ${i + 1} steps`}
-                        data-testid={`leg-toggle-${i}`}
+                  {/* Error display */}
+                  {error && flow.navigation !== "running" && (
+                    <p
+                      className="text-[10px] font-mono text-red-400 py-0.5 ml-5"
+                      data-testid="route-error"
+                    >
+                      {error}
+                    </p>
+                  )}
+
+                  {/* Route summary + legs */}
+                  {route && flow.navigation !== "running" && (
+                    <div
+                      className="flex flex-col gap-1 ml-5"
+                      data-testid="route-summary"
+                    >
+                      <p
+                        className="text-[10px] font-mono font-semibold"
+                        style={{ color: PROFILE_COLORS[profile] }}
                       >
-                        <span className="text-[8px]">
-                          {expandedLeg === i ? "▼" : "▶"}
-                        </span>
-                        <span>
-                          Leg {i + 1} — {formatDistance(leg.distance_m)} /{" "}
-                          {formatDuration(leg.duration_s)}
-                        </span>
-                      </button>
-                      {expandedLeg === i && (
-                        <div
-                          className="ml-3 flex flex-col gap-0.5 mt-0.5"
-                          data-testid={`leg-steps-${i}`}
-                        >
-                          {leg.steps.map((step, j) => (
-                            <p
-                              key={j}
-                              className="text-[9px] font-mono text-slate-500 leading-relaxed"
+                        {formatDistance(route.total_distance_m)} ·{" "}
+                        {formatDuration(route.total_duration_s)}
+                      </p>
+
+                      <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+                        {route.legs.map((leg, i) => (
+                          <div key={i}>
+                            <button
+                              onClick={() =>
+                                setExpandedLeg(expandedLeg === i ? null : i)
+                              }
+                              className="flex items-center gap-1 text-left text-[10px] font-mono text-slate-400 hover:text-white transition-colors w-full"
+                              aria-expanded={expandedLeg === i}
+                              aria-label={`Toggle leg ${i + 1} steps`}
+                              data-testid={`leg-toggle-${i}`}
                             >
-                              • {step.instruction}
-                            </p>
+                              <span className="text-[8px]">
+                                {expandedLeg === i ? "▼" : "▶"}
+                              </span>
+                              <span>
+                                Leg {i + 1} — {formatDistance(leg.distance_m)} /{" "}
+                                {formatDuration(leg.duration_s)}
+                              </span>
+                            </button>
+                            {expandedLeg === i && (
+                              <div
+                                className="ml-3 flex flex-col gap-0.5 mt-0.5"
+                                data-testid={`leg-steps-${i}`}
+                              >
+                                {leg.steps.map((step, j) => (
+                                  <p
+                                    key={j}
+                                    className="text-[9px] font-mono text-slate-500 leading-relaxed"
+                                  >
+                                    • {step.instruction}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Intelligence Section */}
+                <div className="flex flex-col gap-1.5">
+                  <StatusItem
+                    label="2. Intelligence"
+                    status={flow.intelligence}
+                    testId="intel-status"
+                  />
+
+                  {flow.intelligence === "complete" && intelligence && (
+                    <div className="flex flex-col gap-1 ml-5">
+                      {/* Summary line */}
+                      {intelligence.summary.passable ? (
+                        <p
+                          className="text-[10px] font-mono font-semibold text-green-400"
+                          data-testid="assessment-passable"
+                        >
+                          ✓ Route passable ({vehicle.label})
+                          {intelligence.summary.warning > 0 ||
+                          intelligence.summary.info > 0
+                            ? ` · ${intelligence.summary.warning + intelligence.summary.info} notice${intelligence.summary.warning + intelligence.summary.info > 1 ? "s" : ""}`
+                            : ""}
+                        </p>
+                      ) : (
+                        <p
+                          className="text-[10px] font-mono font-semibold text-red-400"
+                          data-testid="assessment-impassable"
+                        >
+                          ✗ IMPASSABLE — {intelligence.summary.critical}{" "}
+                          critical hazard
+                          {intelligence.summary.critical > 1 ? "s" : ""}
+                        </p>
+                      )}
+
+                      {/* Hazard list */}
+                      {intelligence.hazards.length > 0 && (
+                        <div
+                          className="flex flex-col gap-0.5 max-h-48 overflow-y-auto"
+                          data-testid="hazard-list"
+                        >
+                          {intelligence.hazards.map((hazard) => (
+                            <button
+                              key={hazard.id}
+                              onClick={() => onHazardFocus?.(hazard)}
+                              className={[
+                                "flex items-start gap-1.5 text-left rounded px-1.5 py-1 transition-colors w-full",
+                                SEVERITY_BG[hazard.severity],
+                              ].join(" ")}
+                              data-testid={`hazard-row-${hazard.id}`}
+                            >
+                              <span
+                                className="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
+                                style={{
+                                  backgroundColor:
+                                    SEVERITY_COLOR[hazard.severity],
+                                }}
+                                aria-hidden="true"
+                              />
+                              <span className="text-[9px] font-mono text-slate-300 leading-relaxed">
+                                {hazard.message}
+                              </span>
+                            </button>
                           ))}
                         </div>
                       )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Route Assessment */}
-            {route && !loading && (
-              <div
-                className="border-t border-slate-700/60 pt-1.5 flex flex-col gap-1"
-                data-testid="route-assessment"
-              >
-                <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                  Route Assessment
-                </span>
-
-                {intelligenceLoading && (
-                  <p
-                    className="text-[9px] font-mono text-slate-500"
-                    data-testid="intel-loading"
-                  >
-                    Analysing route…
-                  </p>
-                )}
-
-                {!intelligenceLoading && intelligence && (
-                  <>
-                    {/* Summary line */}
-                    {intelligence.summary.passable ? (
-                      <p
-                        className="text-[10px] font-mono font-semibold text-green-400"
-                        data-testid="assessment-passable"
-                      >
-                        ✓ Route passable ({vehicle.label})
-                        {intelligence.summary.warning > 0 ||
-                        intelligence.summary.info > 0
-                          ? ` · ${intelligence.summary.warning + intelligence.summary.info} notice${intelligence.summary.warning + intelligence.summary.info > 1 ? "s" : ""}`
-                          : ""}
-                      </p>
-                    ) : (
-                      <p
-                        className="text-[10px] font-mono font-semibold text-red-400"
-                        data-testid="assessment-impassable"
-                      >
-                        ✗ IMPASSABLE — {intelligence.summary.critical} critical
-                        hazard{intelligence.summary.critical > 1 ? "s" : ""}
-                      </p>
-                    )}
-
-                    {/* Hazard list */}
-                    {intelligence.hazards.length > 0 && (
+                      {/* COMMS Coverage */}
                       <div
-                        className="flex flex-col gap-0.5 max-h-48 overflow-y-auto"
-                        data-testid="hazard-list"
+                        className="border-t border-slate-700/40 pt-1.5 mt-0.5"
+                        data-testid="coverage-section"
                       >
-                        {intelligence.hazards.map((hazard) => (
-                          <button
-                            key={hazard.id}
-                            onClick={() => onHazardFocus?.(hazard)}
-                            className={[
-                              "flex items-start gap-1.5 text-left rounded px-1.5 py-1 transition-colors w-full",
-                              SEVERITY_BG[hazard.severity],
-                            ].join(" ")}
-                            data-testid={`hazard-row-${hazard.id}`}
+                        <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                          Comms Coverage
+                        </span>
+                        {intelligence?.coverage &&
+                        intelligence.coverage.covered_pct > 0 ? (
+                          <div className="mt-0.5">
+                            {intelligence.coverage.covered_pct === 100 ? (
+                              <p
+                                className="text-[10px] font-mono font-semibold text-green-400"
+                                data-testid="coverage-full"
+                              >
+                                ✓ Full cellular coverage
+                              </p>
+                            ) : (
+                              <>
+                                <p
+                                  className="text-[10px] font-mono text-slate-300"
+                                  data-testid="coverage-bar"
+                                >
+                                  {Array.from({ length: 12 }, (_, i) =>
+                                    i <
+                                    Math.round(
+                                      intelligence.coverage!.covered_pct /
+                                        (100 / 12),
+                                    )
+                                      ? "▓"
+                                      : "░",
+                                  ).join("")}{" "}
+                                  {intelligence.coverage.covered_pct}%
+                                </p>
+                                <p
+                                  className="text-[9px] font-mono text-slate-500"
+                                  data-testid="coverage-gaps"
+                                >
+                                  {intelligence.coverage.gap_count} gap
+                                  {intelligence.coverage.gap_count !== 1
+                                    ? "s"
+                                    : ""}{" "}
+                                  · longest{" "}
+                                  {intelligence.coverage.longest_gap_m >= 1000
+                                    ? `${(intelligence.coverage.longest_gap_m / 1000).toFixed(1)} km`
+                                    : `${intelligence.coverage.longest_gap_m} m`}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <p
+                            className="text-[10px] font-mono font-semibold text-red-400"
+                            data-testid="coverage-unavailable"
                           >
-                            <span
-                              className="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
-                              style={{
-                                backgroundColor:
-                                  SEVERITY_COLOR[hazard.severity],
-                              }}
-                              aria-hidden="true"
-                            />
-                            <span className="text-[9px] font-mono text-slate-300 leading-relaxed">
-                              {hazard.message}
-                            </span>
-                          </button>
-                        ))}
+                            ✗ No cellular coverage
+                          </p>
+                        )}
                       </div>
-                    )}
-                  </>
-                )}
-
-                {!intelligenceLoading && !intelligence && (
-                  <p className="text-[9px] font-mono text-slate-600">
-                    No infrastructure data available.
-                  </p>
-                )}
-
-                {/* COMMS Coverage */}
-              {!intelligenceLoading && (
-                <div
-                  className="border-t border-slate-700/40 pt-1.5 mt-0.5"
-                  data-testid="coverage-section"
-                >
-                  <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                    Comms Coverage
-                  </span>
-                  {intelligence?.coverage &&
-                  intelligence.coverage.covered_pct > 0 ? (
-                    <div className="mt-0.5">
-                      {intelligence.coverage.covered_pct === 100 ? (
-                        <p
-                          className="text-[10px] font-mono font-semibold text-green-400"
-                          data-testid="coverage-full"
-                        >
-                          ✓ Full cellular coverage
-                        </p>
-                      ) : (
-                        <>
-                          <p
-                            className="text-[10px] font-mono text-slate-300"
-                            data-testid="coverage-bar"
-                          >
-                            {Array.from({ length: 12 }, (_, i) =>
-                              i <
-                              Math.round(
-                                intelligence.coverage!.covered_pct / (100 / 12),
-                              )
-                                ? "▓"
-                                : "░",
-                            ).join("")}{" "}
-                            {intelligence.coverage.covered_pct}%
-                          </p>
-                          <p
-                            className="text-[9px] font-mono text-slate-500"
-                            data-testid="coverage-gaps"
-                          >
-                            {intelligence.coverage.gap_count} gap
-                            {intelligence.coverage.gap_count !== 1 ? "s" : ""} ·
-                            longest{" "}
-                            {intelligence.coverage.longest_gap_m >= 1000
-                              ? `${(intelligence.coverage.longest_gap_m / 1000).toFixed(1)} km`
-                              : `${intelligence.coverage.longest_gap_m} m`}
-                          </p>
-                        </>
-                      )}
                     </div>
-                  ) : (
-                    <p
-                      className="text-[10px] font-mono font-semibold text-red-400"
-                      data-testid="coverage-unavailable"
-                    >
-                      ✗ No cellular coverage
+                  )}
+
+                  {flow.intelligence === "complete" && !intelligence && (
+                    <p className="text-[9px] font-mono text-slate-600 ml-5">
+                      No infrastructure data available.
                     </p>
                   )}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+
+                {/* 3. AI Summary Section */}
+                <div className="flex flex-col gap-1.5">
+                  <StatusItem
+                    label="3. AI Summary"
+                    status={flow.summary}
+                    testId="summary-status"
+                  />
+
+                  {flow.summary === "complete" && (
+                    <div className="flex items-center gap-1 ml-5">
+                      {routeSummary && (
+                        <button
+                          onClick={onSummaryModalOpen}
+                          className="text-[9px] font-mono px-2 py-0.5 rounded border border-blue-500/50 bg-blue-900/30 text-blue-300 hover:bg-blue-800/50 hover:text-white transition-colors"
+                          data-testid="ai-summary-btn"
+                        >
+                          AI Summary
+                        </button>
+                      )}
+                      {intelligence && (
+                        <button
+                          onClick={() => onExportPDF?.(vehicle, intelligence)}
+                          className="text-[9px] font-mono px-2 py-0.5 rounded border border-emerald-500/50 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-800/50 hover:text-white transition-colors flex items-center gap-1"
+                          data-testid="export-pdf-btn"
+                          title="Export Tactical Report (PDF)"
+                        >
+                          <span>📄</span>
+                          <span>Export</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
-
     );
   },
 );

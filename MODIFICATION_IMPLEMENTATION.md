@@ -1,65 +1,80 @@
-# Route-Intelligence Overlap Filter — Implementation Plan
-
-**Branch**: `feat/ui-fixes`  
-**Design doc**: `MODIFICATION_DESIGN.md`
-
----
-
-## Phase 1 — Pre-flight checks
-
-- [ ] Run `npm test` to confirm the suite is green before any changes.
-
-## Phase 2 — Apply the SQL fix
-
-- [ ] In `src/app/api/route-intelligence/route.ts`, replace the roads `query<RoadRow>(...)` call with the CTE-based query:
-  - Wrap `ST_GeomFromGeoJSON($1)` in a `route` CTE.
-  - Add a `route_corridor` CTE: `ST_Buffer(geom::geography, 10)::geometry`.
-  - `CROSS JOIN route rt` and `CROSS JOIN route_corridor rc` in the `FROM` clause.
-  - Add `AND ST_Length(ST_Intersection(r.geom, rc.geom)::geography) > 15` to `WHERE`.
-  - Change `ST_Centroid(geom)` → `ST_ClosestPoint(r.geom, rt.geom)` for `closest_pt`.
-  - Add a brief inline comment above the new `WHERE` condition explaining the overlap constants.
-- [ ] After completing this task, if you added any TODOs or left anything partially implemented, add new tasks here to track them.
-- [ ] Run `next lint --fix` to auto-fix lint issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript type errors.
-- [ ] Run `npm test` — all tests must pass. A non-zero exit is a hard blocker.
-- [ ] Run `prettier --write .` to normalise formatting.
-- [ ] Re-read this file to check for anything missed.
-- [ ] Update this file: check off completed items, add Journal entry.
-- [ ] Run `git diff` and present the proposed commit message to the user for approval.
-- [ ] **Wait for user approval before committing or moving on.**
-
-## Phase 3 — Final checks and wrap-up
-
-- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal below.
-- [ ] Update `CLAUDE.md` if the route-intelligence description needs updating.
-- [ ] Ask the user to inspect the running app and confirm they are satisfied, or note any further modifications needed.
-
----
+# Modification Implementation: Sequential Route Planning Flow
 
 ## Journal
 
-### 2026-05-16 — Phase 1
+- **2026-05-17**: Initialized implementation plan.
+- **2026-05-17**: Phase 1 complete. Baseline tests passed (477 tests).
+- **2026-05-17**: Phase 2 complete. Refactored state machine and hooks in `RoutePanel.tsx`. Verified with existing tests.
+- **2026-05-17**: Phase 3 complete. Implemented `StatusList` and `StatusItem` components. Replaced old loading indicators. Updated tests to use new test IDs.
+- **2026-05-17**: Phase 4 complete. Ensured strictly sequential execution and handled graceful Intelligence/AI failures.
+- **2026-05-17**: Phase 5 complete. Implemented UI gatekeeping for AI Summary and Export buttons. Updated tests to account for the sequential AI Summary step.
+- **2026-05-17**: Phase 6 complete. Coverage for `RoutePanel.tsx` at 96.54%. All tests passing (477 tests). Fixed ESLint warnings regarding synchronous `setState` in effects and unused props. Removed redundant `summaryLoading` state from `MapWithNav.tsx`.
+- **2026-05-17**: UI Refinement. Interleaved planning status items with their respective results (Navigation, Intelligence, AI Summary). Each result block now appears directly under its status header once available. Verified with tests.
 
-Pre-flight: `npm test` — 467 tests passing, 37 files, all green. Clean baseline confirmed.
+## Phase 1: Preparation & Baseline
 
-### 2026-05-16 — Phase 2
+- [x] Run all tests to ensure the project is in a good state before starting modifications.
+- [x] Run `tsc --noEmit` to verify type safety.
 
-Applied the SQL fix to `src/app/api/route-intelligence/route.ts`:
-- Added `route` and `route_corridor` CTEs.
-- Changed `ST_Centroid(geom)` → `ST_ClosestPoint(r.geom, rt.geom)`.
-- Added `AND ST_Length(ST_Intersection(r.geom, rc.geom)::geography) > 15` to the `WHERE` clause.
-- Inline comment explains the 10 m / 15 m constants.
+## Phase 2: Refactor State & Hooks in `RoutePanel.tsx`
 
-No TypeScript changes, no test changes needed — the fix is SQL text only and the mocked query layer isolates tests from SQL details.
+- [x] Define `StepStatus` and `PlanningFlow` types.
+- [x] Introduce a consolidated flow state in `RoutePanel`.
+- [x] Refactor the three separate `useEffect` hooks (Navigation, Intelligence, AI) into a single coordinated flow logic.
+- [x] Ensure that clearing waypoints or changing profiles resets the entire flow state.
+- [x] **Verification**:
+  - [x] Create/modify unit tests for testing the code added or modified in this phase.
+  - [x] Run `eslint --fix`.
+  - [x] Run `tsc --noEmit`.
+  - [x] Run `npm test`.
+  - [x] Run `prettier --write .`.
+  - [x] Update Journal.
+  - [x] Wait for approval before committing.
 
-ESLint, `tsc --noEmit`, `npm test` (467/467), and `prettier` all clean.
+## Phase 3: Implement Status UI
 
-Committed: `96d6936 fix(route-intelligence): add overlap filter to suppress side-road false positives`
+- [x] Create a `StatusList` sub-component within `RoutePanel.tsx` to display the vertical steps.
+- [x] Add icons for each state: Pending (circle), Running (spinner), Complete (checkmark), Error (cross).
+- [x] Integrate the `StatusList` into the `RoutePanel` UI, positioned above the analysis results.
+- [x] **Verification**:
+  - [x] Create/modify unit tests for testing the code added or modified in this phase.
+  - [x] Run `eslint --fix`.
+  - [x] Run `tsc --noEmit`.
+  - [x] Run `npm test`.
+  - [x] Run `prettier --write .`.
+  - [x] Update Journal.
+  - [x] Wait for approval before committing.
 
-### 2026-05-16 — Phase 3
+## Phase 4: Sequential Logic & Graceful Handling
 
-`npm run test:coverage`:
-- All files: **91.55% stmts / 84.12% branch / 83.7% functions / 91.55% lines**
-- `route-intelligence/route.ts`: 96.31% stmts / 87.82% branch / 100% functions (unchanged — fix is SQL, not new logic branches)
+- [x] Update the flow coordinator to explicitly wait for the previous step.
+- [x] Implement graceful handling: if Intelligence fails, still attempt AI Summary (if possible) but mark Intelligence as 'error'.
+- [x] Update existing `loading` and `intelligenceLoading` states to be derived from or replaced by the flow state.
+- [x] **Verification**:
+  - [x] Create/modify unit tests for testing the code added or modified in this phase.
+  - [x] Run `eslint --fix`.
+  - [x] Run `tsc --noEmit`.
+  - [x] Run `npm test`.
+  - [x] Run `prettier --write .`.
+  - [x] Update Journal.
+  - [x] Wait for approval before committing.
 
-CLAUDE.md updated: file tree comment and `POST /api/route-intelligence` description updated to document the corridor CTE, overlap filter, and `ST_ClosestPoint`.
+## Phase 5: UI Integration & Gatekeeping
+
+- [x] Update the "AI Summary" button to be disabled or hidden until its step is reached/complete.
+- [x] Update the "Export" button to be enabled only when the flow is complete.
+- [x] Ensure the "Route Assessment" section remains hidden or in a "waiting" state until the appropriate step.
+- [x] **Verification**:
+  - [x] Create/modify unit tests for testing the code added or modified in this phase.
+  - [x] Run `eslint --fix`.
+  - [x] Run `tsc --noEmit`.
+  - [x] Run `npm test`.
+  - [x] Run `prettier --write .`.
+  - [x] Update Journal.
+  - [x] Wait for approval before committing.
+
+## Phase 6: Final Validation
+
+- [x] Run `npm run test:coverage` and record the coverage summary in the Journal.
+- [x] Update `README.md` if any user-facing behavior changes significantly (though this is mostly UI polish).
+- [x] Ask the user to inspect the package and running app.

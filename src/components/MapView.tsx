@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
@@ -70,6 +76,10 @@ interface MapViewProps {
   routeHazards?: RouteHazard[];
   focusedHazard?: RouteHazard | null;
   routeCoverageGaps?: GeoJSON.Geometry | null;
+}
+
+export interface MapViewHandle {
+  getMapScreenshot: () => string | undefined;
 }
 
 function buildAoiCollection() {
@@ -448,31 +458,40 @@ function startHighlightAnimation(
   frameRef.current = requestAnimationFrame(tick);
 }
 
-export default function MapView({
-  center = [21.5, 60.2],
-  zoom = 7,
-  selectedAreaId = null,
-  layerVisibility = DEFAULT_LAYER_VISIBILITY,
-  customLayers = [],
-  enabledCustomLayerIds = new Set(),
-  activeDrawingLayerId = null,
-  onCancelDrawing,
-  onInfoPanel,
-  infoPanelOpen = false,
-  plannedRoute = null,
-  routeProfile = "driving",
-  routeWaypoints = [],
-  addingWaypoint = false,
-  onWaypointClick,
-  routeHazards = [],
-  focusedHazard = null,
-  routeCoverageGaps = null,
-}: MapViewProps) {
+const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
+  {
+    center = [21.5, 60.2],
+    zoom = 7,
+    selectedAreaId = null,
+    layerVisibility = DEFAULT_LAYER_VISIBILITY,
+    customLayers = [],
+    enabledCustomLayerIds = new Set(),
+    activeDrawingLayerId = null,
+    onCancelDrawing,
+    onInfoPanel,
+    infoPanelOpen = false,
+    plannedRoute = null,
+    routeProfile = "driving",
+    routeWaypoints = [],
+    addingWaypoint = false,
+    onWaypointClick,
+    routeHazards = [],
+    focusedHazard = null,
+    routeCoverageGaps = null,
+  },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
   const styleLoadedRef = useRef(false);
   const eventsAttachedRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    getMapScreenshot: () => {
+      return mapRef.current?.getCanvas().toDataURL("image/png");
+    },
+  }));
 
   // Cell tower state
   const rawTowerDataRef = useRef<GeoJSON.FeatureCollection>({
@@ -537,6 +556,7 @@ export default function MapView({
       style: "mapbox://styles/mapbox/standard",
       center,
       zoom,
+      preserveDrawingBuffer: true,
     });
 
     // Initialise Draw control
@@ -2118,4 +2138,6 @@ export default function MapView({
       />
     </div>
   );
-}
+});
+
+export default MapView;
