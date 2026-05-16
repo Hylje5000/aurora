@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { PlannedRoute } from "@/lib/routing";
 
-const VALID_PROFILES = new Set<string>([
-  "driving",
-  "walking",
-  "cycling",
-  "driving-traffic",
-]);
+const VALID_PROFILES = new Set<string>(["driving", "walking", "cycling"]);
 
 interface MapboxDirectionsResponse {
   code: string;

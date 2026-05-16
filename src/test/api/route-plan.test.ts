@@ -163,13 +163,8 @@ describe("POST /api/route-plan", () => {
     expect(body.legs[0].steps[0].distance_m).toBe(340);
   });
 
-  it("includes all four profiles in the Mapbox URL", async () => {
-    for (const profile of [
-      "driving",
-      "walking",
-      "cycling",
-      "driving-traffic",
-    ]) {
+  it("includes all three profiles in the Mapbox URL", async () => {
+    for (const profile of ["driving", "walking", "cycling"]) {
       vi.mocked(global.fetch).mockResolvedValueOnce(
         new Response(JSON.stringify(MAPBOX_SUCCESS), { status: 200 }),
       );

@@ -31,18 +31,12 @@ interface RoutePanelProps {
   onClose: () => void;
 }
 
-const PROFILES: RouteProfile[] = [
-  "driving",
-  "walking",
-  "cycling",
-  "driving-traffic",
-];
+const PROFILES: RouteProfile[] = ["driving", "walking", "cycling"];
 
 const PROFILE_ICONS: Record<RouteProfile, string> = {
   driving: "🚗",
   walking: "🚶",
   cycling: "🚴",
-  "driving-traffic": "🚦",
 };
 
 function waypointLabel(index: number, total: number): string {
@@ -190,7 +184,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
     return (
       <div
-        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 w-64 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 w-96 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
         data-testid="route-panel"
       >
         {/* Header */}

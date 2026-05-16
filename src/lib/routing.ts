@@ -1,8 +1,4 @@
-export type RouteProfile =
-  | "driving"
-  | "walking"
-  | "cycling"
-  | "driving-traffic";
+export type RouteProfile = "driving" | "walking" | "cycling";
 
 export interface Waypoint {
   id: string;
@@ -33,7 +29,6 @@ export const PROFILE_COLORS: Record<RouteProfile, string> = {
   driving: "#3b82f6",
   walking: "#22c55e",
   cycling: "#eab308",
-  "driving-traffic": "#f97316",
 };
 
 export function formatDuration(s: number): string {
@@ -58,7 +53,5 @@ export function profileLabel(p: RouteProfile): string {
       return "Walking";
     case "cycling":
       return "Cycling";
-    case "driving-traffic":
-      return "Driving (traffic)";
   }
 }

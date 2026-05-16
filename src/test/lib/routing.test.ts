@@ -49,18 +49,12 @@ describe("profileLabel", () => {
     expect(profileLabel("driving")).toBe("Driving");
     expect(profileLabel("walking")).toBe("Walking");
     expect(profileLabel("cycling")).toBe("Cycling");
-    expect(profileLabel("driving-traffic")).toBe("Driving (traffic)");
   });
 });
 
 describe("PROFILE_COLORS", () => {
   it("has an entry for every profile", () => {
-    const profiles = [
-      "driving",
-      "walking",
-      "cycling",
-      "driving-traffic",
-    ] as const;
+    const profiles = ["driving", "walking", "cycling"] as const;
     for (const p of profiles) {
       expect(PROFILE_COLORS[p]).toBeDefined();
     }
