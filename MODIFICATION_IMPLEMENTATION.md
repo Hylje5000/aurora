@@ -7,7 +7,19 @@
 
 ## Journal
 
-_Updated after each phase._
+**Phase 0** — Baseline 441/441 tests green on `feat/ui-fixes`.
+
+**Phase 1** — Map contrast: added `roads-line-casing` dark halo, brightened road default colour to `#94a3b8`, widened roads to 1.5–4 px, added `route-line-outline` white glow, railway width/dash improved, custom layer lines widened to 5 px / circle-radius 11. `LAYER_GROUPS.roads` updated to include the new casing layer. 441/441 still green.
+
+**Phase 2** — Added `bare` prop to `WeatherWidget` and `DatePicker`. Replaced two-box side-by-side weather layout in `MapWithNav` with a single unified panel (date row at top, weather data below). 3 new tests; 444/444 green.
+
+**Phase 3** — Extracted `CustomLayerSection` from `CustomLayerPanel` (inner body, no wrapper). `LayerPanel` widened to `w-56` and gains optional `customLayerProps` to render the section. `MapWithNav` passes custom layer props to `LayerPanel` directly; standalone `CustomLayerPanel` overlay removed. Legacy `CustomLayerPanel` default export preserved for existing test compatibility. 2 new tests; 446/446 green.
+
+**Phase 4** — `InfoPanel` repositioned to `right-4 top-20 z-20 w-72 max-h-[60vh]` with a collapse chevron. `RoutePanel` repositioned to `right-4 bottom-10 z-20 w-80` (was `left-1/2 bottom-10 w-96`) with a collapse chevron. Fake-timer constraint in RoutePanel tests handled with `fireEvent.click` instead of `userEvent.click`. 4 new tests; 450/450 green.
+
+**Phase 5** — Route button: text `"Route"` → `"Plan a Route"`, position `right-20` → `right-4`, style `bg-black/60` → `bg-blue-600`, padding increased to `px-4 py-2`. `DrawingToolbar` shifted from `top-4` to `top-16` to avoid overlap. 1 test description updated; 450/450 green.
+
+**Phase 6** — Coverage run: 450/450 tests, 92.77% statement / 85.74% branch / 85.38% function coverage across all files. All existing coverage levels maintained or improved. CLAUDE.md updated.
 
 ---
 
