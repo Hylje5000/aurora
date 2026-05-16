@@ -154,10 +154,12 @@ vi.mock("@/components/InfoPanel", () => ({
 vi.mock("@/components/LayerPanel", () => ({
   default: ({
     onToggle,
+    onToggleComms,
     customLayerProps,
   }: {
     visibility: LayerVisibility;
     onToggle: (key: LayerKey) => void;
+    onToggleComms: () => void;
     customLayerProps?: {
       layers: CustomLayer[];
       enabledLayerIds: Set<string>;
@@ -171,6 +173,7 @@ vi.mock("@/components/LayerPanel", () => ({
     <div data-testid="layer-panel">
       <button onClick={() => onToggle("hillshade")}>Toggle Hillshade</button>
       <button onClick={() => onToggle("terrain3d")}>Toggle Terrain</button>
+      <button onClick={onToggleComms}>Toggle Cell Towers</button>
       {customLayerProps && (
         <div
           data-testid="custom-layer-panel"
@@ -371,6 +374,15 @@ describe("MapWithNav", () => {
       "data-terrain3d",
       "true",
     );
+  });
+
+  it("handleCommsToggle is wired: clicking Toggle Cell Towers does not throw", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(
+      screen.getByRole("button", { name: "Toggle Cell Towers" }),
+    );
+    expect(screen.getByTestId("layer-panel")).toBeInTheDocument();
   });
 
   it("fetches custom layers on mount and passes to CustomLayerPanel", async () => {

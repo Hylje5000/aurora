@@ -8,6 +8,7 @@ import type { CustomLayerPanelProps } from "@/components/CustomLayerPanel";
 const defaultProps = {
   visibility: DEFAULT_LAYER_VISIBILITY,
   onToggle: vi.fn(),
+  onToggleComms: vi.fn(),
 };
 
 describe("LayerPanel", () => {
@@ -18,10 +19,11 @@ describe("LayerPanel", () => {
     expect(screen.getByLabelText(/Hillshade/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Contour Lines/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Land Cover/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/GSM/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/UMTS/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/LTE/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/CDMA/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Cell Towers/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^GSM$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^UMTS$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^LTE$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^CDMA$/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Coverage Circles/i)).toBeInTheDocument();
   });
 
@@ -39,18 +41,32 @@ describe("LayerPanel", () => {
     expect(screen.getByLabelText(/Hillshade/i)).toBeChecked();
     expect(screen.getByLabelText(/Contour Lines/i)).toBeChecked();
     expect(screen.getByLabelText(/Land Cover/i)).toBeChecked();
-    expect(screen.getByLabelText(/GSM/i)).toBeChecked();
-    expect(screen.getByLabelText(/UMTS/i)).toBeChecked();
-    expect(screen.getByLabelText(/LTE/i)).toBeChecked();
-    expect(screen.getByLabelText(/CDMA/i)).toBeChecked();
+    // Cell Towers is checked when any cell type is on (all default true)
+    expect(screen.getByLabelText(/Cell Towers/i)).toBeChecked();
     // Coverage Circles is false by default
     expect(screen.getByLabelText(/Coverage Circles/i)).not.toBeChecked();
+  });
+
+  it("shows Cell Towers unchecked when all cell types are off", () => {
+    const allOff = {
+      ...DEFAULT_LAYER_VISIBILITY,
+      cellGSM: false,
+      cellUMTS: false,
+      cellLTE: false,
+      cellCDMA: false,
+    };
+    render(<LayerPanel {...defaultProps} visibility={allOff} />);
+    expect(screen.getByLabelText(/Cell Towers/i)).not.toBeChecked();
   });
 
   it("calls onToggle with 'satellite' when Satellite View checkbox is clicked", async () => {
     const onToggle = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={onToggle}
+        onToggleComms={vi.fn()}
+      />,
     );
     await userEvent.click(screen.getByLabelText(/Satellite View/i));
     expect(onToggle).toHaveBeenCalledWith("satellite");
@@ -59,7 +75,11 @@ describe("LayerPanel", () => {
   it("calls onToggle with 'terrain3d' when 3D Terrain checkbox is clicked", async () => {
     const onToggle = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={onToggle}
+        onToggleComms={vi.fn()}
+      />,
     );
     await userEvent.click(screen.getByLabelText(/3D Terrain/i));
     expect(onToggle).toHaveBeenCalledWith("terrain3d");
@@ -68,7 +88,11 @@ describe("LayerPanel", () => {
   it("calls onToggle with 'hillshade' when Hillshade checkbox is clicked", async () => {
     const onToggle = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={onToggle}
+        onToggleComms={vi.fn()}
+      />,
     );
     await userEvent.click(screen.getByLabelText(/Hillshade/i));
     expect(onToggle).toHaveBeenCalledWith("hillshade");
@@ -77,7 +101,11 @@ describe("LayerPanel", () => {
   it("calls onToggle with 'contours' when Contour Lines checkbox is clicked", async () => {
     const onToggle = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={onToggle}
+        onToggleComms={vi.fn()}
+      />,
     );
     await userEvent.click(screen.getByLabelText(/Contour Lines/i));
     expect(onToggle).toHaveBeenCalledWith("contours");
@@ -86,52 +114,37 @@ describe("LayerPanel", () => {
   it("calls onToggle with 'landcover' when Land Cover checkbox is clicked", async () => {
     const onToggle = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={onToggle}
+        onToggleComms={vi.fn()}
+      />,
     );
     await userEvent.click(screen.getByLabelText(/Land Cover/i));
     expect(onToggle).toHaveBeenCalledWith("landcover");
   });
 
-  it("calls onToggle with 'cellGSM' when GSM checkbox is clicked", async () => {
-    const onToggle = vi.fn();
+  it("calls onToggleComms when Cell Towers checkbox is clicked", async () => {
+    const onToggleComms = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={vi.fn()}
+        onToggleComms={onToggleComms}
+      />,
     );
-    await userEvent.click(screen.getByLabelText(/GSM/i));
-    expect(onToggle).toHaveBeenCalledWith("cellGSM");
-  });
-
-  it("calls onToggle with 'cellUMTS' when UMTS checkbox is clicked", async () => {
-    const onToggle = vi.fn();
-    render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
-    );
-    await userEvent.click(screen.getByLabelText(/UMTS/i));
-    expect(onToggle).toHaveBeenCalledWith("cellUMTS");
-  });
-
-  it("calls onToggle with 'cellLTE' when LTE checkbox is clicked", async () => {
-    const onToggle = vi.fn();
-    render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
-    );
-    await userEvent.click(screen.getByLabelText(/LTE/i));
-    expect(onToggle).toHaveBeenCalledWith("cellLTE");
-  });
-
-  it("calls onToggle with 'cellCDMA' when CDMA checkbox is clicked", async () => {
-    const onToggle = vi.fn();
-    render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
-    );
-    await userEvent.click(screen.getByLabelText(/CDMA/i));
-    expect(onToggle).toHaveBeenCalledWith("cellCDMA");
+    await userEvent.click(screen.getByLabelText(/Cell Towers/i));
+    expect(onToggleComms).toHaveBeenCalledOnce();
   });
 
   it("calls onToggle with 'cellCoverageCircles' when Coverage Circles checkbox is clicked", async () => {
     const onToggle = vi.fn();
     render(
-      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+      <LayerPanel
+        visibility={DEFAULT_LAYER_VISIBILITY}
+        onToggle={onToggle}
+        onToggleComms={vi.fn()}
+      />,
     );
     await userEvent.click(screen.getByLabelText(/Coverage Circles/i));
     expect(onToggle).toHaveBeenCalledWith("cellCoverageCircles");

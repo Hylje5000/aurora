@@ -10,6 +10,7 @@ import {
 interface LayerPanelProps {
   visibility: LayerVisibility;
   onToggle: (key: LayerKey) => void;
+  onToggleComms: () => void;
   customLayerProps?: CustomLayerPanelProps;
 }
 
@@ -53,6 +54,7 @@ function SectionHeading({ label }: { label: string }) {
 export default function LayerPanel({
   visibility,
   onToggle,
+  onToggleComms,
   customLayerProps,
 }: LayerPanelProps) {
   const [open, setOpen] = useState(true);
@@ -62,7 +64,7 @@ export default function LayerPanel({
       {/* Header */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 text-slate-400 hover:text-white transition-colors"
+        className="w-full flex items-center justify-between px-3 py-1.5 text-slate-400 hover:text-white transition-colors"
         aria-expanded={open}
         aria-label="Toggle layer panel"
       >
@@ -79,7 +81,7 @@ export default function LayerPanel({
 
       {/* Layer rows */}
       {open && (
-        <div className="px-3 pb-3 flex flex-col gap-1.5">
+        <div className="px-3 pb-2 flex flex-col gap-1 max-h-[calc(100vh-10rem)] overflow-y-auto">
           <SectionHeading label="Basemap" />
           <LayerRow
             label="Satellite View"
@@ -120,28 +122,15 @@ export default function LayerPanel({
 
           <SectionHeading label="Comms" />
           <LayerRow
-            label="GSM"
+            label="Cell Towers"
             dotColor="#3b82f6"
-            checked={visibility.cellGSM}
-            onToggle={() => onToggle("cellGSM")}
-          />
-          <LayerRow
-            label="UMTS"
-            dotColor="#3b82f6"
-            checked={visibility.cellUMTS}
-            onToggle={() => onToggle("cellUMTS")}
-          />
-          <LayerRow
-            label="LTE"
-            dotColor="#3b82f6"
-            checked={visibility.cellLTE}
-            onToggle={() => onToggle("cellLTE")}
-          />
-          <LayerRow
-            label="CDMA"
-            dotColor="#3b82f6"
-            checked={visibility.cellCDMA}
-            onToggle={() => onToggle("cellCDMA")}
+            checked={
+              visibility.cellGSM ||
+              visibility.cellUMTS ||
+              visibility.cellLTE ||
+              visibility.cellCDMA
+            }
+            onToggle={onToggleComms}
           />
           <LayerRow
             label="Coverage Circles"

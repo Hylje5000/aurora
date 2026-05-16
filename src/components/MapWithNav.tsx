@@ -88,6 +88,20 @@ export default function MapWithNav() {
     setLayerVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  const handleCommsToggle = useCallback(() => {
+    setLayerVisibility((prev) => {
+      const anyOn =
+        prev.cellGSM || prev.cellUMTS || prev.cellLTE || prev.cellCDMA;
+      return {
+        ...prev,
+        cellGSM: !anyOn,
+        cellUMTS: !anyOn,
+        cellLTE: !anyOn,
+        cellCDMA: !anyOn,
+      };
+    });
+  }, []);
+
   const handleToggleLayer = useCallback((id: string) => {
     setEnabledCustomLayerIds((prev) => {
       const next = new Set(prev);
@@ -273,6 +287,7 @@ export default function MapWithNav() {
       <LayerPanel
         visibility={layerVisibility}
         onToggle={handleToggle}
+        onToggleComms={handleCommsToggle}
         customLayerProps={{
           layers: customLayers,
           enabledLayerIds: enabledCustomLayerIds,

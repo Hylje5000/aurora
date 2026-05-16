@@ -1,99 +1,201 @@
-# Modification Design: Sequential Route Planning Flow
+# UI Compaction — Modification Design
 
 ## Overview
 
-This modification refactors the route planning workflow in the Aurora IPB application to follow a strictly sequential, multi-step process. A vertical status list will be added to the `RoutePanel` to provide clear feedback on the progress of Navigation, Intelligence analysis, and AI Summary generation. Export functionality will be restricted until all steps are complete.
+Multiple floating panels on the left-hand side of the map overlap on common browser viewport sizes (1280–1440 px wide, 720–900 px tall). This document describes targeted compaction changes to reduce vertical space consumption, merge redundant controls, and add scrolling safeguards to the layer panel.
 
-## Detailed Analysis of the Goal
+---
 
-Currently, the route planner initiates several asynchronous processes (Navigation, Intelligence, and AI Summary) that trigger based on dependency changes in `useEffect` hooks. While functional, the loading states are disjointed, and there is no unified visual representation of the overall progress.
+## Problem Analysis
 
-### Goals:
+### Current layout (left side, top → bottom)
 
-1.  **Strict Sequential Execution**:
-    - Step 1: Navigation API (Route calculation)
-    - Step 2: Route Intelligence (Hazard and infrastructure analysis)
-    - Step 3: AI Tactical Summary (Executive summary generation)
-    - Step 4: Completion and Export availability
-2.  **Unified Progress UI**: A vertical list showing each step with its current status (Pending, Running, Complete, or Error).
-3.  **Controlled Export**: The "Export" button will only be active once all analysis steps have finished successfully (or gracefully handled failures).
-4.  **Graceful Error Handling**: Allow the flow to continue or adjust if certain non-critical steps fail (e.g., Intelligence failing might still allow a basic summary, or AI Summary failing shouldn't block viewing the route).
+| Panel | Position | Approx height |
+|-------|----------|---------------|
+| AreaNav | `top-4` (16 px) centered | ~38 px |
+| Weather/Date panel | `left-4 top-10` (40 px) | ~120–140 px |
+| LayerPanel | `left-4 bottom-10` (bottom-anchored) | ~330–400 px (grows with custom layers) |
+
+At 900 px viewport height the layer panel reaches ~`bottom-10 + 330 px ≈ 370 px from bottom = 530 px from top`. The weather panel ends at roughly `40 + 140 = 180 px from top`. There is ~350 px of gap, but custom layers make the layer panel grow upward and eventually overlap the weather panel. The weather panel itself nearly overlaps the AreaNav (AreaNav bottom ≈ 54 px, weather panel top = 40 px → 14 px gap).
+
+### Root causes
+
+1. **Weather panel header wastes a full row** — the area name sits in its own `pt-2.5 pb-1` block above the date row, adding ~32–36 px.
+2. **Four COMMS rows** — GSM, UMTS, LTE, CDMA each consume a row (`gap-1.5` between them) ≈ 4 × 20 px = 80 px just for comms; in practice only operators want per-type control which is not a current use-case.
+3. **LayerPanel has no height cap** — adding custom layers causes unbounded growth upward.
+4. **Minor spacing waste** — `gap-1.5` between rows, `pb-3` bottom padding, `py-2` date row are all slightly larger than needed.
+
+---
 
 ## Alternatives Considered
 
-- **Parallel Execution (Current)**: Fastest performance but confusing UI when multiple loading indicators appear and disappear independently.
-- **Full-Screen Stepper**: Too intrusive for a map-centric application where the user might want to see the map updates as they happen.
-- **Integrated Progress Bar**: Less descriptive than a vertical status list; doesn't communicate what is actually happening at each stage.
+### A — CSS-only scrolling trick on LayerPanel
+Add `max-h` + `overflow-y-auto` without touching content. Solves the scroll problem but not the overlap problem.
+
+### B — Move panels to different screen edges
+Put weather top-right. Breaks left-panel visual grouping and conflicts with InfoPanel/RoutePanel on the right.
+
+### C — Collapsible weather panel
+Already the LayerPanel has a collapse chevron. Adding the same to weather adds toggle fatigue for the most-used element.
+
+### D — Selected approach: targeted compaction (3 changes)
+1. **Merge area-name row into date row** in the weather panel → saves ~32 px.
+2. **Replace 4 COMMS rows with 1 "Cell Towers" row** in LayerPanel → saves ~60 px.
+3. **Cap LayerPanel height with scroll** → prevents future growth from causing overlaps.
+4. **Minor spacing reductions** across DatePicker selects, row gaps, and padding.
+
+---
 
 ## Detailed Design
 
-### State Management
+### 1. Weather panel header compaction (`MapWithNav.tsx`)
 
-A new state object will be introduced in `RoutePanel` to track the status of the planning flow.
+**Before:**
+```
++------------------------------+
+| Archipelago Sea              |  <- separate name row (pt-2.5 pb-1)
++------------------------------+
+| Date            [Jan] [15]   |  <- date row (py-2 border-b)
++------------------------------+
+| Historical avg x 10 yr       |
+| 2.3C +/- 1.2  max 3.5 min 1 |
+| 45% rain avg 3.2 mm          |
++------------------------------+
+```
 
-```typescript
-type StepStatus = "pending" | "running" | "complete" | "error";
+**After:**
+```
++------------------------------+
+| Archipelago Sea  [Jan] [15]  |  <- merged row (py-1.5)
++------------------------------+
+| Historical avg x 10 yr       |
+| 2.3C +/- 1.2  max 3.5 min 1 |
+| 45% rain avg 3.2 mm          |
++------------------------------+
+```
 
-interface PlanningFlow {
-  navigation: StepStatus;
-  intelligence: StepStatus;
-  summary: StepStatus;
+Implementation: replace the two `<div>` blocks (area-name block + date row) with a single flex row. Area name uses `text-xs font-bold flex-1` (smaller than current `text-sm`). DatePicker bare selector occupies the right portion.
+
+### 2. Combined Cell Towers toggle (`LayerPanel.tsx` + `MapWithNav.tsx`)
+
+**Before (COMMS section):**
+```
+COMMS
+* GSM          [x]
+* UMTS         [x]
+* LTE          [x]
+* CDMA         [x]
+* Coverage Cir [ ]
+```
+
+**After:**
+```
+COMMS
+* Cell Towers  [x]
+* Coverage Cir [ ]
+```
+
+**Logic:** `commsOn = vis.cellGSM || vis.cellUMTS || vis.cellLTE || vis.cellCDMA`. Toggling sets all four to `!anyOn`.
+
+**Interface change in `LayerPanel`:**
+```ts
+interface LayerPanelProps {
+  visibility: LayerVisibility;
+  onToggle: (key: LayerKey) => void;
+  onToggleComms: () => void;          // NEW — controls all 4 cell types at once
+  customLayerProps?: CustomLayerPanelProps;
 }
 ```
 
-### Component Structure Changes (`RoutePanel.tsx`)
+**`MapWithNav` handler:**
+```ts
+const handleCommsToggle = useCallback(() => {
+  setLayerVisibility((prev) => {
+    const anyOn = prev.cellGSM || prev.cellUMTS || prev.cellLTE || prev.cellCDMA;
+    return { ...prev, cellGSM: !anyOn, cellUMTS: !anyOn, cellLTE: !anyOn, cellCDMA: !anyOn };
+  });
+}, []);
+```
 
-1.  **Flow Coordinator**: A central logic block (likely replacing or wrapping the existing `useEffect` hooks) that manages transitions between `PlanningFlow` states.
-2.  **Status List UI**: A new sub-component or section within `RoutePanel` that renders the vertical progress list.
-3.  **Conditional Rendering**: Update existing sections (Route Summary, Hazards, AI Summary) to respect the current flow state.
-4.  **Export Guard**: Modify the Export button logic to check if `flow.summary` is 'complete' or 'error' (if graceful).
+The four individual `LayerKey` values (`cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`) are **not removed** from `LayerVisibility` or `LAYER_GROUPS` — `MapView` still uses them for per-type symbol layer visibility and cluster filtering. Only the UI surface changes.
 
-### Sequence Logic
+### 3. LayerPanel max-height + scroll
 
-1.  **Trigger**: User adds/changes waypoints or profile.
-2.  **Step 1**: Reset flow to `{ navigation: 'running', intelligence: 'pending', summary: 'pending' }`. Call `/api/route-plan`.
-3.  **Transition 1**: If Navigation succeeds, set `navigation: 'complete'` and `intelligence: 'running'`.
-4.  **Step 2**: Call `/api/route-intelligence`.
-5.  **Transition 2**: If Intelligence succeeds (or gracefully fails), set `intelligence: 'complete'` and `summary: 'running'`.
-6.  **Step 3**: Call `/api/ai`.
-7.  **Transition 3**: Set `summary: 'complete'`. Enable Export.
+The content `<div>` gains `max-h-[calc(100vh-10rem)] overflow-y-auto` so it never grows taller than the available viewport height minus safe margins. A custom thin scrollbar keeps the aesthetic clean.
 
-### Diagrams (Mermaid)
+```tsx
+<div className="px-3 pb-2 flex flex-col gap-1 max-h-[calc(100vh-10rem)] overflow-y-auto">
+```
+
+`100vh - 10rem` = viewport height minus 160 px (accounts for AreaNav, bottom margin, and browser chrome).
+
+### 4. Minor spacing reductions
+
+| Element | Before | After | Saving |
+|---------|--------|-------|--------|
+| LayerPanel row gap | `gap-1.5` | `gap-1` | ~4 px per N rows |
+| LayerPanel bottom padding | `pb-3` | `pb-2` | 4 px |
+| DatePicker select padding | `px-2 py-1` | `px-1.5 py-0.5` | ~4 px per select |
+| LayerPanel header | `py-2` | `py-1.5` | 4 px |
+| WeatherWidget top label | `mb-1` | `mb-0.5` | 4 px |
+
+---
+
+## Architecture Diagram
 
 ```mermaid
 graph TD
-    A[Waypoints Changed] --> B{Step 1: Navigation}
-    B -- Success --> C{Step 2: Intelligence}
-    B -- Failure --> B_Error[Show Error / Stop]
-    C -- Success/Graceful --> D{Step 3: AI Summary}
-    C -- Hard Failure --> C_Error[Show Error / Stop]
-    D -- Success/Graceful --> E[Step 4: Ready / Export]
-    D -- Failure --> E
+    A["MapWithNav (state owner)"] --> B["LayerPanel"]
+    A --> C["Weather panel (inline JSX)"]
+    A --> D["MapView"]
+
+    subgraph LayerPanelProps
+      B1["visibility: LayerVisibility"]
+      B2["onToggle: key to void"]
+      B3["onToggleComms: () to void  (NEW)"]
+    end
+
+    B --> B1 & B2 & B3
+
+    subgraph "handleCommsToggle (new in MapWithNav)"
+      H1["reads prev.cellGSM|UMTS|LTE|CDMA"]
+      H2["sets all four to anyOn = false"]
+    end
+
+    A --> H1 --> H2
+
+    subgraph "Weather panel merged row"
+      W1["area name (flex-1, text-xs font-bold)"]
+      W2["DatePicker bare (right side)"]
+    end
+
+    C --> W1 & W2
+
+    subgraph "LayerPanel COMMS section"
+      L1["Cell Towers (single row) -> onToggleComms"]
+      L2["Coverage Circles -> onToggle cellCoverageCircles"]
+    end
+
+    B --> L1 & L2
 ```
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant P as RoutePanel
-    P->>P: Status: Navigation Running
-    P->>API: POST /api/route-plan
-    API-->>P: Route Data
-    P->>P: Status: Navigation Done, Intel Running
-    P->>API: POST /api/route-intelligence
-    API-->>P: Intel Data
-    P->>P: Status: Intel Done, AI Running
-    P->>API: POST /api/ai
-    API-->>P: Summary Content
-    P->>P: Status: All Done
-    P-->>U: Show Export Button
-```
+---
 
-## Summary of the Design
+## Summary
 
-The `RoutePanel` will be refactored to treat the analysis process as a state machine. This ensures that data dependencies are handled correctly and provides the user with a predictable, transparent experience. The UI will prominently feature the status of each tactical analysis step, making the "Intelligence Preparation of the Battlespace" process feel like a cohesive operation.
+| Change | Files | Approx line delta |
+|--------|-------|-------------|
+| Merge weather header into date row | `MapWithNav.tsx` | -10, +5 |
+| Single Cell Towers toggle | `LayerPanel.tsx`, `MapWithNav.tsx` | -15, +10 |
+| LayerPanel max-height + scroll | `LayerPanel.tsx` | +3 |
+| Minor spacing reductions | `LayerPanel.tsx`, `DatePicker.tsx`, `WeatherWidget.tsx` | +/-10 |
+| Update tests | `LayerPanel.test.tsx`, `MapWithNav.test.tsx`, `DatePicker.test.tsx` | +/-20 |
+
+No database, API, or Mapbox layer changes are required. The individual `LayerKey` values for each cell type remain intact in `lib/layers.ts` and `MapView.tsx` — only the panel UI surface changes.
+
+---
 
 ## References
 
-- [Next.js App Router Documentation](https://nextjs.org/docs/app)
-- [React useEffect Best Practices](https://react.dev/reference/react/useEffect)
-- [Tailwind CSS v4 Documentation](https://tailwindcss.com/docs)
+- Tailwind CSS v4 `max-h`, `overflow-y-auto` utilities (project already on Tailwind v4)
+- React 18 automatic batching — functional `setState` updaters are applied sequentially on accumulated state, so toggling 4 keys requires a single `setLayerVisibility` call setting all at once.
