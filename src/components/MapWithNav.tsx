@@ -125,49 +125,7 @@ export default function MapWithNav() {
 
   function handleHazardFocus(hazard: RouteHazard) {
     setFocusedHazard(hazard);
-    setInfoPanelData({
-      title: hazard.type === "bridge" ? "Bridge" : "Road Segment",
-      rows: [
-        ["Severity", hazard.severity.toUpperCase()],
-        ["Issue", hazard.message],
-        [
-          "Location",
-          `${hazard.coordinates[1].toFixed(4)}, ${hazard.coordinates[0].toFixed(4)}`,
-        ],
-        ...((hazard.type === "bridge"
-          ? [
-              ["Name", (hazard.properties.name as string) ?? null],
-              [
-                "Mass limit",
-                hazard.properties.max_vehicle_mass_t != null
-                  ? `${hazard.properties.max_vehicle_mass_t} t`
-                  : null,
-              ],
-              [
-                "Height limit",
-                hazard.properties.height_restriction_m != null
-                  ? `${hazard.properties.height_restriction_m} m`
-                  : null,
-              ],
-              ["Status", (hazard.properties.status as string) ?? null],
-            ]
-          : [
-              [
-                "Mass limit",
-                hazard.properties.max_mass_kg != null
-                  ? `${hazard.properties.max_mass_kg} kg`
-                  : null,
-              ],
-              [
-                "Width",
-                hazard.properties.width_cm != null
-                  ? `${hazard.properties.width_cm} cm`
-                  : null,
-              ],
-              ["Condition class", hazard.properties.condition_class ?? null],
-            ]) as [string, string | null][]),
-      ],
-    });
+    // Details shown in a map popup at the marker — no InfoPanel needed.
   }
 
   async function handleDeleteLayer(id: string) {

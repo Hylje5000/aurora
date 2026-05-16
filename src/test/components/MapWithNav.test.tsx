@@ -667,7 +667,7 @@ describe("MapWithNav", () => {
     );
   });
 
-  it("sets focusedHazard on MapView and opens InfoPanel when onHazardFocus is called", async () => {
+  it("sets focusedHazard on MapView when onHazardFocus is called (popup shown on map, not InfoPanel)", async () => {
     render(<MapWithNav />);
     await act(async () => {});
     await userEvent.click(screen.getByTestId("route-toggle-btn"));
@@ -678,33 +678,7 @@ describe("MapWithNav", () => {
       "data-focused-hazard",
       "bridge-1-0",
     );
-    expect(screen.getByTestId("info-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("info-panel")).toHaveTextContent("Bridge");
-  });
-
-  it("clears focusedHazard when InfoPanel is closed", async () => {
-    render(<MapWithNav />);
-    await act(async () => {});
-    await userEvent.click(screen.getByTestId("route-toggle-btn"));
-    await userEvent.click(screen.getByRole("button", { name: "FocusHazard" }));
-
-    expect(screen.getByTestId("map-view")).toHaveAttribute(
-      "data-focused-hazard",
-      "bridge-1-0",
-    );
-
-    // InfoPanel stub closes on click of the close button — but since it's a stub,
-    // we trigger via the MapView onInfoPanel with null (emulating close)
-    // The actual close path goes through InfoPanel's onClose → setInfoPanelData(null) + setFocusedHazard(null)
-    // We test it by clicking "Trigger InfoPanel" (which calls onInfoPanel with new data — clears focusedHazard too)
-    await userEvent.click(
-      screen.getByRole("button", { name: "Trigger InfoPanel" }),
-    );
-    // focusedHazard is NOT cleared by a new InfoPanel open — only by explicit close
-    // Verify focusedHazard was still set after the previous click
-    expect(screen.getByTestId("map-view")).toHaveAttribute(
-      "data-focused-hazard",
-      "bridge-1-0",
-    );
+    // Hazard details are shown in a map popup, not the InfoPanel
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
   });
 });

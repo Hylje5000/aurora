@@ -225,6 +225,10 @@ export async function POST(req: NextRequest) {
   const routeGeoJSON = JSON.stringify(routeGeometry);
 
   try {
+    // Distance constants in degrees (at ~60°N, 1 deg lon ≈ 55.7 km, 1 deg lat ≈ 111.3 km).
+    // We use the more restrictive longitude conversion and add a margin so the geometry
+    // DWithin hits the GiST index instead of the expensive geography cast.
+    // Roads: 20 m target → 0.0004 deg;  Bridges: 50 m target → 0.0010 deg.
     const [roadsResult, bridgesResult] = await Promise.all([
       query<RoadRow>(
         `
@@ -233,9 +237,9 @@ export async function POST(req: NextRequest) {
           max_mass_kg, max_height_cm, max_bogie_mass_kg, max_axle_mass_kg,
           width_cm, pavement_type, has_damage, damage_recurring,
           condition_class, condition_text, rut_depth_mm,
-          ST_AsGeoJSON(ST_ClosestPoint(geom, route_geom)) AS closest_pt
+          ST_AsGeoJSON(ST_Centroid(geom)) AS closest_pt
         FROM roads, ST_GeomFromGeoJSON($1) AS route_geom
-        WHERE ST_DWithin(geom::geography, route_geom::geography, 20)
+        WHERE ST_DWithin(geom, route_geom, 0.0004)
         ORDER BY link_id
         LIMIT 500
         `,
@@ -249,7 +253,7 @@ export async function POST(req: NextRequest) {
           max_axle_mass_t, height_restriction_m, type_name,
           ST_AsGeoJSON(geom) AS geojson
         FROM bridges, ST_GeomFromGeoJSON($1) AS route_geom
-        WHERE ST_DWithin(geom::geography, route_geom::geography, 50)
+        WHERE ST_DWithin(geom, route_geom, 0.0010)
         `,
         [routeGeoJSON],
       ),

@@ -1357,7 +1357,31 @@ describe("MapView", () => {
     expect(mockMarkerSetLngLat).toHaveBeenCalledWith([25.0, 60.2]);
   });
 
-  it("removes previous hazard focus marker when focusedHazard changes", async () => {
+  it("opens a Popup at the focused hazard coordinates", async () => {
+    const hazard: RouteHazard = {
+      id: "bridge-2-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit exceeded",
+      coordinates: [25.0, 60.2],
+      properties: { name: "Test Bridge", max_vehicle_mass_t: 16 },
+    };
+
+    MockPopup.mockClear();
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+
+    rerender(<MapView focusedHazard={hazard} />);
+
+    expect(MockPopup).toHaveBeenCalled();
+    expect(mockSetLngLat).toHaveBeenCalledWith([25.0, 60.2]);
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Bridge hazard"),
+    );
+  });
+
+  it("removes previous hazard focus marker and popup when focusedHazard changes", async () => {
     const hazard1: RouteHazard = {
       id: "road-1-0",
       type: "road",
@@ -1381,9 +1405,11 @@ describe("MapView", () => {
 
     rerender(<MapView focusedHazard={hazard1} />);
     mockMarkerRemove.mockClear();
+    mockPopupRemove.mockClear();
 
     rerender(<MapView focusedHazard={hazard2} />);
 
     expect(mockMarkerRemove).toHaveBeenCalled();
+    expect(mockPopupRemove).toHaveBeenCalled();
   });
 });

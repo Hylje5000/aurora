@@ -440,6 +440,7 @@ export default function MapView({
   const onWaypointClickRef = useRef(onWaypointClick);
   const waypointMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const hazardFocusMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const hazardFocusPopupRef = useRef<mapboxgl.Popup | null>(null);
 
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
@@ -1364,6 +1365,8 @@ export default function MapView({
       waypointMarkersRef.current = [];
       hazardFocusMarkerRef.current?.remove();
       hazardFocusMarkerRef.current = null;
+      hazardFocusPopupRef.current?.remove();
+      hazardFocusPopupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;
@@ -1662,11 +1665,13 @@ export default function MapView({
     });
   }, [routeHazards]);
 
-  // ── Focused hazard: fly-to + temporary marker ─────────────────────────
+  // ── Focused hazard: fly-to + marker + popup ───────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     hazardFocusMarkerRef.current?.remove();
     hazardFocusMarkerRef.current = null;
+    hazardFocusPopupRef.current?.remove();
+    hazardFocusPopupRef.current = null;
 
     if (!map || !focusedHazard) return;
 
@@ -1679,7 +1684,105 @@ export default function MapView({
           ? "#eab308"
           : "#94a3b8";
 
-    hazardFocusMarkerRef.current = new mapboxgl.Marker({ color })
+    const severityLabel =
+      focusedHazard.severity === "critical"
+        ? "CRITICAL"
+        : focusedHazard.severity === "warning"
+          ? "WARNING"
+          : "INFO";
+
+    const p = focusedHazard.properties;
+    const rows: [string, unknown][] =
+      focusedHazard.type === "bridge"
+        ? [
+            [
+              "Severity",
+              `<span style="color:${color};font-weight:700">${severityLabel}</span>`,
+            ],
+            ...(p.name ? [["Name", p.name] as [string, unknown]] : []),
+            ...(p.max_vehicle_mass_t != null
+              ? [
+                  ["Mass limit", `${p.max_vehicle_mass_t} t`] as [
+                    string,
+                    unknown,
+                  ],
+                ]
+              : []),
+            ...(p.max_bogie_mass_t != null
+              ? [
+                  ["Bogie limit", `${p.max_bogie_mass_t} t`] as [
+                    string,
+                    unknown,
+                  ],
+                ]
+              : []),
+            ...(p.max_axle_mass_t != null
+              ? [["Axle limit", `${p.max_axle_mass_t} t`] as [string, unknown]]
+              : []),
+            ...(p.height_restriction_m != null
+              ? [
+                  ["Height limit", `${p.height_restriction_m} m`] as [
+                    string,
+                    unknown,
+                  ],
+                ]
+              : []),
+            ...(p.status ? [["Status", p.status] as [string, unknown]] : []),
+          ]
+        : [
+            [
+              "Severity",
+              `<span style="color:${color};font-weight:700">${severityLabel}</span>`,
+            ],
+            ...(p.max_mass_kg != null
+              ? [["Mass limit", `${p.max_mass_kg} kg`] as [string, unknown]]
+              : []),
+            ...(p.max_bogie_mass_kg != null
+              ? [
+                  ["Bogie limit", `${p.max_bogie_mass_kg} kg`] as [
+                    string,
+                    unknown,
+                  ],
+                ]
+              : []),
+            ...(p.max_axle_mass_kg != null
+              ? [
+                  ["Axle limit", `${p.max_axle_mass_kg} kg`] as [
+                    string,
+                    unknown,
+                  ],
+                ]
+              : []),
+            ...(p.width_cm != null
+              ? [["Width", `${p.width_cm} cm`] as [string, unknown]]
+              : []),
+            ...(p.max_height_cm != null
+              ? [["Height limit", `${p.max_height_cm} cm`] as [string, unknown]]
+              : []),
+            ...(p.condition_class != null
+              ? [["Condition class", p.condition_class] as [string, unknown]]
+              : []),
+            ...(p.condition_text
+              ? [["Condition", p.condition_text] as [string, unknown]]
+              : []),
+            ...(p.rut_depth_mm != null
+              ? [["Rut depth", `${p.rut_depth_mm} mm`] as [string, unknown]]
+              : []),
+          ];
+
+    const title =
+      focusedHazard.type === "bridge" ? "Bridge hazard" : "Road hazard";
+    const html = popupStyle(title, rows);
+
+    hazardFocusPopupRef.current = new mapboxgl.Popup({
+      className: "aurora-popup",
+      maxWidth: "260px",
+    })
+      .setLngLat(focusedHazard.coordinates)
+      .setHTML(html)
+      .addTo(map);
+
+    hazardFocusMarkerRef.current = new mapboxgl.Marker({ color, scale: 0.8 })
       .setLngLat(focusedHazard.coordinates)
       .addTo(map);
   }, [focusedHazard]);
