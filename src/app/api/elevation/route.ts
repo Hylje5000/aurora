@@ -52,6 +52,12 @@ export async function GET(req: NextRequest) {
     }
 
     const row = result.rows[0];
+
+    // No DEM data within 5 km → outside all covered AOIs
+    if (row.dist_m > 5000) {
+      return NextResponse.json<ElevationResponse>({ elevation_m: null });
+    }
+
     return NextResponse.json<ElevationResponse>({
       elevation_m: row.elevation_m,
       aoi_id: row.aoi_id,

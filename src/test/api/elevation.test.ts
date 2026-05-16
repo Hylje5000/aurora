@@ -102,6 +102,26 @@ describe("GET /api/elevation", () => {
     expect(body).toEqual({ elevation_m: null });
   });
 
+  it("returns { elevation_m: null } when nearest point is more than 5 km away", async () => {
+    process.env.DATABASE_URL = "postgres://test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          elevation_m: 42.0,
+          aoi_id: "lappi",
+          grid_file: "X9999",
+          dist_m: 87432.5, // ~87 km away
+        },
+      ],
+      rowCount: 1,
+    } as never);
+
+    const res = await GET(makeRequest("15.0", "55.0"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ elevation_m: null });
+  });
+
   it("returns 500 when DB throws", async () => {
     process.env.DATABASE_URL = "postgres://test";
     mockQuery.mockRejectedValueOnce(new Error("connection refused"));

@@ -406,8 +406,9 @@ export default function MapView({
   const activeDrawingToolRef = useRef<DrawingTool | null>(null);
   const pendingDrawFeatureRef = useRef<GeoJSON.Feature | null>(null);
 
-  // Elevation marker
+  // Elevation marker + popup (both replaced on each click, cleared on teardown)
   const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const elevationPopupRef = useRef<mapboxgl.Popup | null>(null);
 
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
@@ -1148,6 +1149,8 @@ export default function MapView({
           const { lng, lat } = e.lngLat;
           elevationMarkerRef.current?.remove();
           elevationMarkerRef.current = null;
+          elevationPopupRef.current?.remove();
+          elevationPopupRef.current = null;
           try {
             const res = await fetch(
               `/api/elevation?lng=${lng.toFixed(6)}&lat=${lat.toFixed(6)}`,
@@ -1158,10 +1161,8 @@ export default function MapView({
               aoi_id?: string;
               dist_m?: number;
             };
-            if (data.elevation_m === null) {
-              onInfoPanel?.(null);
-              return;
-            }
+            if (data.elevation_m === null) return;
+
             const el = document.createElement("div");
             el.style.cssText =
               "width:14px;height:14px;border-radius:50%;" +
@@ -1170,19 +1171,25 @@ export default function MapView({
             elevationMarkerRef.current = new mapboxgl.Marker({ element: el })
               .setLngLat([lng, lat])
               .addTo(map);
-            onInfoPanel?.({
-              title: "Terrain Elevation",
-              rows: [
-                ["Elevation", `${data.elevation_m.toFixed(1)} m`],
-                ["Coordinates", `${lat.toFixed(4)}°N  ${lng.toFixed(4)}°E`],
-                ["AOI", data.aoi_id ?? "—"],
-                ["Source", "NLS Finland DEM (50 m)"],
-                [
-                  "Source dist",
-                  data.dist_m != null ? `${data.dist_m.toFixed(0)} m` : "—",
-                ],
-              ],
-            });
+
+            elevationPopupRef.current = new mapboxgl.Popup({
+              className: "aurora-popup",
+              offset: 15,
+            })
+              .setLngLat([lng, lat])
+              .setHTML(
+                popupStyle("Terrain Elevation", [
+                  ["Elevation", `${data.elevation_m.toFixed(1)} m`],
+                  ["Coordinates", `${lat.toFixed(4)}°N  ${lng.toFixed(4)}°E`],
+                  ["AOI", data.aoi_id ?? "—"],
+                  ["Source", "NLS Finland DEM (50 m)"],
+                  [
+                    "Source dist",
+                    data.dist_m != null ? `${data.dist_m.toFixed(0)} m` : "—",
+                  ],
+                ]),
+              )
+              .addTo(map);
           } catch {
             // Elevation is supplementary — fail silently
           }
@@ -1201,6 +1208,8 @@ export default function MapView({
       }
       elevationMarkerRef.current?.remove();
       elevationMarkerRef.current = null;
+      elevationPopupRef.current?.remove();
+      elevationPopupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;
@@ -1380,8 +1389,6 @@ export default function MapView({
       cancelAnimationFrame(highlightAnimFrameRef.current);
       highlightAnimFrameRef.current = null;
     }
-    elevationMarkerRef.current?.remove();
-    elevationMarkerRef.current = null;
     const map = mapRef.current;
     if (map && styleLoadedRef.current) {
       (

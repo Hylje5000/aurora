@@ -27,6 +27,7 @@ const {
   MockMap,
   MockNavigationControl,
   MockPopup,
+  mockPopupRemove,
   mockMarkerRemove,
   mockMarkerSetLngLat,
   mockMarkerAddTo,
@@ -64,10 +65,12 @@ const {
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
   const mockAddTo = vi.fn();
+  const mockPopupRemove = vi.fn();
   const MockPopup = vi.fn(() => ({
     setLngLat: mockSetLngLat.mockReturnThis(),
     setHTML: mockSetHTML.mockReturnThis(),
     addTo: mockAddTo.mockReturnThis(),
+    remove: mockPopupRemove,
   }));
 
   const mockMarkerRemove = vi.fn();
@@ -128,6 +131,7 @@ const {
     MockMap,
     MockNavigationControl,
     MockPopup,
+    mockPopupRemove,
     mockMarkerRemove,
     mockMarkerSetLngLat,
     mockMarkerAddTo,
@@ -267,6 +271,7 @@ describe("MapView", () => {
     mockDrawChangeMode.mockClear();
     mockDrawDelete.mockClear();
     mockDrawTrash.mockClear();
+    mockPopupRemove.mockClear();
     MockMarker.mockClear();
     mockMarkerRemove.mockClear();
     mockMarkerSetLngLat.mockClear();
@@ -798,10 +803,13 @@ describe("MapView", () => {
     expect(findGeneralClickHandler()).toBeDefined();
   });
 
-  it("fetches /api/elevation with the clicked lng/lat and calls onInfoPanel with elevation rows", async () => {
-    const onInfoPanel = vi.fn();
-    render(<MapView onInfoPanel={onInfoPanel} />);
+  it("fetches /api/elevation with the clicked lng/lat and opens a Popup with elevation data", async () => {
+    render(<MapView />);
     await fireStyleLoad();
+    MockPopup.mockClear();
+    mockSetLngLat.mockClear();
+    mockSetHTML.mockClear();
+    mockAddTo.mockClear();
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -821,21 +829,21 @@ describe("MapView", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/elevation?lng=22.270000&lat=60.450000"),
     );
-    expect(onInfoPanel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Terrain Elevation",
-        rows: expect.arrayContaining([["Elevation", "6.5 m"]]),
-      }),
+    expect(MockPopup).toHaveBeenCalledTimes(1);
+    expect(mockSetLngLat).toHaveBeenCalledWith([22.27, 60.45]);
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Terrain Elevation"),
     );
+    expect(mockSetHTML).toHaveBeenCalledWith(expect.stringContaining("6.5 m"));
+    expect(mockAddTo).toHaveBeenCalled();
     expect(MockMarker).toHaveBeenCalledTimes(1);
     expect(mockMarkerSetLngLat).toHaveBeenCalledWith([22.27, 60.45]);
-    expect(mockMarkerAddTo).toHaveBeenCalled();
   });
 
-  it("calls onInfoPanel(null) when elevation_m is null (outside AOI)", async () => {
-    const onInfoPanel = vi.fn();
-    render(<MapView onInfoPanel={onInfoPanel} />);
+  it("does not open a Popup or place a marker when elevation_m is null (outside AOI or too far)", async () => {
+    render(<MapView />);
     await fireStyleLoad();
+    MockPopup.mockClear();
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -847,14 +855,18 @@ describe("MapView", () => {
       await handler({ lngLat: { lng: 10.0, lat: 50.0 } });
     });
 
-    expect(onInfoPanel).toHaveBeenCalledWith(null);
     expect(MockMarker).not.toHaveBeenCalled();
+    // Only pre-existing popup calls (none in this test path)
+    const elevationPopupCalls = MockPopup.mock.calls.filter((args) =>
+      JSON.stringify(args).includes("aurora-popup"),
+    );
+    expect(elevationPopupCalls).toHaveLength(0);
   });
 
-  it("does not call onInfoPanel when the elevation fetch throws", async () => {
-    const onInfoPanel = vi.fn();
-    render(<MapView onInfoPanel={onInfoPanel} />);
+  it("does not open a Popup when the elevation fetch throws", async () => {
+    render(<MapView />);
     await fireStyleLoad();
+    MockPopup.mockClear();
 
     global.fetch = vi.fn().mockRejectedValue(new Error("network error"));
 
@@ -863,35 +875,7 @@ describe("MapView", () => {
       await handler({ lngLat: { lng: 22.27, lat: 60.45 } });
     });
 
-    expect(onInfoPanel).not.toHaveBeenCalled();
-  });
-
-  it("removes the elevation marker when infoPanelOpen transitions to false", async () => {
-    const { rerender } = render(<MapView infoPanelOpen={true} />);
-    await fireStyleLoad();
-
-    // Inject a fake marker into the ref by simulating a previous click
-    const fakeMarker = { remove: mockMarkerRemove };
-    MockMarker.mockReturnValueOnce({
-      setLngLat: mockMarkerSetLngLat.mockReturnThis(),
-      addTo: mockMarkerAddTo.mockReturnThis(),
-      remove: mockMarkerRemove,
-    });
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({ elevation_m: 5.0, aoi_id: "turku", dist_m: 8 }),
-    } as unknown as Response);
-    const handler = findGeneralClickHandler()!;
-    await act(async () => {
-      await handler({ lngLat: { lng: 22.27, lat: 60.45 } });
-    });
-    mockMarkerRemove.mockClear();
-
-    // Now close the panel
-    rerender(<MapView infoPanelOpen={false} />);
-    expect(mockMarkerRemove).toHaveBeenCalledTimes(1);
-
-    void fakeMarker; // suppress unused warning
+    expect(MockMarker).not.toHaveBeenCalled();
+    expect(MockPopup).not.toHaveBeenCalled();
   });
 });
