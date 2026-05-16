@@ -641,6 +641,65 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   No infrastructure data available.
                 </p>
               )}
+
+              {/* COMMS Coverage */}
+              {!intelligenceLoading && (
+                <div
+                  className="border-t border-slate-700/40 pt-1.5 mt-0.5"
+                  data-testid="coverage-section"
+                >
+                  <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                    Comms Coverage
+                  </span>
+                  {intelligence?.coverage ? (
+                    <div className="mt-0.5">
+                      {intelligence.coverage.covered_pct === 100 ? (
+                        <p
+                          className="text-[10px] font-mono font-semibold text-green-400"
+                          data-testid="coverage-full"
+                        >
+                          ✓ Full cellular coverage
+                        </p>
+                      ) : (
+                        <>
+                          <p
+                            className="text-[10px] font-mono text-slate-300"
+                            data-testid="coverage-bar"
+                          >
+                            {Array.from({ length: 12 }, (_, i) =>
+                              i <
+                              Math.round(
+                                intelligence.coverage!.covered_pct / (100 / 12),
+                              )
+                                ? "▓"
+                                : "░",
+                            ).join("")}{" "}
+                            {intelligence.coverage.covered_pct}%
+                          </p>
+                          <p
+                            className="text-[9px] font-mono text-slate-500"
+                            data-testid="coverage-gaps"
+                          >
+                            {intelligence.coverage.gap_count} gap
+                            {intelligence.coverage.gap_count !== 1 ? "s" : ""} ·
+                            longest{" "}
+                            {intelligence.coverage.longest_gap_m >= 1000
+                              ? `${(intelligence.coverage.longest_gap_m / 1000).toFixed(1)} km`
+                              : `${intelligence.coverage.longest_gap_m} m`}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <p
+                      className="text-[9px] font-mono text-slate-600"
+                      data-testid="coverage-unavailable"
+                    >
+                      No coverage data
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
