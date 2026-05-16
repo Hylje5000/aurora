@@ -256,7 +256,7 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "line-color": ["get", "color"],
-      "line-width": 4,
+      "line-width": 5,
     },
   });
 
@@ -272,7 +272,7 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "circle-color": ["get", "color"],
-      "circle-radius": 10,
+      "circle-radius": 11,
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 2.5,
     },
@@ -933,6 +933,19 @@ export default function MapView({
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
+      // Dark halo casing renders below the colour line for contrast
+      map.addLayer({
+        id: "roads-line-casing",
+        type: "line",
+        minzoom: 12,
+        source: "roads-source",
+        layout: { visibility: vis.roads ? "visible" : "none" },
+        paint: {
+          "line-color": "#0f172a",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 7],
+          "line-opacity": 0.65,
+        },
+      });
       map.addLayer({
         id: "roads-line",
         type: "line",
@@ -952,10 +965,10 @@ export default function MapView({
             "#22c55e",
             ["==", ["get", "condition_class"], 5],
             "#22c55e",
-            "#64748b",
+            "#94a3b8",
           ],
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 14, 3],
-          "line-opacity": 0.8,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 14, 4],
+          "line-opacity": 1.0,
         },
       });
 
@@ -994,8 +1007,8 @@ export default function MapView({
         layout: { visibility: vis.railways ? "visible" : "none" },
         paint: {
           "line-color": "#a78bfa",
-          "line-width": 2,
-          "line-dasharray": [2, 2],
+          "line-width": 3,
+          "line-dasharray": [4, 2],
         },
       });
 
@@ -1290,6 +1303,19 @@ export default function MapView({
       map.addSource("route-source", {
         type: "geojson",
         data: EMPTY_COLLECTION,
+      });
+      // White glow beneath the colour line for contrast on any basemap tile
+      map.addLayer({
+        id: "route-line-outline",
+        type: "line",
+        source: "route-source",
+        slot: "top",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 9,
+          "line-opacity": 0.25,
+        },
       });
       map.addLayer({
         id: "route-line",

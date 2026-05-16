@@ -1,341 +1,357 @@
-# Design Document: Route Intelligence — Phase 2 Hazard Analysis
-
-**Date:** 2026-05-16  
-**Branch:** `feat/navigation-api`  
-**Feature:** Vehicle-aware route hazard analysis with interactive warning panel
-
----
+# UI Layout & Accessibility Overhaul — Design Document
 
 ## Overview
 
-Phase 2 extends the existing route planning panel (Phase 1, already shipped) with a
-**route intelligence** layer that cross-references the planned route geometry against
-Finland's road and bridge infrastructure data stored in PostGIS. It produces a
-structured list of hazards (CRITICAL / WARNING / INFO) visible in `RoutePanel` and
-lets the analyst click each hazard to fly the map to the problem location, drop a
-colored marker, and open the InfoPanel with full infrastructure details.
+This document describes the design for a comprehensive UI layout and accessibility improvement pass
+on the Aurora IPB application. The five problem areas are:
+
+1. **Custom Layers panel** (bottom-right) is redundant as a standalone overlay — it belongs in the
+   existing Layers panel (bottom-left).
+2. **Weather + DatePicker** appear as two separate boxes at the top-left; they should be unified
+   into one coherent panel.
+3. **InfoPanel** (municipality / elevation) and **RoutePanel** clutter the map centre; both should
+   live on the right-side edge as collapsible panels.
+4. **"Route" button** is small, low-contrast, and poorly labelled — it should read "Plan a Route"
+   and be styled as a primary CTA.
+5. **Map lines** (roads, drawn features, route) are low-contrast against the dark Mapbox Standard
+   night basemap — they need higher contrast colours, thicker strokes, and halo effects.
 
 ---
 
-## Detailed Problem Analysis
+## Analysis of Current Problems
 
-### What data do we have?
+### 1 – Custom Layers Panel (bottom-right)
 
-**`roads` table** (Digiroad, Finnish Transport Infrastructure Agency):
-| Column | Type | Meaning |
-|---|---|---|
-| `max_mass_kg` | int\|null | Total vehicle mass limit |
-| `max_height_cm` | int\|null | Height clearance |
-| `max_bogie_mass_kg` | int\|null | Bogie (tracked axle group) limit |
-| `max_axle_mass_kg` | int\|null | Single axle limit |
-| `width_cm` | int\|null | Road carriageway width |
-| `has_damage` | bool | Damage reported |
-| `damage_recurring` | bool | Recurring seasonal damage |
-| `condition_class` | int\|null | 1 (excellent) → 5 (very poor) |
-| `condition_text` | str\|null | Free-text condition note |
-| `rut_depth_mm` | int\|null | Rut depth (mm) |
-| `ride_quality` | int\|null | 1 (smooth) → 5 (very rough) |
-| `pavement_type` | int\|null | 1=Asphalt, 2=Gravel, 3=Dirt |
-| `functional_class` | int\|null | Road class (1=motorway … 5=local) |
-| `lane_count` | int\|null | Number of lanes |
+`CustomLayerPanel` is positioned at `absolute right-4 bottom-10 z-10`. This places it in the
+bottom-right corner while the "Layers" panel is in the bottom-left. Users must look in two different
+corners to manage layers. The current panel has its own header/collapse toggle, making it
+structurally identical to the Layers panel — a strong signal they should be merged.
 
-**`bridges` table** (Digiroad):
-| Column | Type | Meaning |
-|---|---|---|
-| `max_vehicle_mass_t` | float\|null | Total vehicle mass limit (tonnes) |
-| `max_bogie_mass_t` | float\|null | Bogie mass limit (tonnes) |
-| `max_combination_mass_t` | float\|null | Combination vehicle limit |
-| `max_axle_mass_t` | float\|null | Single axle limit (tonnes) |
-| `height_restriction_m` | float\|null | Height restriction (m) |
-| `status` | str\|null | Bridge condition status string |
-| `name` | str\|null | Bridge name |
-| `type_name` | str\|null | Bridge structural type |
+### 2 – Weather / Date split box
 
-### Hazard classification rules
+`MapWithNav` renders:
+```tsx
+<div className="absolute left-4 top-16 z-10 flex items-start gap-2">
+  <WeatherWidget ... />
+  <DatePicker ... />
+</div>
+```
+Each child renders its own `rounded-lg border border-slate-700 bg-slate-900/90 ...` panel — two
+separate boxes side-by-side. This makes the relationship between the date selector and the weather
+data unclear. The expected UX is "choose a date, see weather for that date" — best expressed as a
+single stacked panel.
 
-| Source | Condition | Severity | Message template |
-|---|---|---|---|
-| Road | `has_damage=true AND damage_recurring=true` | WARNING | "Recurring road damage" |
-| Road | `has_damage=true` | INFO | "Road damage reported" |
-| Road | `condition_class >= 4` | WARNING | "Poor road condition (class N)" |
-| Road | `max_mass_kg > 0 AND vehicle.mass_t*1000 > max_mass_kg` | CRITICAL | "Road weight limit exceeded (N kg)" |
-| Road | `max_bogie_mass_kg > 0 AND vehicle.bogie_mass_t*1000 > max_bogie_mass_kg` | CRITICAL | "Road bogie limit exceeded (N kg)" |
-| Road | `max_axle_mass_kg > 0 AND vehicle.axle_mass_t*1000 > max_axle_mass_kg` | CRITICAL | "Road axle limit exceeded (N kg)" |
-| Road | `pavement_type IN (2,3)` | INFO | "Unpaved surface (Gravel/Dirt)" |
-| Road | `rut_depth_mm >= 30` | WARNING | "Heavy rutting (N mm)" |
-| Road | `width_cm > 0 AND vehicle.width_m*100 > width_cm` | CRITICAL | "Road too narrow for vehicle (N cm)" |
-| Road | `max_height_cm > 0 AND vehicle.height_m*100 > max_height_cm` | CRITICAL | "Height restriction on road (N cm)" |
-| Bridge | `status != null AND status NOT ILIKE 'ok%'` | WARNING | "Bridge condition: {status}" |
-| Bridge | `max_vehicle_mass_t > 0 AND vehicle.mass_t > max_vehicle_mass_t` | CRITICAL | "Bridge vehicle limit exceeded (N t)" |
-| Bridge | `max_bogie_mass_t > 0 AND vehicle.bogie_mass_t > max_bogie_mass_t` | CRITICAL | "Bridge bogie limit exceeded (N t)" |
-| Bridge | `max_axle_mass_t > 0 AND vehicle.axle_mass_t > max_axle_mass_t` | CRITICAL | "Bridge axle limit exceeded (N t)" |
-| Bridge | `height_restriction_m > 0 AND vehicle.height_m > height_restriction_m` | CRITICAL | "Height restriction (N m)" |
+### 3 – InfoPanel & RoutePanel position
 
-**Infantry special-case:** Infantry profile has `mass_t = 0` — all mass-based checks are skipped (0 > any limit is always false). Road damage/condition checks still fire.
+`InfoPanel` is at `right-4 top-1/2 -translate-y-1/2` (vertically centred right). `RoutePanel` is
+at `bottom-10 left-1/2 -translate-x-1/2` (bottom-centre, 384 px wide). Both encroach on the map
+canvas — the route panel in particular blocks the centre of the screen where the user is most likely
+to be interacting with the map.
 
-Road deduplication: multiple road rows often share the same `link_id`. We group by `link_id` and represent each unique segment once (worst-case check per link). This prevents the same potholed road generating 50 identical warnings.
+The right-side edge is the canonical location for detail/context panels in map applications
+(Google Maps, Mapbox Studio, Felt, etc.). Stacking InfoPanel and RoutePanel on the right keeps the
+map centre clear. Both panels are optional/dismissible so they don't permanently consume space.
+
+### 4 – Route button
+
+Current: `"absolute top-4 right-20 z-10 ... bg-black/60 ... Route"`.
+
+Problems:
+- `bg-black/60` is nearly invisible against the dark basemap.
+- The label "Route" is ambiguous — is it a layer, a view, or an action?
+- It sits at `right-20` to avoid the Mapbox NavigationControl, but also collides with
+  `DrawingToolbar` at `right-4` when drawing mode is active.
+
+### 5 – Map contrast
+
+In Mapbox Standard night mode, the basemap background for land is approximately `#1a1a2e`. Against this:
+- `roads-line` default colour `#64748b` (slate-500) at opacity 0.8 is barely distinguishable.
+- Min line width at zoom 8 is 1 px — subpixel on retina displays.
+- `railways-line` at `#a78bfa` width 2 with `[2,2]` dasharray renders as dots at medium zoom.
+- Route line at `#3b82f6` (blue-500) width 5 is acceptable colour-wise but has no halo, so it
+  can merge visually into map tile roads below.
+- Custom layer lines at width 4 rely on bright palette colours (acceptable) but benefit from a
+  contrasting stroke for legibility on both light and dark map tiles.
 
 ---
 
 ## Alternatives Considered
 
-| Option | Pros | Cons | Decision |
-|---|---|---|---|
-| Client-side hazard check (fetch road/bridge GeoJSON, classify in browser) | No new API | Route geometry can be long; GeoJSON payloads are large; exposes raw DB data to client | Rejected |
-| New `POST /api/route-intelligence` server route | Clean separation, PostGIS spatial indexing, POST body carries both route + vehicle | One more API route | **Chosen** |
-| Re-use existing `/api/roads` and `/api/bridges` routes | Re-uses code | Returns bbox-scoped data, not route-scoped; over-fetches by area | Rejected |
-| Overlay hazards as a dedicated Mapbox layer (always visible) | Always visible, styled via GL | Requires passing full GeoJSON up to MapView; coordination is harder | Partially adopted: hazard circles on map + marker on click |
+| Option | Decision |
+|--------|----------|
+| Create a new `RightSidebar` wrapper component for InfoPanel + RoutePanel | Rejected — adds abstraction without benefit; Tailwind absolute positioning achieves the same layout directly. |
+| Use a drawer/slide-in animation for right panels | Deferred — outside scope; but collapsible via local `collapsed` state achieves 90% of the UX benefit without animation complexity. |
+| Delete `CustomLayerPanel.tsx` and inline its JSX in `LayerPanel.tsx` | Rejected — all existing `CustomLayerPanel` tests would break. Preferred: extract inner body as `CustomLayerSection`, keep legacy export. |
+| Strip outer wrapper from `WeatherWidget` / `DatePicker` via a `bare` prop | **Accepted** — cleanest approach; backwards-compatible with existing tests (bare=false by default). |
+| Move DrawingToolbar to left side | Rejected — inconsistent with its existing top-right placement; better to shift it down to `top-16` to avoid collision with the route button. |
 
 ---
 
 ## Detailed Design
 
-### Architecture Flow
+### Component interaction map
 
 ```mermaid
-sequenceDiagram
-    participant U as User
-    participant RP as RoutePanel
-    participant API as "POST /api/route-intelligence"
-    participant DB as PostGIS
-    participant MWN as MapWithNav
-    participant MV as MapView
+graph TD
+    MWN["MapWithNav"]
+    AP["AreaNav (top-centre)"]
+    WP["WeatherPanel (top-left unified box)"]
+    DP["DatePicker bare (inside WeatherPanel)"]
+    WW["WeatherWidget bare (inside WeatherPanel)"]
+    LP["LayerPanel (bottom-left, w-56)"]
+    CLS["CustomLayerSection (inside LayerPanel)"]
+    IP["InfoPanel (right-4 top-20, collapsible)"]
+    RP["RoutePanel (right-4 bottom-10, w-80)"]
+    MV["MapView"]
+    DT["DrawingToolbar (top-16 right-4)"]
 
-    U->>RP: "Select vehicle + route exists"
-    RP->>API: "POST {routeGeometry, vehicle}"
-    API->>DB: "ST_DWithin roads query (20 m)"
-    API->>DB: "ST_DWithin bridges query (50 m)"
-    DB-->>API: "road rows + bridge rows"
-    API-->>RP: "{hazards[], summary}"
-    RP-->>U: "Render hazard list"
-    U->>RP: "Click hazard row"
-    RP->>MWN: "onHazardFocus(hazard)"
-    MWN->>MV: "focusedHazard prop"
-    MV-->>U: "flyTo + marker"
-    MWN-->>U: "InfoPanel opens"
+    MWN --> AP
+    MWN --> WP
+    WP --> DP
+    WP --> WW
+    MWN --> LP
+    LP --> CLS
+    MWN --> IP
+    MWN --> RP
+    MWN --> MV
+    MV --> DT
 ```
 
-### New file: `src/app/api/route-intelligence/route.ts`
+### 1 – Merge Custom Layers into Layer Panel
 
-**Request body:**
-```json
-{
-  "routeGeometry": { "type": "LineString", "coordinates": [[lng,lat], ...] },
-  "vehicle": {
-    "label": "MBT (tank)",
-    "mass_t": 60,
-    "axle_mass_t": 0,
-    "bogie_mass_t": 15,
-    "height_m": 2.9,
-    "width_m": 3.6
-  }
-}
+**Strategy**: Give `LayerPanel` optional custom-layer props; render `CustomLayerPanel`'s inner
+content as a new section inside the same panel container.
+
+```mermaid
+graph LR
+    subgraph "Before"
+        A["LayerPanel (bottom-left)"]
+        B["CustomLayerPanel (bottom-right)"]
+    end
+    subgraph "After"
+        C["LayerPanel (bottom-left)"]
+        C --> D["... existing sections ..."]
+        C --> E["CUSTOM LAYERS section"]
+    end
 ```
 
-**Response:**
-```json
-{
-  "hazards": [
-    {
-      "id": "bridge-42",
-      "type": "bridge",
-      "severity": "critical",
-      "message": "Bridge vehicle limit exceeded (16 t) — vehicle is 60 t",
-      "coordinates": [24.94, 60.17],
-      "properties": { "name": "Keravanjoki bridge", "max_vehicle_mass_t": 16 }
-    }
-  ],
-  "summary": { "critical": 1, "warning": 2, "info": 0, "passable": false }
-}
+Changes:
+- `CustomLayerPanel.tsx` is refactored to export a `CustomLayerSection` component containing the
+  inner body (list + create form) **without** the outer absolute-positioned panel wrapper.
+  The legacy default export `CustomLayerPanel` is kept as a thin wrapper for existing test
+  compatibility.
+- `LayerPanel` receives an optional `customLayerProps` object typed as the existing
+  `CustomLayerPanelProps`. When provided, a `CUSTOM LAYERS` section heading and
+  `<CustomLayerSection {...customLayerProps} />` appear at the bottom of the panel body.
+- `LayerPanel` width: `w-48` → `w-56` (224 px) to accommodate layer names.
+- `MapWithNav` no longer renders `<CustomLayerPanel .../>` as a standalone sibling; it passes
+  props to `<LayerPanel customLayerProps={...} />`.
+
+### 2 – Unified Weather Panel
+
+```mermaid
+graph LR
+    subgraph "Before (two separate boxes side-by-side)"
+        A["DatePicker box"]
+        B["WeatherWidget box"]
+    end
+    subgraph "After (one vertical panel)"
+        C["Panel wrapper"] --> D["Date header row (DatePicker bare)"]
+        C --> E["Weather content (WeatherWidget bare)"]
+    end
 ```
 
-**PostGIS queries (parameterized):**
+Changes:
+- `DatePicker`: add `bare?: boolean` prop. When `bare=true`, return just the inner `<select>`
+  elements (wrapped in a plain `<div className="flex items-center gap-1">`), with no outer
+  `rounded-lg border ... backdrop-blur-sm` div.
+- `WeatherWidget`: add `bare?: boolean` prop. When `bare=true`, all three render branches (loading,
+  no-data, data) return their content without the outer panel div. Padding is removed; the parent
+  provides it.
+- `MapWithNav` wrapper:
 
-```sql
--- Roads: unique link_ids within 20 m of the route
-SELECT DISTINCT ON (link_id)
-       id, link_id, aoi_id,
-       max_mass_kg, max_height_cm, max_bogie_mass_kg, max_axle_mass_kg,
-       width_cm, pavement_type, has_damage, damage_recurring,
-       condition_class, condition_text, rut_depth_mm,
-       ST_AsGeoJSON(ST_ClosestPoint(geom, route_geom)) AS closest_pt
-FROM roads, ST_GeomFromGeoJSON($1) AS route_geom
-WHERE ST_DWithin(geom::geography, route_geom::geography, 20)
-ORDER BY link_id
-LIMIT 500;
-
--- Bridges: points within 50 m of the route
-SELECT id, name, code, status, aoi_id,
-       max_vehicle_mass_t, max_bogie_mass_t, max_combination_mass_t,
-       max_axle_mass_t, height_restriction_m, type_name,
-       ST_AsGeoJSON(geom) AS geojson
-FROM bridges, ST_GeomFromGeoJSON($1) AS route_geom
-WHERE ST_DWithin(geom::geography, route_geom::geography, 50);
+```tsx
+{selectedAreaId && (
+  <div className="absolute left-4 top-16 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl">
+    {/* Date row */}
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40">
+      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex-1">
+        Date
+      </span>
+      <DatePicker
+        bare
+        month={selectedDay.month}
+        day={selectedDay.day}
+        onChange={(month, day) => setSelectedDay({ month, day })}
+      />
+    </div>
+    {/* Weather data */}
+    <WeatherWidget
+      bare
+      region={selectedAreaId}
+      month={selectedDay.month}
+      day={selectedDay.day}
+    />
+  </div>
+)}
 ```
 
-**Error handling:**
-- 400 — missing/invalid `routeGeometry` or `vehicle` fields
-- 503 — `DATABASE_URL` not set (returns empty hazards with warning header, `passable: true`)
-- 500 — DB error
+### 3 – InfoPanel and RoutePanel on the Right Edge
 
-### Extended types: `src/lib/routing.ts`
+#### Position changes
 
-```typescript
-export interface VehicleProfile {
-  label: string;
-  mass_t: number;
-  axle_mass_t: number;
-  bogie_mass_t: number;
-  height_m: number;
-  width_m: number;
-}
+| Panel | Before | After |
+|-------|--------|-------|
+| `InfoPanel` | `absolute right-4 top-1/2 -translate-y-1/2` | Rendered as `absolute right-4 top-20 z-20 max-h-[60vh] overflow-y-auto` |
+| `RoutePanel` | `absolute bottom-10 left-1/2 -translate-x-1/2 w-96` | `absolute right-4 bottom-10 z-20 w-80` |
 
-export const VEHICLE_PRESETS: VehicleProfile[] = [
-  { label: 'Infantry',       mass_t: 0,  axle_mass_t: 0,  bogie_mass_t: 0,  height_m: 2.0, width_m: 0.8  },
-  { label: 'Wheeled APC',    mass_t: 18, axle_mass_t: 9,  bogie_mass_t: 0,  height_m: 2.7, width_m: 2.7  },
-  { label: 'IFV (BMP-type)', mass_t: 22, axle_mass_t: 0,  bogie_mass_t: 6,  height_m: 2.4, width_m: 3.2  },
-  { label: 'MBT (tank)',     mass_t: 60, axle_mass_t: 0,  bogie_mass_t: 15, height_m: 2.9, width_m: 3.6  },
-  { label: 'Custom',         mass_t: 0,  axle_mass_t: 0,  bogie_mass_t: 0,  height_m: 2.0, width_m: 1.0  },
-];
+InfoPanel positioning is changed by updating the class directly inside `InfoPanel.tsx`. RoutePanel
+positioning is changed inside `RoutePanel.tsx`.
 
-export type HazardSeverity = 'critical' | 'warning' | 'info';
+#### Collapsibility
 
-export interface RouteHazard {
-  id: string;
-  type: 'road' | 'bridge';
-  severity: HazardSeverity;
-  message: string;
-  coordinates: [number, number];
-  properties: Record<string, unknown>;
-}
+**InfoPanel**: add `collapsed / setCollapsed` local state (default `false`). A `▾/▸` chevron in
+the header row beside the `×` close button toggles collapsed state. When collapsed, only the
+title bar renders (content area gets `hidden`). The `×` still dismisses entirely (calls `onClose`).
 
-export interface RouteIntelligence {
-  hazards: RouteHazard[];
-  summary: { critical: number; warning: number; info: number; passable: boolean };
-}
+**RoutePanel**: existing `onClose` handler already removes the panel from the DOM. Add a collapse
+chevron (`▾/▸`) in the header. Collapsed state hides the body; header stays visible. Default
+expanded. Collapsing does NOT call `onClose`; it just hides the body.
+
+#### RoutePanel width adjustment
+
+`w-96` (384 px) → `w-80` (320 px): better on 1280 px wide displays while still readable.
+
+### 4 – "Plan a Route" Button
+
+| Property | Before | After |
+|----------|--------|-------|
+| Text | `"Route"` | `"Plan a Route"` |
+| Background | `bg-black/60 backdrop-blur-sm` | `bg-blue-600 hover:bg-blue-700` |
+| Border (inactive) | `border-white/30` | `border-blue-500` |
+| Border (active) | `border-blue-400 shadow-[0_0_0_2px_#60a5fa]` | unchanged |
+| Padding | `px-3 py-1.5` | `px-4 py-2` |
+| Position | `top-4 right-20` | `top-4 right-4` |
+| `data-testid` | `route-toggle-btn` | `route-toggle-btn` (unchanged) |
+
+The `DrawingToolbar` currently uses `top-4 right-4` which would overlap with the repositioned
+button. Fix: change `DrawingToolbar` outer div to `top-16 right-4` (64 px below the nav bar).
+
+### 5 – Map Contrast Improvements
+
+#### Roads
+
+Add a dark halo layer **below** `roads-line`:
+
+```js
+map.addLayer({
+  id: "roads-line-casing",
+  type: "line",
+  minzoom: 12,
+  source: "roads-source",
+  layout: { visibility: vis.roads ? "visible" : "none" },
+  paint: {
+    "line-color": "#0f172a",
+    "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 7],
+    "line-opacity": 0.65,
+  },
+});
 ```
 
-### RoutePanel UI changes
+Update `roads-line`:
+- Default colour: `#64748b` → `#94a3b8`
+- Opacity: 0.8 → 1.0
+- Width: `[zoom 8→1, zoom 14→3]` → `[zoom 8→1.5, zoom 14→4]`
 
-**Vehicle section** (inserted above the waypoint list):
+Layer insertion order: `roads-line-casing` added before `roads-line` (Mapbox `addLayer` without
+`before` param appends; use `before: "roads-line"` for the casing).
 
-```
-┌────────────────────────────────────────┐
-│  Vehicle                               │
-│  [MBT (tank)            ▾]            │
-│  Mass:  [60  ] t   Axle: [0   ] t     │
-│  Bogie: [15  ] t   H:    [2.9 ] m     │
-│  Width: [3.6 ] m                       │
-└────────────────────────────────────────┘
-```
+#### Route line
 
-- Preset `<select>` auto-fills all 5 fields.
-- Editing any field switches preset to "Custom".
-- All fields are `<input type="number" min="0" step="0.1">`.
+Add a white glow layer **below** `route-line`:
 
-**Route Assessment section** (below route summary, only when `route` is non-null):
-
-```
-┌────────────────────────────────────────┐
-│  Route Assessment                      │
-│  ✗ IMPASSABLE — 1 critical hazard     │  ← red
-│  ⚠ 2 warnings · 1 info               │  ← amber/slate
-│                                        │
-│  ● [red]   Bridge vehicle limit…       │
-│            Keravanjoki · 16 t limit    │
-│  ● [amber] Recurring road damage       │
-│  ● [slate] Unpaved surface (Gravel)   │
-└────────────────────────────────────────┘
+```js
+map.addLayer({
+  id: "route-line-outline",
+  type: "line",
+  source: "route-source",
+  slot: "top",
+  layout: { "line-join": "round", "line-cap": "round" },
+  paint: {
+    "line-color": "#ffffff",
+    "line-width": 9,
+    "line-opacity": 0.25,
+  },
+});
 ```
 
-- Sorted: CRITICAL, WARNING, INFO.
-- Scrollable list (`max-h-48 overflow-y-auto`).
-- Each row is a `<button>` that calls `onHazardFocus(hazard)`.
+The `route-line` colour and width remain unchanged (`#3b82f6`, width 5).
 
-**New props added to `RoutePanel`:**
-```typescript
-onHazardsChange?: (intelligence: RouteIntelligence | null) => void;
-onHazardFocus?: (hazard: RouteHazard) => void;
-```
+#### Railways
 
-### MapWithNav changes
+- Width: 2 → 3
+- Dasharray: `[2, 2]` → `[4, 2]`
 
-```typescript
-const [routeIntelligence, setRouteIntelligence] = useState<RouteIntelligence | null>(null);
-const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
-```
+#### Custom layer lines
 
-`handleHazardFocus`:
-```typescript
-function handleHazardFocus(hazard: RouteHazard) {
-  setFocusedHazard(hazard);
-  setInfoPanelData({
-    title: hazard.type === 'bridge' ? 'Bridge' : 'Road Segment',
-    rows: buildHazardRows(hazard),
-  });
-}
-```
-
-Pass down to `MapView`: `routeHazards={routeIntelligence?.hazards ?? []}` and `focusedHazard={focusedHazard}`.
-
-### MapView changes
-
-**New props:**
-```typescript
-routeHazards?: RouteHazard[];
-focusedHazard?: RouteHazard | null;
-```
-
-**Hazard layer** (added in `style.load`, after route layers):
-- Source: `route-hazards-source` — GeoJSON, initially empty.
-- `route-hazards-critical` — circle, color `#ef4444`, radius 8, stroke white 2px, filter `severity == "critical"`, slot `top`.
-- `route-hazards-warning` — circle, color `#eab308`, radius 6, stroke white 1px, filter `severity == "warning"`, slot `top`.
-- `route-hazards-info` — circle, color `#94a3b8`, radius 5, filter `severity == "info"`, slot `top`.
-
-**`useEffect([routeHazards])`:**
-Converts array to `FeatureCollection` (Point features, properties include `severity`, `id`, `message`) and calls `setData`.
-
-**`useEffect([focusedHazard])`:**
-- Removes previous `hazardFocusMarkerRef`.
-- If non-null: `map.flyTo({ center, zoom: 15, duration: 800 })`.
-- Creates a `mapboxgl.Marker({ color: severityColor })` at `focusedHazard.coordinates`.
+- `line-width`: 4 → 5 for the `-line` paint layer.
+- `circle-radius`: 10 → 11 for better point visibility.
 
 ---
 
-## Data Flow Diagram
+## Screen Layout Diagram
 
-```mermaid
-flowchart TD
-    RP["RoutePanel\n(vehicle + route state)"] -->|"POST /api/route-intelligence"| API["route-intelligence\nAPI route"]
-    API -->|"ST_DWithin roads 20m"| Roads["PostGIS roads"]
-    API -->|"ST_DWithin bridges 50m"| Bridges["PostGIS bridges"]
-    Roads --> API
-    Bridges --> API
-    API -->|"RouteIntelligence JSON"| RP
-    RP -->|"onHazardsChange"| MWN["MapWithNav"]
-    RP -->|"onHazardFocus"| MWN
-    MWN -->|"routeHazards prop"| MV["MapView\n(hazard circles)"]
-    MWN -->|"focusedHazard prop"| MV
-    MWN -->|"setInfoPanelData"| IP["InfoPanel"]
-    MV -->|"flyTo + marker"| Map["Mapbox GL JS"]
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  AreaNav (top-centre: Lappi | Karjala | Turku)       [Plan a Route] (top-4 right-4) │
+├───────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐                                          ┌─────────────────┐  │
+│  │  Date:   │                                          │ Municipality /  │  │
+│  │  [May▼][16▼]                                       │ Elevation info  │  │
+│  │  Hist avg · N yr                                   │ (InfoPanel,     │  │
+│  │  12.3°C ± 2.1°                                    │  right-4 top-20)│  │
+│  │  18% rain                                          └─────────────────┘  │
+│  └──────────┘                                                               │
+│                                                                              │
+│                     M  A  P     C  A  N  V  A  S                            │
+│                                                                              │
+│                                                          ┌─────────────────┐│
+│  ┌─────────────────────┐                                │ Route Planning  ││
+│  │ Layers              │                                │ (RoutePanel,    ││
+│  │ ─ Basemap           │                                │  right-4 bot-10)││
+│  │ ─ Terrain           │                                │ w-80            ││
+│  │ ─ Elevation         │                                └─────────────────┘│
+│  │ ─ Vegetation        │                                                    │
+│  │ ─ Comms             │                                                    │
+│  │ ─ Infrastructure    │                                                    │
+│  │ ─ Custom Layers     │                                                    │
+│  │   + New Layer       │                                                    │
+│  └─────────────────────┘                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Summary
+## Summary of File Changes
 
-- **New API route:** `POST /api/route-intelligence` — PostGIS ST_DWithin query against roads (20 m buffer) and bridges (50 m buffer); applies hazard classification rules; returns sorted `RouteHazard[]`.
-- **New types:** `VehicleProfile`, `VEHICLE_PRESETS`, `HazardSeverity`, `RouteHazard`, `RouteIntelligence` in `src/lib/routing.ts`.
-- **RoutePanel additions:** Vehicle selector with editable preset fields + custom option; hazard list section with severity-colored clickable rows.
-- **MapView additions:** Three hazard circle layers; focused-hazard flyTo + colored marker effect.
-- **MapWithNav additions:** `routeIntelligence`, `focusedHazard` state; `handleHazardFocus` sets InfoPanel data.
-- **No new env vars** — uses existing `DATABASE_URL` and `NEXT_PUBLIC_MAPBOX_TOKEN`.
+| File | Change summary |
+|------|---------------|
+| `src/components/CustomLayerPanel.tsx` | Extract `CustomLayerSection` (inner body, no outer div); keep `CustomLayerPanel` legacy wrapper. |
+| `src/components/LayerPanel.tsx` | Accept `customLayerProps?`; render `CustomLayerSection`; widen to `w-56`. |
+| `src/components/WeatherWidget.tsx` | Add `bare?: boolean` prop. |
+| `src/components/DatePicker.tsx` | Add `bare?: boolean` prop. |
+| `src/components/InfoPanel.tsx` | Add `collapsed/setCollapsed` state + chevron toggle; update position class to `right-4 top-20 z-20 max-h-[60vh] overflow-y-auto`. |
+| `src/components/RoutePanel.tsx` | Change position from bottom-centre to `right-4 bottom-10`; width `w-80`; add collapse chevron. |
+| `src/components/DrawingToolbar.tsx` | `top-4 right-4` → `top-16 right-4` to avoid route button overlap. |
+| `src/components/MapView.tsx` | Add `roads-line-casing` + `route-line-outline` layers; update road/railway/custom-layer paint values. |
+| `src/components/MapWithNav.tsx` | Remove `<CustomLayerPanel/>`; pass props to `LayerPanel`; unify weather wrapper; update route button label/style/position. |
+| Tests | Update affected tests for new prop signatures, positions, and section merges. |
 
 ---
 
 ## References
 
-- Digiroad data model: road and bridge attribute definitions confirmed from existing `/api/roads` and `/api/bridges` routes in the codebase.
-- PostGIS `ST_DWithin` + `ST_ClosestPoint`: established pattern from `/api/elevation` route.
-- Mapbox GL JS `flyTo` + `Marker`: existing patterns from elevation marker and waypoint markers in `MapView.tsx`.
-- Phase 2 original plan: `.local/route_planning_integration_plan.md` sections 2.1–2.6.
+- Mapbox GL JS line layer paint spec: https://docs.mapbox.com/mapbox-gl-js/style-spec/layers/#line
+- Mapbox Standard night-mode: https://docs.mapbox.com/mapbox-gl-js/guides/styles/
+- WCAG 1.4.11 non-text contrast (3:1 minimum for UI components against adjacent colours)
+- Map panel UX patterns: Felt.com, Google Maps sidebar, Mapbox Studio sidebar
