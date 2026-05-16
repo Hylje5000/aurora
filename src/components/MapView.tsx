@@ -1304,28 +1304,27 @@ export default function MapView({
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
-      // White glow beneath the colour line for contrast on any basemap tile
+      // No slot — non-slotted layers render above slot:"top" layers in Standard style,
+      // so route must be slotless and added after roads to win the z-order battle.
       map.addLayer({
         id: "route-line-outline",
         type: "line",
         source: "route-source",
-        slot: "top",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": "#ffffff",
-          "line-width": 14,
-          "line-opacity": 0.35,
+          "line-width": 36,
+          "line-opacity": 0.4,
         },
       });
       map.addLayer({
         id: "route-line",
         type: "line",
         source: "route-source",
-        slot: "top",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": PROFILE_COLORS["driving"],
-          "line-width": 8,
+          "line-width": 22,
           "line-opacity": 1.0,
         },
       });
@@ -1339,7 +1338,6 @@ export default function MapView({
         id: "route-hazards-info",
         type: "circle",
         source: "route-hazards-source",
-        slot: "top",
         filter: ["==", ["get", "severity"], "info"],
         paint: {
           "circle-color": "#94a3b8",
@@ -1352,7 +1350,6 @@ export default function MapView({
         id: "route-hazards-warning",
         type: "circle",
         source: "route-hazards-source",
-        slot: "top",
         filter: ["==", ["get", "severity"], "warning"],
         paint: {
           "circle-color": "#eab308",
@@ -1365,7 +1362,6 @@ export default function MapView({
         id: "route-hazards-critical",
         type: "circle",
         source: "route-hazards-source",
-        slot: "top",
         filter: ["==", ["get", "severity"], "critical"],
         paint: {
           "circle-color": "#ef4444",

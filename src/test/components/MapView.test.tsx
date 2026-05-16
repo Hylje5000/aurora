@@ -1120,7 +1120,7 @@ describe("MapView", () => {
       expect.objectContaining({ type: "geojson" }),
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "route-line", type: "line", slot: "top" }),
+      expect.objectContaining({ id: "route-line", type: "line" }),
     );
   });
 
