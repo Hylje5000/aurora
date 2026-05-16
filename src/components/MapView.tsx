@@ -296,13 +296,18 @@ function addCustomLayerSourcesToMap(
   });
 }
 
-function registerCustomLayerClickHandlers(map: mapboxgl.Map, layerId: string) {
+function registerCustomLayerClickHandlers(
+  map: mapboxgl.Map,
+  layerId: string,
+  addingWaypointRef: { current: boolean },
+) {
   const sourceId = `custom-layer-${layerId}`;
 
   for (const suffix of ["-fill", "-line", "-circle", "-symbol"]) {
     const fullId = `${sourceId}${suffix}`;
 
     map.on("click", fullId, (e) => {
+      if (addingWaypointRef.current) return;
       const feature = e.features?.[0];
       if (!feature?.properties) return;
       const { name, description } = feature.properties as {
@@ -671,6 +676,7 @@ export default function MapView({
       if (!eventsAttachedRef.current) {
         for (const layerId of TOWER_LAYER_IDS) {
           map.on("click", layerId, (e) => {
+            if (addingWaypointRef.current) return;
             const feature = e.features?.[0];
             if (!feature) return;
             const { radio, aoi_id, range_m, avg_signal } =
@@ -748,7 +754,7 @@ export default function MapView({
           enabledCustomLayerIdsRef.current.has(layer.id),
           registeredCustomLayerIdsRef.current,
         );
-        registerCustomLayerClickHandlers(map, layer.id);
+        registerCustomLayerClickHandlers(map, layer.id, addingWaypointRef);
         if (enabledCustomLayerIdsRef.current.has(layer.id)) {
           void fetchCustomLayerFeatures(map, layer.id);
         }
@@ -1026,6 +1032,7 @@ export default function MapView({
 
       // Click popups for infrastructure layers
       map.on("click", "roads-line", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1075,6 +1082,7 @@ export default function MapView({
       });
 
       map.on("click", "bridges-symbol", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1117,6 +1125,7 @@ export default function MapView({
       });
 
       map.on("click", "railways-line", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1141,6 +1150,7 @@ export default function MapView({
       });
 
       map.on("click", "municipalities-fill", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1353,9 +1363,9 @@ export default function MapView({
         filter: ["==", ["get", "severity"], "info"],
         paint: {
           "circle-color": "#94a3b8",
-          "circle-radius": 5,
+          "circle-radius": 7,
           "circle-stroke-color": "#fff",
-          "circle-stroke-width": 1,
+          "circle-stroke-width": 1.5,
         },
       });
       map.addLayer({
@@ -1364,10 +1374,10 @@ export default function MapView({
         source: "route-hazards-source",
         filter: ["==", ["get", "severity"], "warning"],
         paint: {
-          "circle-color": "#eab308",
-          "circle-radius": 6,
+          "circle-color": "#f97316",
+          "circle-radius": 9,
           "circle-stroke-color": "#fff",
-          "circle-stroke-width": 1,
+          "circle-stroke-width": 2,
         },
       });
       map.addLayer({
@@ -1376,10 +1386,10 @@ export default function MapView({
         source: "route-hazards-source",
         filter: ["==", ["get", "severity"], "critical"],
         paint: {
-          "circle-color": "#ef4444",
-          "circle-radius": 8,
+          "circle-color": "#ff2d2d",
+          "circle-radius": 11,
           "circle-stroke-color": "#fff",
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 2.5,
         },
       });
 
@@ -1500,7 +1510,7 @@ export default function MapView({
         registeredCustomLayerIdsRef.current,
       );
       if (isNew) {
-        registerCustomLayerClickHandlers(map, layer.id);
+        registerCustomLayerClickHandlers(map, layer.id, addingWaypointRef);
         if (enabledCustomLayerIdsRef.current.has(layer.id)) {
           void fetchCustomLayerFeatures(map, layer.id);
         }
