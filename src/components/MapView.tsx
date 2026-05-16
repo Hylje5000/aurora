@@ -174,22 +174,26 @@ async function fetchCellTowers(
   map: mapboxgl.Map,
   rawDataRef: { current: GeoJSON.FeatureCollection },
   visRef: { current: LayerVisibility },
+  signal?: AbortSignal,
 ): Promise<void> {
   const bbox = getBbox(map);
   if (!bbox) return;
 
   try {
-    const res = await fetch(`/api/cell-towers?bbox=${bbox}`);
+    const res = await fetch(`/api/cell-towers?bbox=${bbox}`, { signal });
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
     rawDataRef.current = data;
     (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
       filterByEnabled(data, visRef.current),
     );
-    (
-      map.getSource("coverage-circles-source") as mapboxgl.GeoJSONSource
-    )?.setData(buildCoverageCircles(data));
+    if (visRef.current.cellCoverageCircles) {
+      (
+        map.getSource("coverage-circles-source") as mapboxgl.GeoJSONSource
+      )?.setData(buildCoverageCircles(data));
+    }
   } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
     console.error("[cell-towers] fetch failed", err);
   }
 }
@@ -198,15 +202,17 @@ async function fetchLayer(
   map: mapboxgl.Map,
   sourceId: string,
   endpoint: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const bbox = getBbox(map);
   if (!bbox) return;
   try {
-    const res = await fetch(`${endpoint}?bbox=${bbox}`);
+    const res = await fetch(`${endpoint}?bbox=${bbox}`, { signal });
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
     (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(data);
   } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
     console.error(`[${endpoint}] fetch failed`, err);
   }
 }
@@ -237,6 +243,7 @@ function popupStyle(title: string, rows: [string, unknown][]): string {
 async function fetchCustomLayerFeatures(
   map: mapboxgl.Map,
   layerId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const bbox = getBbox(map);
   if (!bbox) return;
@@ -244,6 +251,7 @@ async function fetchCustomLayerFeatures(
   try {
     const res = await fetch(
       `/api/custom-layers/${layerId}/features?bbox=${bbox}`,
+      { signal },
     );
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
@@ -254,6 +262,7 @@ async function fetchCustomLayerFeatures(
       map.getSource(`custom-layer-${layerId}`) as mapboxgl.GeoJSONSource
     )?.setData(data);
   } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
     console.error(`[custom-layer] fetch failed for ${layerId}`, err);
   }
 }
@@ -489,6 +498,13 @@ export default function MapView({
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
   const enabledCustomLayerIdsRef = useRef<Set<string>>(enabledCustomLayerIds);
+
+  // Abort controllers — each cancels its previous in-flight fetch on new moveend
+  const cellTowersAbortRef = useRef<AbortController | null>(null);
+  const roadsAbortRef = useRef<AbortController | null>(null);
+  const bridgesAbortRef = useRef<AbortController | null>(null);
+  const railwaysAbortRef = useRef<AbortController | null>(null);
+  const customLayerAbortRefs = useRef<Map<string, AbortController>>(new Map());
 
   // UI state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1237,24 +1253,76 @@ export default function MapView({
       // ── Fetch on every pan/zoom and immediately on load ────────────────
       if (!eventsAttachedRef.current) {
         map.on("moveend", () => {
-          fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+          cellTowersAbortRef.current?.abort();
+          const cellCtrl = new AbortController();
+          cellTowersAbortRef.current = cellCtrl;
+          fetchCellTowers(
+            map,
+            rawTowerDataRef,
+            layerVisibilityRef,
+            cellCtrl.signal,
+          );
+
           if (map.getZoom() >= 12) {
-            fetchLayer(map, "roads-source", "/api/roads");
-            fetchLayer(map, "bridges-source", "/api/bridges");
+            roadsAbortRef.current?.abort();
+            const roadsCtrl = new AbortController();
+            roadsAbortRef.current = roadsCtrl;
+            fetchLayer(map, "roads-source", "/api/roads", roadsCtrl.signal);
+
+            bridgesAbortRef.current?.abort();
+            const bridgesCtrl = new AbortController();
+            bridgesAbortRef.current = bridgesCtrl;
+            fetchLayer(
+              map,
+              "bridges-source",
+              "/api/bridges",
+              bridgesCtrl.signal,
+            );
           }
-          fetchLayer(map, "railways-source", "/api/railways");
+
+          railwaysAbortRef.current?.abort();
+          const railCtrl = new AbortController();
+          railwaysAbortRef.current = railCtrl;
+          fetchLayer(map, "railways-source", "/api/railways", railCtrl.signal);
+
           for (const layerId of enabledCustomLayerIdsRef.current) {
             if (registeredCustomLayerIdsRef.current.has(layerId)) {
-              void fetchCustomLayerFeatures(map, layerId);
+              customLayerAbortRefs.current.get(layerId)?.abort();
+              const ctrl = new AbortController();
+              customLayerAbortRefs.current.set(layerId, ctrl);
+              void fetchCustomLayerFeatures(map, layerId, ctrl.signal);
             }
           }
         });
-        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
-        if (map.getZoom() >= 12) {
-          fetchLayer(map, "roads-source", "/api/roads");
-          fetchLayer(map, "bridges-source", "/api/bridges");
+
+        {
+          cellTowersAbortRef.current?.abort();
+          const cellCtrl = new AbortController();
+          cellTowersAbortRef.current = cellCtrl;
+          fetchCellTowers(
+            map,
+            rawTowerDataRef,
+            layerVisibilityRef,
+            cellCtrl.signal,
+          );
         }
-        fetchLayer(map, "railways-source", "/api/railways");
+        if (map.getZoom() >= 12) {
+          roadsAbortRef.current?.abort();
+          const roadsCtrl = new AbortController();
+          roadsAbortRef.current = roadsCtrl;
+          fetchLayer(map, "roads-source", "/api/roads", roadsCtrl.signal);
+
+          bridgesAbortRef.current?.abort();
+          const bridgesCtrl = new AbortController();
+          bridgesAbortRef.current = bridgesCtrl;
+          fetchLayer(map, "bridges-source", "/api/bridges", bridgesCtrl.signal);
+        }
+        {
+          railwaysAbortRef.current?.abort();
+          const railCtrl = new AbortController();
+          railwaysAbortRef.current = railCtrl;
+          fetchLayer(map, "railways-source", "/api/railways", railCtrl.signal);
+        }
 
         // Elevation click — fires on every map click (general handler, no layer filter)
         map.on("click", async (e) => {
@@ -1450,7 +1518,14 @@ export default function MapView({
     });
 
     const registeredIds = registeredCustomLayerIdsRef.current;
+    const customAborts = customLayerAbortRefs.current;
     return () => {
+      cellTowersAbortRef.current?.abort();
+      roadsAbortRef.current?.abort();
+      bridgesAbortRef.current?.abort();
+      railwaysAbortRef.current?.abort();
+      for (const ctrl of customAborts.values()) ctrl.abort();
+
       if (highlightAnimFrameRef.current !== null) {
         cancelAnimationFrame(highlightAnimFrameRef.current);
       }

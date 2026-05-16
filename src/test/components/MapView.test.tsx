@@ -518,9 +518,11 @@ describe("MapView", () => {
 
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/cell-towers?bbox="),
+      expect.objectContaining({ signal: expect.anything() }),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/roads?bbox="),
+      expect.objectContaining({ signal: expect.anything() }),
     );
   });
 
