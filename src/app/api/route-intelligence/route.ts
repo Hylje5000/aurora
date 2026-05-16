@@ -347,15 +347,31 @@ export async function POST(req: NextRequest) {
     const [roadsResult, bridgesResult] = await Promise.all([
       query<RoadRow>(
         `
-        SELECT DISTINCT ON (link_id)
-          id, link_id, aoi_id,
-          max_mass_kg, max_height_cm, max_bogie_mass_kg, max_axle_mass_kg,
-          width_cm, pavement_type, has_damage, damage_recurring,
-          condition_class, condition_text, rut_depth_mm,
-          ST_AsGeoJSON(ST_Centroid(geom)) AS closest_pt
-        FROM roads, ST_GeomFromGeoJSON($1) AS route_geom
-        WHERE ST_DWithin(geom, route_geom, 0.0004)
-        ORDER BY link_id
+        WITH route AS (
+          SELECT ST_GeomFromGeoJSON($1) AS geom
+        ),
+        route_corridor AS (
+          -- 10 m corridor around the route (geography buffer for metric accuracy,
+          -- cast back to geometry for ST_Intersection).
+          SELECT ST_Buffer(geom::geography, 10)::geometry AS geom
+          FROM route
+        )
+        SELECT DISTINCT ON (r.link_id)
+          r.id, r.link_id, r.aoi_id,
+          r.max_mass_kg, r.max_height_cm, r.max_bogie_mass_kg, r.max_axle_mass_kg,
+          r.width_cm, r.pavement_type, r.has_damage, r.damage_recurring,
+          r.condition_class, r.condition_text, r.rut_depth_mm,
+          ST_AsGeoJSON(ST_ClosestPoint(r.geom, rt.geom)) AS closest_pt
+        FROM roads r
+        CROSS JOIN route rt
+        CROSS JOIN route_corridor rc
+        WHERE ST_DWithin(r.geom, rt.geom, 0.0004)
+          -- Reject side roads that only touch the route at a junction.
+          -- A perpendicular side road overlaps ~10 m of the 10 m corridor;
+          -- roads running alongside the route overlap their full segment length.
+          -- Threshold 15 m filters perpendicular (≈10 m) and steep diagonal (≈14 m) branches.
+          AND ST_Length(ST_Intersection(r.geom, rc.geom)::geography) > 15
+        ORDER BY r.link_id
         LIMIT 500
         `,
         [routeGeoJSON],
