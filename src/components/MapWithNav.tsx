@@ -152,16 +152,15 @@ export default function MapWithNav() {
       <button
         onClick={() => setRoutePanelOpen((o) => !o)}
         className={[
-          "absolute top-4 right-20 z-10 rounded px-3 py-1.5 text-sm font-semibold text-white transition-all",
-          "bg-black/60 backdrop-blur-sm hover:bg-black/80",
+          "absolute top-4 right-4 z-10 rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-white transition-all backdrop-blur-sm",
           routePanelOpen
-            ? "border border-blue-400 shadow-[0_0_0_2px_#60a5fa]"
-            : "border border-white/30",
+            ? "bg-blue-700 border border-blue-400 shadow-[0_0_0_2px_#60a5fa]"
+            : "bg-blue-600 hover:bg-blue-700 border border-blue-500",
         ].join(" ")}
         aria-label="Toggle route planning panel"
         data-testid="route-toggle-btn"
       >
-        Route
+        Plan a Route
       </button>
 
       <MapView

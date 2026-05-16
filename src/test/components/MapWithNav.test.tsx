@@ -550,13 +550,15 @@ describe("MapWithNav", () => {
 
   // ── Route planning wiring tests ───────────────────────────────────────
 
-  it("renders the Route toggle button", async () => {
+  it("renders the Plan a Route toggle button", async () => {
     render(<MapWithNav />);
     await act(async () => {});
-    expect(screen.getByTestId("route-toggle-btn")).toBeInTheDocument();
+    const btn = screen.getByTestId("route-toggle-btn");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent("Plan a Route");
   });
 
-  it("shows RoutePanel when Route button is clicked", async () => {
+  it("shows RoutePanel when Plan a Route button is clicked", async () => {
     render(<MapWithNav />);
     await act(async () => {});
     expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
@@ -564,7 +566,7 @@ describe("MapWithNav", () => {
     expect(screen.getByTestId("route-panel")).toBeInTheDocument();
   });
 
-  it("hides RoutePanel when Route button is clicked again", async () => {
+  it("hides RoutePanel when Plan a Route button is clicked again", async () => {
     render(<MapWithNav />);
     await act(async () => {});
     await userEvent.click(screen.getByTestId("route-toggle-btn"));
