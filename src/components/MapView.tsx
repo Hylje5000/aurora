@@ -12,7 +12,7 @@ import {
   LAYER_GROUPS,
   type LayerVisibility,
 } from "@/lib/layers";
-import { createMilsymbolImage } from "@/lib/milsymbol";
+import { createMilsymbolImage, ensureMilsymbolImages } from "@/lib/milsymbol";
 import {
   COLOUR_PALETTE,
   type CustomLayer,
@@ -130,6 +130,9 @@ async function fetchCustomLayerFeatures(
     );
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
+
+    await ensureMilsymbolImages(map, data.features);
+
     (
       map.getSource(`custom-layer-${layerId}`) as mapboxgl.GeoJSONSource
     )?.setData(data);
@@ -187,7 +190,11 @@ function addCustomLayerSourcesToMap(
     id: `${sourceId}-circle`,
     type: "circle",
     source: sourceId,
-    filter: ["==", ["geometry-type"], "Point"],
+    filter: [
+      "all",
+      ["==", ["geometry-type"], "Point"],
+      ["!", ["has", "sidc", ["get", "properties"]]],
+    ],
     layout: { visibility: vis },
     paint: {
       "circle-color": ["get", "color"],
@@ -196,12 +203,29 @@ function addCustomLayerSourcesToMap(
       "circle-stroke-width": 2.5,
     },
   });
+
+  map.addLayer({
+    id: `${sourceId}-symbol`,
+    type: "symbol",
+    source: sourceId,
+    filter: [
+      "all",
+      ["==", ["geometry-type"], "Point"],
+      ["has", "sidc", ["get", "properties"]],
+    ],
+    layout: {
+      visibility: vis,
+      "icon-image": ["get", "sidc", ["get", "properties"]],
+      "icon-size": 0.6,
+      "icon-allow-overlap": true,
+    },
+  });
 }
 
 function registerCustomLayerClickHandlers(map: mapboxgl.Map, layerId: string) {
   const sourceId = `custom-layer-${layerId}`;
 
-  for (const suffix of ["-fill", "-line", "-circle"]) {
+  for (const suffix of ["-fill", "-line", "-circle", "-symbol"]) {
     const fullId = `${sourceId}${suffix}`;
 
     map.on("click", fullId, (e) => {
@@ -254,7 +278,7 @@ function removeCustomLayerFromMap(
   registeredIds.delete(layerId);
 
   const sourceId = `custom-layer-${layerId}`;
-  for (const suffix of ["-fill", "-line", "-circle"]) {
+  for (const suffix of ["-fill", "-line", "-circle", "-symbol"]) {
     try {
       map.removeLayer(`${sourceId}${suffix}`);
     } catch {
@@ -308,6 +332,8 @@ export default function MapView({
     COLOUR_PALETTE[0].hex,
   );
   const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
+  const [dialogFeatureType, setDialogFeatureType] =
+    useState<DrawingTool | null>(null);
 
   const activeLayer = customLayers.find((l) => l.id === activeDrawingLayerId);
 
@@ -542,7 +568,19 @@ export default function MapView({
           drawRef.current?.delete(feature.id as string);
           return;
         }
+
+        const geomType = (feature.geometry as GeoJSON.Geometry).type;
+        const featureType: DrawingTool =
+          activeDrawingToolRef.current === "Rectangle"
+            ? "Rectangle"
+            : geomType === "Point"
+              ? "Point"
+              : geomType === "LineString"
+                ? "LineString"
+                : "Polygon";
+
         pendingDrawFeatureRef.current = feature;
+        setDialogFeatureType(featureType);
         setDialogOpen(true);
       });
 
@@ -804,7 +842,7 @@ export default function MapView({
       const sourceId = `custom-layer-${layerId}`;
       const vis = enabled ? "visible" : "none";
 
-      for (const suffix of ["-fill", "-line", "-circle"]) {
+      for (const suffix of ["-fill", "-line", "-circle", "-symbol"]) {
         map.setLayoutProperty(`${sourceId}${suffix}`, "visibility", vis);
       }
 
@@ -852,7 +890,11 @@ export default function MapView({
   }, [activeDrawingColour]);
 
   // ── Feature dialog handlers ────────────────────────────────────────────
-  async function handleFeatureSave(name: string, description: string) {
+  async function handleFeatureSave(
+    name: string,
+    description: string,
+    sidc?: string,
+  ) {
     const feature = pendingDrawFeatureRef.current;
     const layerId = activeDrawingLayerIdRef.current;
     const map = mapRef.current;
@@ -884,6 +926,7 @@ export default function MapView({
           feature_type: featureType,
           geometry: feature.geometry,
           color: activeDrawingColourRef.current,
+          properties: sidc ? { sidc } : {},
         }),
       });
       if (res.ok) {
@@ -930,6 +973,7 @@ export default function MapView({
 
       <FeatureDialog
         open={dialogOpen}
+        featureType={dialogFeatureType || undefined}
         onSave={handleFeatureSave}
         onDiscard={handleFeatureDiscard}
       />

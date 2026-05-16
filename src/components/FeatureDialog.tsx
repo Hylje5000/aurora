@@ -2,15 +2,24 @@
 
 import { useState, useEffect, useRef } from "react";
 
+import SymbolPicker from "./SymbolPicker";
+import { MILITARY_SYMBOLS } from "@/lib/milsymbolData";
+
 interface FeatureDialogProps {
   open: boolean;
-  onSave: (name: string, description: string) => void;
+  featureType?: "Point" | "LineString" | "Polygon" | "Rectangle";
+  onSave: (name: string, description: string, sidc?: string) => void;
   onDiscard: () => void;
 }
 
-function DialogForm({ onSave, onDiscard }: Omit<FeatureDialogProps, "open">) {
+function DialogForm({
+  featureType,
+  onSave,
+  onDiscard,
+}: Omit<FeatureDialogProps, "open">) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [sidc, setSidc] = useState(MILITARY_SYMBOLS[0].sidc);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -20,7 +29,11 @@ function DialogForm({ onSave, onDiscard }: Omit<FeatureDialogProps, "open">) {
   function handleSave() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onSave(trimmed, description.trim());
+    onSave(
+      trimmed,
+      description.trim(),
+      featureType === "Point" ? sidc : undefined,
+    );
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -78,6 +91,10 @@ function DialogForm({ onSave, onDiscard }: Omit<FeatureDialogProps, "open">) {
           />
         </div>
 
+        {featureType === "Point" && (
+          <SymbolPicker selectedSidc={sidc} onChange={setSidc} />
+        )}
+
         <div className="flex gap-2 justify-end pt-1">
           <button
             onClick={onDiscard}
@@ -102,9 +119,16 @@ function DialogForm({ onSave, onDiscard }: Omit<FeatureDialogProps, "open">) {
 
 export default function FeatureDialog({
   open,
+  featureType,
   onSave,
   onDiscard,
 }: FeatureDialogProps) {
   if (!open) return null;
-  return <DialogForm onSave={onSave} onDiscard={onDiscard} />;
+  return (
+    <DialogForm
+      featureType={featureType}
+      onSave={onSave}
+      onDiscard={onDiscard}
+    />
+  );
 }

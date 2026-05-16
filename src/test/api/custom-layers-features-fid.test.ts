@@ -103,6 +103,24 @@ describe("PUT /api/custom-layers/[id]/features/[fid]", () => {
     );
   });
 
+  it("updates properties (SIDC) correctly", async () => {
+    process.env.DATABASE_URL = "postgres://test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: "f1" }],
+      rowCount: 1,
+    } as never);
+
+    const properties = { sidc: "SHG-UCV--------" };
+    await PUT(
+      makePutRequest("l1", "f1", { properties }),
+      makeParams("l1", "f1"),
+    );
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("properties"),
+      expect.arrayContaining([JSON.stringify(properties)]),
+    );
+  });
+
   it("returns 404 when feature not found", async () => {
     process.env.DATABASE_URL = "postgres://test";
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as never);

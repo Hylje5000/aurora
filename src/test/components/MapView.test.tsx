@@ -142,6 +142,7 @@ vi.mock("@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css", () => ({}));
 
 vi.mock("@/lib/milsymbol", () => ({
   createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())),
+  ensureMilsymbolImages: vi.fn(() => Promise.resolve()),
 }));
 
 import MapView from "@/components/MapView";
@@ -919,6 +920,9 @@ describe("MapView", () => {
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "custom-layer-layer-a-circle" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "custom-layer-layer-a-symbol" }),
     );
   });
 

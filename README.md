@@ -35,6 +35,13 @@ Automated Intelligence Preparation of the Battlespace — open-source situationa
 
 4. Open [http://localhost:3000](http://localhost:3000) — you should see a full-screen map centred on the Archipelago Sea, Finland.
 
+## Key Features
+
+- **Military Symbology**: Integration with `milsymbol` for NATO APP-6 / US MIL-STD-2525 symbols, automatically synced to the database.
+- **Collaborative Drawing**: Custom named layers with Point, Line, Polygon, and Rectangle drawing tools, shared across all users via PostGIS.
+- **Dynamic Viewport Clustering**: High-performance clustering for dense data like cell towers, updating in real-time as you pan/zoom.
+- **Terrain & Intelligence Layers**: Toggleable 3D terrain, hillshading, contours, and military-themed landcover.
+
 ## Areas of Interest
 
 Three operational areas are pre-defined in `src/lib/areas.ts` and visible on the map:

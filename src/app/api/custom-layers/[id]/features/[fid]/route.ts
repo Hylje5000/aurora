@@ -18,6 +18,7 @@ export async function PUT(
     name?: string;
     description?: string;
     color?: string;
+    properties?: Record<string, unknown>;
   };
   try {
     body = await req.json();
@@ -40,6 +41,10 @@ export async function PUT(
   if (typeof body.color === "string" && body.color.trim()) {
     updates.push(`color = $${idx++}`);
     values.push(body.color.trim());
+  }
+  if (body.properties && typeof body.properties === "object") {
+    updates.push(`properties = $${idx++}`);
+    values.push(JSON.stringify(body.properties));
   }
 
   if (updates.length === 0) {

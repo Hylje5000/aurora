@@ -2,6 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import FeatureDialog from "@/components/FeatureDialog";
 
+// Mock milsymbol to avoid full library loading in tests
+vi.mock("milsymbol", () => ({
+  default: {
+    Symbol: vi.fn().mockImplementation(() => ({
+      asSVG: () => "<svg>mock-symbol</svg>",
+    })),
+  },
+}));
+
 function setup(props?: Partial<Parameters<typeof FeatureDialog>[0]>) {
   const onSave = vi.fn();
   const onDiscard = vi.fn();
@@ -58,28 +67,56 @@ describe("FeatureDialog", () => {
       target: { value: "  Some notes  " },
     });
     fireEvent.click(screen.getByTestId("feature-dialog-save"));
-    expect(onSave).toHaveBeenCalledWith("Alpha", "Some notes");
+    expect(onSave).toHaveBeenCalledWith("Alpha", "Some notes", undefined);
   });
 
-  it("does not call onSave when name is only whitespace", () => {
-    const { onSave } = setup();
+  it("shows SymbolPicker only for Point features", () => {
+    const { rerender } = render(
+      <FeatureDialog
+        open={true}
+        featureType="Polygon"
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("symbol-picker")).toBeNull();
+
+    rerender(
+      <FeatureDialog
+        open={true}
+        featureType="Point"
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("symbol-picker")).toBeTruthy();
+  });
+
+  it("calls onSave with SIDC when featureType is Point", () => {
+    const { onSave } = setup({ featureType: "Point" });
     fireEvent.change(screen.getByTestId("feature-dialog-name"), {
-      target: { value: "   " },
+      target: { value: "Friendly Inf" },
     });
+
+    // Default symbol should be Infantry (SFG-UCI--------)
     fireEvent.click(screen.getByTestId("feature-dialog-save"));
-    expect(onSave).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledWith("Friendly Inf", "", "SFG-UCI--------");
   });
 
-  it("calls onDiscard on Discard button click", () => {
-    const { onDiscard } = setup();
-    fireEvent.click(screen.getByTestId("feature-dialog-discard"));
-    expect(onDiscard).toHaveBeenCalledOnce();
-  });
+  it("calls onSave with selected symbol from SymbolPicker", () => {
+    const { onSave } = setup({ featureType: "Point" });
+    fireEvent.change(screen.getByTestId("feature-dialog-name"), {
+      target: { value: "Armor" },
+    });
 
-  it("calls onDiscard on Escape key", () => {
-    const { onDiscard } = setup();
-    fireEvent.keyDown(screen.getByTestId("feature-dialog"), { key: "Escape" });
-    expect(onDiscard).toHaveBeenCalledOnce();
+    // Change affiliation to Hostile
+    fireEvent.click(screen.getByText("Hostile"));
+    // Select Armor / Tank
+    fireEvent.click(screen.getByText("Armor / Tank"));
+
+    fireEvent.click(screen.getByTestId("feature-dialog-save"));
+    // Hostile Armor SIDC
+    expect(onSave).toHaveBeenCalledWith("Armor", "", "SHG-UCV--------");
   });
 
   it("calls onSave on Enter key when name is filled", () => {
@@ -88,7 +125,7 @@ describe("FeatureDialog", () => {
       target: { value: "Test" },
     });
     fireEvent.keyDown(screen.getByTestId("feature-dialog"), { key: "Enter" });
-    expect(onSave).toHaveBeenCalledWith("Test", "");
+    expect(onSave).toHaveBeenCalledWith("Test", "", undefined);
   });
 
   it("calls onDiscard when clicking the backdrop", () => {

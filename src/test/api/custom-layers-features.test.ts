@@ -213,6 +213,28 @@ describe("POST /api/custom-layers/[id]/features", () => {
     );
   });
 
+  it("persists properties (SIDC) when provided", async () => {
+    process.env.DATABASE_URL = "postgres://test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [FEATURE_ROW],
+      rowCount: 1,
+    } as never);
+
+    const properties = { sidc: "SFG-UCI--------" };
+    await POST(
+      makePostRequest("layer-1", {
+        ...VALID_BODY,
+        properties,
+      }),
+      makeParams("layer-1"),
+    );
+
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT"),
+      expect.arrayContaining([JSON.stringify(properties)]),
+    );
+  });
+
   it("returns 500 when DB throws", async () => {
     process.env.DATABASE_URL = "postgres://test";
     mockQuery.mockRejectedValueOnce(new Error("DB error"));
