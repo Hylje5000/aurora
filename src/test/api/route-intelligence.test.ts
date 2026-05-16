@@ -162,16 +162,49 @@ describe("POST /api/route-intelligence", () => {
     expect(h.severity).toBe("info");
   });
 
-  it("generates WARNING for poor condition class (>= 4)", async () => {
+  it("generates WARNING for condition class 1 (erittäin huono — very bad)", async () => {
     mockQuery
-      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, condition_class: 5 }] } as never)
+      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, condition_class: 1, condition_text: "erittäin huono" }] } as never)
       .mockResolvedValueOnce({ rows: [] } as never);
     const res = await POST(makeReq({ routeGeometry: ROUTE_GEOMETRY, vehicle: INFANTRY }));
     const body = await res.json();
-    const h = body.hazards.find((h: { message: string }) => h.message.includes("condition"));
+    const h = body.hazards.find((h: { message: string }) => h.message.includes("Very poor"));
     expect(h).toBeDefined();
     expect(h.severity).toBe("warning");
-    expect(h.message).toContain("5");
+    expect(h.message).toContain("erittäin huono");
+  });
+
+  it("generates INFO for condition class 2 (huono — bad)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, condition_class: 2, condition_text: "huono" }] } as never)
+      .mockResolvedValueOnce({ rows: [] } as never);
+    const res = await POST(makeReq({ routeGeometry: ROUTE_GEOMETRY, vehicle: INFANTRY }));
+    const body = await res.json();
+    const h = body.hazards.find((h: { message: string }) => h.message.includes("Poor road surface"));
+    expect(h).toBeDefined();
+    expect(h.severity).toBe("info");
+  });
+
+  it("does not warn for condition class 4 or 5 (hyvä tai erittäin hyvä — good)", async () => {
+    for (const cls of [4, 5]) {
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, condition_class: cls, condition_text: "hyvä tai erittäin hyvä" }] } as never)
+        .mockResolvedValueOnce({ rows: [] } as never);
+      const res = await POST(makeReq({ routeGeometry: ROUTE_GEOMETRY, vehicle: MBT }));
+      const body = await res.json();
+      const h = body.hazards.find((h: { message: string }) => h.message.toLowerCase().includes("condition") || h.message.toLowerCase().includes("surface"));
+      expect(h).toBeUndefined();
+    }
+  });
+
+  it("does not warn for condition class 3 (tyydyttävä — satisfactory)", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, condition_class: 3, condition_text: "tyydyttävä" }] } as never)
+      .mockResolvedValueOnce({ rows: [] } as never);
+    const res = await POST(makeReq({ routeGeometry: ROUTE_GEOMETRY, vehicle: MBT }));
+    const body = await res.json();
+    const h = body.hazards.find((h: { message: string }) => h.message.toLowerCase().includes("surface"));
+    expect(h).toBeUndefined();
   });
 
   it("generates CRITICAL for road weight limit exceeded", async () => {
@@ -232,16 +265,26 @@ describe("POST /api/route-intelligence", () => {
     expect(h.message).toContain("Gravel");
   });
 
-  it("generates WARNING for heavy rutting (>= 30 mm)", async () => {
+  it("generates WARNING for significant rutting (>= 20 mm)", async () => {
     mockQuery
-      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, rut_depth_mm: 45 }] } as never)
+      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, rut_depth_mm: 25 }] } as never)
       .mockResolvedValueOnce({ rows: [] } as never);
     const res = await POST(makeReq({ routeGeometry: ROUTE_GEOMETRY, vehicle: INFANTRY }));
     const body = await res.json();
     const h = body.hazards.find((h: { message: string }) => h.message.includes("rutting"));
     expect(h).toBeDefined();
     expect(h.severity).toBe("warning");
-    expect(h.message).toContain("45 mm");
+    expect(h.message).toContain("25 mm");
+  });
+
+  it("does not warn for rutting under 20 mm", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ ...EMPTY_ROAD_ROW, rut_depth_mm: 15 }] } as never)
+      .mockResolvedValueOnce({ rows: [] } as never);
+    const res = await POST(makeReq({ routeGeometry: ROUTE_GEOMETRY, vehicle: INFANTRY }));
+    const body = await res.json();
+    const h = body.hazards.find((h: { message: string }) => h.message.includes("rutting"));
+    expect(h).toBeUndefined();
   });
 
   // --- Infantry skips mass checks ---

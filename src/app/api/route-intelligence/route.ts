@@ -77,12 +77,16 @@ function classifyRoadHazards(row: RoadRow, v: VehicleProfile): RouteHazard[] {
     add("info", "Road damage reported");
   }
 
-  if (row.condition_class != null && row.condition_class >= 4) {
-    add("warning", `Poor road condition (class ${row.condition_class})`);
+  // Digiroad condition_class scale: 1 = erittäin huono (very bad) … 5 = hyvä tai erittäin hyvä (good).
+  // Lower is worse — only class 1 and 2 are worth flagging.
+  if (row.condition_class === 1) {
+    add("warning", `Very poor road surface (${row.condition_text ?? "erittäin huono"})`);
+  } else if (row.condition_class === 2) {
+    add("info", `Poor road surface (${row.condition_text ?? "huono"})`);
   }
 
-  if (row.rut_depth_mm != null && row.rut_depth_mm >= 30) {
-    add("warning", `Heavy rutting (${row.rut_depth_mm} mm)`);
+  if (row.rut_depth_mm != null && row.rut_depth_mm >= 20) {
+    add("warning", `Significant rutting (${row.rut_depth_mm} mm)`);
   }
 
   if (row.pavement_type != null && (row.pavement_type === 2 || row.pavement_type === 3)) {
