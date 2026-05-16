@@ -361,7 +361,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
       const fetchAI = async () => {
         try {
-          const prompt = `You are a Senior Military Planning Officer (G3/S3). Provide a concise, tactical executive summary for the following route analysis.
+          const prompt = `You are a Senior Military Planning Officer (G3/S3). Provide a high-level tactical executive summary for the following route analysis.
           
           Route Overview:
           - Profile: ${profileLabel(profile)}
@@ -379,12 +379,27 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
           Comms Coverage:
           ${intelligence.coverage ? `- Covered: ${intelligence.coverage.covered_pct}%\n- Gaps: ${intelligence.coverage.gap_count} (Max: ${intelligence.coverage.longest_gap_m}m)` : "- No data"}
 
-          Focus on:
-          1. Mobility Assessment
-          2. Critical Constraints
-          3. Tactical Recommendations
+          REQUIRED STRUCTURE:
           
-          Keep it professional, tactical, and format nicely with markdown.`;
+          1. TACTICAL SCOREBOARD (Table format)
+          | Metric | Status / Score |
+          | :--- | :--- |
+          | Route Suitability | 1-10 score |
+          | Travel Speed Est. | Estimated speed for this unit type |
+          | Obstacle Impact | Low/Med/High impact on timeline |
+          | Risk Level | Overall operational risk |
+          | Logistical Support | Recommended maneuvers at destination |
+
+          2. MOBILITY ASSESSMENT
+          (Concise explanation of the suitability score and speed estimate)
+
+          3. CRITICAL CONSTRAINTS & RISKS
+          (Detailed impact of obstacles and cellular gaps)
+
+          4. TACTICAL RECOMMENDATIONS
+          (Actionable advice for the planning officer)
+          
+          Keep it professional, tactical, and format nicely with markdown. Use a strict military tone.`;
 
           const res = await fetch("/api/ai", {
             method: "POST",
