@@ -8,6 +8,7 @@ import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
 import DatePicker from "./DatePicker";
 import RoutePanel, { type RoutePanelHandle } from "./RoutePanel";
+import { AREAS_OF_INTEREST } from "@/lib/areas";
 import {
   DEFAULT_LAYER_VISIBILITY,
   type LayerKey,
@@ -23,7 +24,7 @@ import type {
 } from "@/lib/routing";
 
 export default function MapWithNav() {
-  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>("turku");
   const [selectedDay, setSelectedDay] = useState<{
     month: number;
     day: number;
@@ -253,6 +254,14 @@ export default function MapWithNav() {
       />
       {selectedAreaId && (
         <div className="absolute left-4 top-10 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl">
+          {/* Area name header */}
+          <div className="px-3 pt-2.5 pb-1">
+            <span className="text-sm font-bold tracking-wide text-white">
+              {AREAS_OF_INTEREST.find((a) => a.id === selectedAreaId)?.name ??
+                selectedAreaId}
+            </span>
+          </div>
+          {/* Date row */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40">
             <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex-1">
               Date

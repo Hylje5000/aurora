@@ -261,10 +261,13 @@ describe("MapWithNav", () => {
     expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
   });
 
-  it("starts with no area selected", async () => {
+  it("starts with turku selected by default", async () => {
     render(<MapWithNav />);
     await act(async () => {});
-    expect(screen.getByTestId("map-view")).toHaveAttribute("data-selected", "");
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-selected",
+      "turku",
+    );
   });
 
   it("propagates selected area from AreaNav to MapView", async () => {
@@ -491,11 +494,11 @@ describe("MapWithNav", () => {
     );
   });
 
-  it("does not render WeatherWidget or DatePicker when no area is selected", async () => {
+  it("renders WeatherWidget and DatePicker on initial load (turku default)", async () => {
     render(<MapWithNav />);
     await act(async () => {});
-    expect(screen.queryByTestId("weather-widget")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("date-picker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("weather-widget")).toBeInTheDocument();
+    expect(screen.getByTestId("date-picker")).toBeInTheDocument();
   });
 
   it("renders WeatherWidget and DatePicker when an area is selected", async () => {
