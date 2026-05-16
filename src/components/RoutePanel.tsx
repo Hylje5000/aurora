@@ -381,14 +381,12 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
           REQUIRED STRUCTURE:
           
-          1. TACTICAL SCOREBOARD (Table format)
-          | Metric | Status / Score |
-          | :--- | :--- |
-          | Route Suitability | 1-10 score |
-          | Travel Speed Est. | Estimated speed for this unit type |
-          | Obstacle Impact | Low/Med/High impact on timeline |
-          | Risk Level | Overall operational risk |
-          | Logistical Support | Recommended maneuvers at destination |
+          1. TACTICAL SCOREBOARD
+          Route Suitability: [1-10 score]
+          Travel Speed Est.: [Estimated speed for this unit type]
+          Obstacle Impact: [Low/Med/High impact on timeline]
+          Risk Level: [Overall operational risk]
+          Logistical Support: [Recommended maneuvers at destination]
 
           2. MOBILITY ASSESSMENT
           (Concise explanation of the suitability score and speed estimate)
