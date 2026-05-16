@@ -509,7 +509,7 @@ export default function MapView({
         source: "aoi-source",
         paint: {
           "fill-color": ["get", "color"],
-          "fill-opacity": 0.4,
+          "fill-opacity": 0.06,
         },
       });
       // Glow layer for maximum visibility
