@@ -894,7 +894,11 @@ describe("MapView", () => {
       expect.objectContaining({ id: "roads-line", type: "line" }),
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "bridges-symbol", type: "symbol" }),
+      expect.objectContaining({
+        id: "bridges-symbol",
+        type: "symbol",
+        minzoom: 12,
+      }),
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "railways-line", type: "line" }),

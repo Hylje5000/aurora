@@ -566,6 +566,7 @@ export default function MapView({
       map.addLayer({
         id: "bridges-symbol",
         type: "symbol",
+        minzoom: 12,
         source: "bridges-source",
         layout: {
           visibility: vis.bridges ? "visible" : "none",
