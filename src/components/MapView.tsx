@@ -517,17 +517,17 @@ export default function MapView({
         type: "fill",
         source: "aoi-source",
         paint: {
-          "fill-color": ["get", "color"],
+          "fill-color": "#38bdf8",
           "fill-opacity": 0.06,
         },
       });
-      // Glow layer for maximum visibility
+      // Glow layer for visibility
       map.addLayer({
         id: "aoi-outline-glow",
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": ["get", "color"],
+          "line-color": "#38bdf8",
           "line-width": 16,
           "line-blur": 6,
           "line-opacity": 0.7,
@@ -538,7 +538,7 @@ export default function MapView({
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": "#ffffff", // Pure white inner line for high contrast
+          "line-color": "#ffffff",
           "line-width": 2,
         },
       });
@@ -547,9 +547,8 @@ export default function MapView({
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": ["get", "color"],
+          "line-color": "#38bdf8",
           "line-width": 6,
-          "line-offset": 0,
         },
       });
 
