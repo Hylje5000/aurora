@@ -669,7 +669,7 @@ describe("RoutePanel", () => {
     expect(screen.getByTestId("coverage-gaps")).toHaveTextContent("3.2 km");
   });
 
-  it("shows 'No coverage data' when coverage is null", async () => {
+  it("shows 'No cellular coverage' when coverage is null", async () => {
     const intel: RouteIntelligence = {
       ...MOCK_INTELLIGENCE_PASSABLE,
       coverage: null,
@@ -698,7 +698,46 @@ describe("RoutePanel", () => {
 
     expect(screen.getByTestId("coverage-unavailable")).toBeInTheDocument();
     expect(screen.getByTestId("coverage-unavailable")).toHaveTextContent(
-      "No coverage data",
+      "No cellular coverage",
+    );
+  });
+
+  it("shows 'No cellular coverage' when covered_pct is 0", async () => {
+    const intel: RouteIntelligence = {
+      ...MOCK_INTELLIGENCE_PASSABLE,
+      coverage: {
+        route_length_m: 50000,
+        covered_pct: 0,
+        gap_count: 0,
+        longest_gap_m: 0,
+        gap_geometry: null,
+      },
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(MOCK_ROUTE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(intel), { status: 200 }),
+      );
+
+    const ref = createRef<RoutePanelHandle>();
+    render(<RoutePanel ref={ref} {...makeProps()} />);
+    act(() => {
+      ref.current?.addWaypoint([24.94, 60.17]);
+      ref.current?.addWaypoint([25.01, 60.23]);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+
+    expect(screen.getByTestId("coverage-unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("coverage-unavailable")).toHaveTextContent(
+      "No cellular coverage",
     );
   });
 });

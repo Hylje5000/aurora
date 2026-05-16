@@ -651,7 +651,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
                     Comms Coverage
                   </span>
-                  {intelligence?.coverage ? (
+                  {intelligence?.coverage &&
+                  intelligence.coverage.covered_pct > 0 ? (
                     <div className="mt-0.5">
                       {intelligence.coverage.covered_pct === 100 ? (
                         <p
@@ -692,10 +693,10 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                     </div>
                   ) : (
                     <p
-                      className="text-[9px] font-mono text-slate-600"
+                      className="text-[10px] font-mono font-semibold text-red-400"
                       data-testid="coverage-unavailable"
                     >
-                      No coverage data
+                      ✗ No cellular coverage
                     </p>
                   )}
                 </div>
