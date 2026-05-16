@@ -35,7 +35,7 @@ src/
 │       ├── route-plan/
 │       │   └── route.ts        # POST /api/route-plan → PlannedRoute JSON; proxies Mapbox Directions API server-side
 │       ├── route-intelligence/
-│       │   └── route.ts        # POST /api/route-intelligence → RouteIntelligence JSON; PostGIS ST_DWithin roads (20 m) + bridges (50 m) along route geometry; classifies hazards against vehicle profile
+│       │   └── route.ts        # POST /api/route-intelligence → RouteIntelligence JSON; PostGIS ST_DWithin roads (20 m) + bridges (50 m) along route geometry; classifies hazards against vehicle profile; PostGIS coverage query (ST_Buffer/ST_Union/ST_Difference) returns CoverageAnalysis; isolated try/catch degrades gracefully
 │       └── custom-layers/
 │           ├── route.ts        # GET list + POST create custom layers
 │           ├── [id]/
@@ -48,13 +48,15 @@ src/
 │   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, layerVisibility,
 │   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId, infoPanelData, selectedDay,
 │   │                           #   routePanelOpen, plannedRoute, routeProfile, routeWaypoints, addingWaypoint, routePanelRef,
-│   │                           #   routeIntelligence, focusedHazard; handleHazardsChange + handleHazardFocus build InfoPanel rows
+│   │                           #   routeIntelligence, focusedHazard; derives routeCoverageGaps from intelligence.coverage.gap_geometry;
+│   │                           #   handleHazardsChange + handleHazardFocus build InfoPanel rows
 │   ├── RoutePanel.tsx          # 'use client' forwardRef — floating route planning panel (bottom center);
 │   │                           #   exposes addWaypoint(coords) via RoutePanelHandle; debounced POST /api/route-plan;
 │   │                           #   profile selector, vehicle preset selector (Infantry/Wheeled APC/IFV/MBT/Custom) with
 │   │                           #   editable mass/axle/bogie/height/width fields; waypoint list (drag/remove); leg accordion;
 │   │                           #   route assessment section: debounced POST /api/route-intelligence (600 ms after route set),
-│   │                           #   passable/impassable summary, severity-colored hazard rows (click → onHazardFocus)
+│   │                           #   passable/impassable summary, severity-colored hazard rows (click → onHazardFocus);
+│   │                           #   COMMS COVERAGE sub-section: ▓░ block bar + covered%, gap count, longest gap distance
 │   ├── WeatherWidget.tsx       # 'use client' — fetches /api/weather, shows avg temp ± spread + rain stats
 │   ├── DatePicker.tsx          # 'use client' — two <select> dropdowns (month/day) with leap-year day clamping
 │   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
@@ -66,7 +68,9 @@ src/
 │   ├── FeatureDialog.tsx       # 'use client' — modal: name + description for a newly drawn feature
 │   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control, visibility sync effect;
 │   │                           #   route-hazards-source + three circle layers (critical/warning/info); useEffect([routeHazards]) syncs GeoJSON;
-│   │                           #   useEffect([focusedHazard]) calls map.flyTo + places color-coded Marker (hazardFocusMarkerRef)
+│   │                           #   useEffect([focusedHazard]) calls map.flyTo + places color-coded Marker (hazardFocusMarkerRef);
+│   │                           #   route-coverage-gaps-source + red dashed line layer; useEffect([routeCoverageGaps]) syncs gap geometry;
+│   │                           #   coverage-circles-source + fill/line layers; towerToCirclePolygon + buildCoverageCircles helpers
 │   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
 ├── lib/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
@@ -74,7 +78,7 @@ src/
 │   ├── customLayers.ts         # CustomLayer, CustomFeature, DrawingTool types; COLOUR_PALETTE (8 colours); DEFAULT_LAYER_COLOUR
 │   ├── routing.ts              # RouteProfile, Waypoint, PlannedRoute, RouteLeg, RouteStep types; PROFILE_COLORS map;
 │   │                           #   VehicleProfile, VEHICLE_PRESETS (Infantry/Wheeled APC/IFV/MBT/Custom);
-│   │                           #   HazardSeverity, RouteHazard, RouteIntelligence types;
+│   │                           #   HazardSeverity, RouteHazard, RouteIntelligence, CoverageAnalysis types;
 │   │                           #   formatDuration/formatDistance/profileLabel helpers
 │   ├── milsymbol.ts            # createMilsymbolImage(opts) — NATO SIDC → SVG → HTMLImageElement (async)
 │   ├── ai.ts                   # createAIClient() factory + CM_MODEL constant — ConfidentialMind OpenAI-compatible client
@@ -85,7 +89,7 @@ src/
     ├── setup.ts                # @testing-library/jest-dom global matchers
     ├── api/
     │   ├── route-plan.test.ts  # POST /api/route-plan — validation, Mapbox proxy, 503/502/404/200
-│   │   ├── route-intelligence.test.ts  # POST /api/route-intelligence — validation, road/bridge hazard rules, Infantry mass-skip, sorting, 503/500
+│   │   ├── route-intelligence.test.ts  # POST /api/route-intelligence — validation, road/bridge hazard rules, Infantry mass-skip, sorting, 503/500; coverage analysis (gap data, full coverage, no rows, query error graceful)
     │   ├── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
     │   ├── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
     │   ├── weather.test.ts     # GET /api/weather — params validation, aggregate stats, NULL precip, DB degradation
@@ -105,10 +109,10 @@ src/
     │   ├── routing.test.ts     # formatDuration, formatDistance, profileLabel, PROFILE_COLORS, VEHICLE_PRESETS
     │   └── customLayers.test.ts # COLOUR_PALETTE completeness/uniqueness, type shapes, milsymbol extensibility
     └── components/
-        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain, elevation click, route layer, waypoint markers, hazard circle layers, flyTo + marker on focusedHazard
-        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel + WeatherWidget + DatePicker + RoutePanel); intelligence + focusedHazard wiring
-        ├── RoutePanel.test.tsx # waypoint add/remove/reorder, profile switch, fetch trigger, leg accordion, loading/error; vehicle preset selector, intelligence fetch, hazard list, onHazardFocus
-        ├── LayerPanel.test.tsx # checkbox render, onToggle calls, collapse/expand
+        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain, elevation click, route layer, waypoint markers, hazard circle layers, flyTo + marker on focusedHazard; coverage-gaps-source + circle overlay sources
+        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel + WeatherWidget + DatePicker + RoutePanel); intelligence + focusedHazard wiring; routeCoverageGaps null default + gap geometry passed
+        ├── RoutePanel.test.tsx # waypoint add/remove/reorder, profile switch, fetch trigger, leg accordion, loading/error; vehicle preset selector, intelligence fetch, hazard list, onHazardFocus; COMMS COVERAGE bar + full coverage + no-data fallback
+        ├── LayerPanel.test.tsx # checkbox render, onToggle calls, collapse/expand; cellCoverageCircles off by default + onToggle("cellCoverageCircles")
         ├── AreaNav.test.tsx    # button render + onSelect callback tests
         ├── ElectionPieChart.test.tsx  # SVG slices, < 2% grouping, single-slice circle, empty data, party colors
         ├── InfoPanel.test.tsx  # null data, title/row render, — fallback, onClose callback, optional component
@@ -138,7 +142,7 @@ src/
   - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`, `InfoPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
 - **AI route**: `POST /api/ai` accepts `{ messages: ChatCompletionMessageParam[], maxTokens?: number, temperature?: number }` and returns `{ content: string, model: string, usage: {promptTokens, completionTokens, totalTokens} | null }`. Uses the `openai` npm SDK with a custom `baseURL` (`CM_BASE_URL + "/v1"`) to call ConfidentialMind's Gemma-4 endpoint. Returns 503 when `CM_BASE_URL`/`CM_API_KEY` are absent, 502 on `OpenAI.APIError`, 400 on bad input. `src/lib/ai.ts` exports `createAIClient()` (factory, not singleton) and `CM_MODEL` constant. No `NEXT_PUBLIC_` prefix — credentials never reach the browser.
-- **Coverage summary (last run — 437 tests)**: All API routes 100% except `route-intelligence/route.ts` ~96% (uncovered: empty-body edge at lines 110–111 and non-ok early return at 199–200). All lib modules 100% (`routing.ts` 100% including new vehicle/hazard types, `ai.ts` 100%). `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `ElectionPieChart.tsx` 100% stmts/lines, `RoutePanel.tsx` ~98.6%, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~86%, `MapView.tsx` ~86% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 457 tests)**: All API routes 100% except `route-intelligence/route.ts` ~96% (uncovered: empty-body edge + non-ok early return + coverage query error branches). All lib modules 100% (`routing.ts` 100% including `CoverageAnalysis`, `ai.ts` 100%). `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `ElectionPieChart.tsx` 100% stmts/lines, `RoutePanel.tsx` ~98.5%, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~92%, `MapView.tsx` ~85% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 - **RoutePanel debounce testing**: Uses `vi.advanceTimersByTimeAsync(400)` for route fetch and `vi.advanceTimersByTimeAsync(600)` for intelligence fetch inside `act()` to properly flush microtasks after the debounced async fetch inside `setTimeout`.
 
 ## Key Patterns
@@ -161,10 +165,10 @@ src/
 - **Weather widget**: When `selectedAreaId !== null`, `MapWithNav` renders a `WeatherWidget` + `DatePicker` block (`absolute left-4 top-16 z-10`). `selectedDay` state (default: today's month/day) is shared between them. `WeatherWidget` fetches `/api/weather?region&month&day` on prop change via `useEffect` + `AbortController`; shows avg temp ± spread, ↑max/↓min, rain probability %, avg mm on wet days. Falls back to "No data" when `sampleSize === 0`. `DatePicker` renders two `<select>` dropdowns (Month Jan–Dec, Day 1–31 clamped to month max); Feb max is 29 to allow leap years.
 - **Weather API**: `GET /api/weather?region=turku|karjala|lappi&month=1-12&day=1-31` — runs a single aggregate SQL over `weather_observations` table. `COUNT(precip_mm)` (non-NULL only) gives rain probability; `-1` precip was converted to `NULL` at ingestion so the SQL needs no special handling. Returns `WeatherStats` JSON; degrades gracefully to zeroed stats (200) when DB is absent or throws.
 - **Weather DB table**: `weather_observations` — columns `id, region_id, year, month, day, precip_mm (nullable), mean_temp, max_temp, min_temp`. Index on `(region_id, month, day)`. Ingested via `scripts/ingest_weather.py` from `data/weather/{region}_weather.csv` (FMI station data 2016–2026). `-1` precip stored as NULL; rows with missing temperature readings skipped.
-- **Layer toggle system**: `src/lib/layers.ts` exports `LayerKey` (13 values: `satellite`, `terrain3d`, `hillshade`, `contours`, `landcover`, `cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`, `roads`, `bridges`, `railways`, `municipalities`), `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY` (cell types all default `true`, terrain3d `false`, satellite `false`), and `LAYER_GROUPS` (maps each key to the Mapbox layer IDs it controls). `MapWithNav` owns `layerVisibility` state and a `handleToggle` callback, passing them to both `LayerPanel` and `MapView`.
+- **Layer toggle system**: `src/lib/layers.ts` exports `LayerKey` (14 values: `satellite`, `terrain3d`, `hillshade`, `contours`, `landcover`, `cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`, `cellCoverageCircles`, `roads`, `bridges`, `railways`, `municipalities`), `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY` (cell types all default `true`, `cellCoverageCircles` defaults `false`, terrain3d `false`, satellite `false`), and `LAYER_GROUPS` (maps each key to the Mapbox layer IDs it controls). `MapWithNav` owns `layerVisibility` state and a `handleToggle` callback, passing them to both `LayerPanel` and `MapView`.
 - **Dark theme**: On `style.load`, `map.setConfigProperty("basemap", "lightPreset", "night")` switches the Mapbox Standard basemap to night mode. Military basemap hardening also disables POI/transit labels, 3D objects, and sets water to dark blue (`#0d2137`). `globals.css` overrides `.mapboxgl-ctrl-group` styles to match the slate dark palette (`#1e293b` bg, `#334155` borders, inverted SVG icons). AreaNav inactive buttons use `border-white/30`.
 - **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style (night preset).
-- **LayerPanel**: Floating dark-slate panel (`absolute left-4 bottom-10`) with collapsible sections — BASEMAP (Satellite View), TERRAIN (3D Terrain, Hillshade), ELEVATION (Contour Lines), VEGETATION (Land Cover), INFRA (Roads, Bridges, Railways, Municipalities), COMMS (GSM, UMTS, LTE, CDMA). Each row is a checkbox with a colored dot calling `onToggle(key)`. COMMS dot colors match the map marker colors exactly.
+- **LayerPanel**: Floating dark-slate panel (`absolute left-4 bottom-10`) with collapsible sections — BASEMAP (Satellite View), TERRAIN (3D Terrain, Hillshade), ELEVATION (Contour Lines), VEGETATION (Land Cover), INFRA (Roads, Bridges, Railways, Municipalities), COMMS (GSM, UMTS, LTE, CDMA, Coverage Circles). Each row is a checkbox with a colored dot calling `onToggle(key)`. COMMS dot colors match the map marker colors exactly. Coverage Circles is off by default.
 - **Terrain & intelligence layers**: On `style.load`, `MapView` adds two Mapbox-hosted sources — `mapbox-dem` (raster-dem, `mapbox://mapbox.mapbox-terrain-dem-v1`) and `terrain-v2` (vector, `mapbox://mapbox.mapbox-terrain-v2`) — and five layers in Standard style slots: `hillshading` (hillshade, slot `bottom`), `landcover-military` (fill from `landcover` source-layer, GO/SLOW-GO/NO-GO colours, slot `bottom`), `contours-minor` + `contours-major` (lines from `contour` source-layer, slot `bottom`), `contours-labels` (symbol, slot `middle`).
 - **Layer visibility sync**: A `useEffect([layerVisibility])` in `MapView` guarded by `styleLoadedRef` (1) updates `layerVisibilityRef.current`, (2) calls `source.setData(filterByEnabled(rawTowerDataRef.current, layerVisibility))` so cluster counts immediately reflect the current toggles, (3) iterates `LAYER_GROUPS` calling `map.setLayoutProperty(layerId, 'visibility', ...)`, (4) calls `map.setTerrain({...})` / `map.setTerrain(null)` for `terrain3d`, (5) applies `clustersVisible` (OR of the four cell-type flags) to the two cluster layers so they hide when all COMMS types are off, and (6) handles `satellite` style switch.
 - **Cell tower source filtering**: `filterByEnabled(data, vis)` returns a new `FeatureCollection` containing only features whose `radio` property matches an enabled type (fast-path returns `data` unchanged when all four types are on). Raw fetched data is kept in `rawTowerDataRef`; `layerVisibilityRef` gives async `moveend` handlers access to the current toggle state without closing over a stale value.
@@ -188,6 +192,15 @@ src/
 - **`RoutePanel` Route Assessment section**: `useEffect([route, vehicle])` debounced 600 ms — fetches `POST /api/route-intelligence` when route is set. Shows passable (green) or impassable (red) summary. Severity-colored hazard rows (clickable → `onHazardFocus`). Clearing intelligence is handled by the route-fetch effect's early return (waypoints < 2) and the intelligence effect's callback-only early return when `!route`.
 - **`MapWithNav` intelligence state**: `routeIntelligence: RouteIntelligence | null`, `focusedHazard: RouteHazard | null`. `handleHazardsChange` sets intelligence and clears `focusedHazard` when null. `handleHazardFocus` sets `focusedHazard` and builds InfoPanel rows (bridge: name/mass/height/status; road: mass/width/condition). InfoPanel `onClose` clears `focusedHazard`.
 - **`MapView` hazard layers**: `route-hazards-source` (GeoJSON) + three circle layers (`route-hazards-critical` red r=8, `route-hazards-warning` amber r=6, `route-hazards-info` slate r=5), all slot `top`. `useEffect([routeHazards])` converts array to `FeatureCollection`. `useEffect([focusedHazard])` calls `map.flyTo({ center, zoom: 15, duration: 800 })` and places a color-coded `mapboxgl.Marker` (`hazardFocusMarkerRef`); removed on next focus change or unmount.
+
+### Cellular Coverage Analysis (Phase 3)
+
+- **`src/lib/routing.ts` additions**: `CoverageAnalysis` interface (`route_length_m`, `covered_pct`, `gap_count`, `longest_gap_m`, `gap_geometry: GeoJSON.Geometry | null`). `coverage?: CoverageAnalysis | null` added to `RouteIntelligence`.
+- **PostGIS coverage query** (in `POST /api/route-intelligence`, isolated try/catch after roads+bridges): Uses a CTE chain — `towers` buffers cell tower geometries by their `range_m` (defaulting to 500 m), `coverage_union` unions them into a single polygon, `uncovered` diffs the route from coverage, `covered` intersects. Returns `gap_geojson`, route/covered/uncovered lengths (via `ST_Length(::geography)`), gap count (`ST_NumGeometries`), and longest gap (`ST_Dump`+`MAX`). A query error returns `coverage: null` without affecting hazard results.
+- **`MapWithNav`**: derives `routeCoverageGaps = routeIntelligence?.coverage?.gap_geometry ?? null` and passes it to `<MapView routeCoverageGaps={...} />`.
+- **`MapView` coverage gap layer**: `route-coverage-gaps-source` (GeoJSON) + `route-coverage-gaps-line` layer (red `#ef4444`, width 6, dashed `[6,4]`, slot `top`). `useEffect([routeCoverageGaps])` syncs geometry to source (null → empty FeatureCollection).
+- **`MapView` coverage circles**: `coverage-circles-source` (GeoJSON) + `coverage-circles-fill` (blue `#3b82f6`, opacity 0.07, slot `bottom`) + `coverage-circles-line` (blue, width 1, opacity 0.3). `towerToCirclePolygon(lng, lat, radiusM)` generates a 64-segment geodesic Polygon approximation. `buildCoverageCircles(data)` converts the tower FeatureCollection on every `fetchCellTowers` call. Visibility controlled via `cellCoverageCircles` LayerKey (default off).
+- **`RoutePanel` COMMS COVERAGE section**: Shown after intelligence loads. Displays `✓ Full cellular coverage` when `covered_pct === 100`; otherwise a 12-char `▓░` block bar + percentage + gap count + longest gap in km. Shows `No coverage data` when `coverage` is null.
 
 ## Collaborative Drawing Layers
 
