@@ -34,6 +34,8 @@ src/
 │       │   └── route.ts        # GET /api/elevation?lng=&lat= → { elevation_m, aoi_id, grid_file, dist_m } | { elevation_m: null }
 │       ├── route-plan/
 │       │   └── route.ts        # POST /api/route-plan → PlannedRoute JSON; proxies Mapbox Directions API server-side
+│       ├── route-intelligence/
+│       │   └── route.ts        # POST /api/route-intelligence → RouteIntelligence JSON; PostGIS ST_DWithin roads (20 m) + bridges (50 m) along route geometry; classifies hazards against vehicle profile
 │       └── custom-layers/
 │           ├── route.ts        # GET list + POST create custom layers
 │           ├── [id]/
@@ -45,10 +47,14 @@ src/
 ├── components/
 │   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, layerVisibility,
 │   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId, infoPanelData, selectedDay,
-│   │                           #   routePanelOpen, plannedRoute, routeProfile, routeWaypoints, addingWaypoint, routePanelRef
-│   ├── RoutePanel.tsx          # 'use client' forwardRef — floating route planning panel (bottom-40 left-4);
+│   │                           #   routePanelOpen, plannedRoute, routeProfile, routeWaypoints, addingWaypoint, routePanelRef,
+│   │                           #   routeIntelligence, focusedHazard; handleHazardsChange + handleHazardFocus build InfoPanel rows
+│   ├── RoutePanel.tsx          # 'use client' forwardRef — floating route planning panel (bottom center);
 │   │                           #   exposes addWaypoint(coords) via RoutePanelHandle; debounced POST /api/route-plan;
-│   │                           #   profile selector, waypoint list (up/down/remove), leg accordion
+│   │                           #   profile selector, vehicle preset selector (Infantry/Wheeled APC/IFV/MBT/Custom) with
+│   │                           #   editable mass/axle/bogie/height/width fields; waypoint list (drag/remove); leg accordion;
+│   │                           #   route assessment section: debounced POST /api/route-intelligence (600 ms after route set),
+│   │                           #   passable/impassable summary, severity-colored hazard rows (click → onHazardFocus)
 │   ├── WeatherWidget.tsx       # 'use client' — fetches /api/weather, shows avg temp ± spread + rain stats
 │   ├── DatePicker.tsx          # 'use client' — two <select> dropdowns (month/day) with leap-year day clamping
 │   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
@@ -58,13 +64,18 @@ src/
 │   ├── InfoPanel.tsx           # 'use client' — generic right-side info panel; accepts InfoPanelData {title, rows, component?} | null
 │   ├── DrawingToolbar.tsx      # 'use client' — floating top-right tool palette (Point/Line/Polygon/Rectangle) + 8-colour palette
 │   ├── FeatureDialog.tsx       # 'use client' — modal: name + description for a newly drawn feature
-│   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control, visibility sync effect
+│   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control, visibility sync effect;
+│   │                           #   route-hazards-source + three circle layers (critical/warning/info); useEffect([routeHazards]) syncs GeoJSON;
+│   │                           #   useEffect([focusedHazard]) calls map.flyTo + places color-coded Marker (hazardFocusMarkerRef)
 │   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
 ├── lib/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
 │   ├── layers.ts               # LayerKey, LayerVisibility, DEFAULT_LAYER_VISIBILITY, LAYER_GROUPS
 │   ├── customLayers.ts         # CustomLayer, CustomFeature, DrawingTool types; COLOUR_PALETTE (8 colours); DEFAULT_LAYER_COLOUR
-│   ├── routing.ts              # RouteProfile, Waypoint, PlannedRoute types; PROFILE_COLORS map; formatDuration/formatDistance/profileLabel helpers
+│   ├── routing.ts              # RouteProfile, Waypoint, PlannedRoute, RouteLeg, RouteStep types; PROFILE_COLORS map;
+│   │                           #   VehicleProfile, VEHICLE_PRESETS (Infantry/Wheeled APC/IFV/MBT/Custom);
+│   │                           #   HazardSeverity, RouteHazard, RouteIntelligence types;
+│   │                           #   formatDuration/formatDistance/profileLabel helpers
 │   ├── milsymbol.ts            # createMilsymbolImage(opts) — NATO SIDC → SVG → HTMLImageElement (async)
 │   ├── ai.ts                   # createAIClient() factory + CM_MODEL constant — ConfidentialMind OpenAI-compatible client
 │   └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
@@ -74,6 +85,7 @@ src/
     ├── setup.ts                # @testing-library/jest-dom global matchers
     ├── api/
     │   ├── route-plan.test.ts  # POST /api/route-plan — validation, Mapbox proxy, 503/502/404/200
+│   │   ├── route-intelligence.test.ts  # POST /api/route-intelligence — validation, road/bridge hazard rules, Infantry mass-skip, sorting, 503/500
     │   ├── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
     │   ├── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
     │   ├── weather.test.ts     # GET /api/weather — params validation, aggregate stats, NULL precip, DB degradation
@@ -90,12 +102,12 @@ src/
     │   ├── areas.test.ts       # AOI bbox validity, center-within-bbox, description presence
     │   ├── layers.test.ts      # LayerKey completeness, DEFAULT_LAYER_VISIBILITY defaults, LAYER_GROUPS mappings
     │   ├── milsymbol.test.ts   # createMilsymbolImage — data URL format, option passthrough, onerror rejection
-    │   ├── routing.test.ts     # formatDuration, formatDistance, profileLabel, PROFILE_COLORS
+    │   ├── routing.test.ts     # formatDuration, formatDistance, profileLabel, PROFILE_COLORS, VEHICLE_PRESETS
     │   └── customLayers.test.ts # COLOUR_PALETTE completeness/uniqueness, type shapes, milsymbol extensibility
     └── components/
-        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain, elevation click, route layer, waypoint markers
-        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel + WeatherWidget + DatePicker + RoutePanel)
-        ├── RoutePanel.test.tsx # waypoint add/remove/reorder, profile switch, fetch trigger, leg accordion, loading/error
+        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain, elevation click, route layer, waypoint markers, hazard circle layers, flyTo + marker on focusedHazard
+        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel + WeatherWidget + DatePicker + RoutePanel); intelligence + focusedHazard wiring
+        ├── RoutePanel.test.tsx # waypoint add/remove/reorder, profile switch, fetch trigger, leg accordion, loading/error; vehicle preset selector, intelligence fetch, hazard list, onHazardFocus
         ├── LayerPanel.test.tsx # checkbox render, onToggle calls, collapse/expand
         ├── AreaNav.test.tsx    # button render + onSelect callback tests
         ├── ElectionPieChart.test.tsx  # SVG slices, < 2% grouping, single-slice circle, empty data, party colors
@@ -126,8 +138,8 @@ src/
   - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`, `InfoPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
 - **AI route**: `POST /api/ai` accepts `{ messages: ChatCompletionMessageParam[], maxTokens?: number, temperature?: number }` and returns `{ content: string, model: string, usage: {promptTokens, completionTokens, totalTokens} | null }`. Uses the `openai` npm SDK with a custom `baseURL` (`CM_BASE_URL + "/v1"`) to call ConfidentialMind's Gemma-4 endpoint. Returns 503 when `CM_BASE_URL`/`CM_API_KEY` are absent, 502 on `OpenAI.APIError`, 400 on bad input. `src/lib/ai.ts` exports `createAIClient()` (factory, not singleton) and `CM_MODEL` constant. No `NEXT_PUBLIC_` prefix — credentials never reach the browser.
-- **Coverage summary (last run — 386 tests)**: All API routes 100% (`route-plan/route.ts` 100%), all lib modules 100% (`routing.ts` 100%, `ai.ts` 100%), `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `ElectionPieChart.tsx` 100% stmts/lines, `RoutePanel.tsx` ~97%, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~93%, `MapView.tsx` ~86% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
-- **RoutePanel debounce testing**: Uses `vi.advanceTimersByTimeAsync(400)` (not the sync variant) inside `act()` to properly flush microtasks after the debounced async fetch inside `setTimeout`.
+- **Coverage summary (last run — 437 tests)**: All API routes 100% except `route-intelligence/route.ts` ~96% (uncovered: empty-body edge at lines 110–111 and non-ok early return at 199–200). All lib modules 100% (`routing.ts` 100% including new vehicle/hazard types, `ai.ts` 100%). `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `ElectionPieChart.tsx` 100% stmts/lines, `RoutePanel.tsx` ~98.6%, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~86%, `MapView.tsx` ~86% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **RoutePanel debounce testing**: Uses `vi.advanceTimersByTimeAsync(400)` for route fetch and `vi.advanceTimersByTimeAsync(600)` for intelligence fetch inside `act()` to properly flush microtasks after the debounced async fetch inside `setTimeout`.
 
 ## Key Patterns
 
@@ -167,6 +179,15 @@ src/
 - **Waypoint placement flow**: `RoutePanel` → `onAddingWaypointChange(true)` → `MapWithNav.addingWaypoint=true` → `MapView` cursor=crosshair + `addingWaypointRef=true`. Map click fires `onWaypointClick([lng,lat])` → `MapWithNav.handleWaypointClick` → `routePanelRef.current.addWaypoint(coords)` + `setAddingWaypoint(false)`.
 - **MapView route layer**: `route-source` (GeoJSON, empty at init) + `route-line` (line, width 5, slot `top`) added in `style.load`. `useEffect([plannedRoute, routeProfile])` updates source data and repaints line color via `setPaintProperty`. `useEffect([routeWaypoints])` creates/destroys numbered `mapboxgl.Marker` elements. Markers cleaned up on unmount.
 - **Waypoint intercept**: The existing general `map.on("click", …)` elevation handler checks `addingWaypointRef.current` first. If true, fires `onWaypointClickRef.current([lng, lat])` and returns — elevation fetch is skipped.
+
+### Route Intelligence (Phase 2)
+
+- **`src/lib/routing.ts` additions**: `VehicleProfile` interface + `VEHICLE_PRESETS` (Infantry, Wheeled APC, IFV/BMP-type, MBT/tank, Custom). `HazardSeverity` (`critical|warning|info`), `RouteHazard`, `RouteIntelligence` types.
+- **`POST /api/route-intelligence`**: accepts `{ routeGeometry: GeoJSON.LineString, vehicle: VehicleProfile }`. Runs two PostGIS queries in parallel — roads (`ST_DWithin(geom::geography, route_geom::geography, 20)`, `DISTINCT ON (link_id)`, LIMIT 500) and bridges (`ST_DWithin`, 50 m buffer). Classifies each row against vehicle profile: 10 road rules (mass/bogie/axle/width/height limits, damage, condition class, rut depth, pavement) and 5 bridge rules (vehicle/bogie/axle mass, height, status). Infantry (`mass_t=0`) skips all mass-based checks. Sorts CRITICAL→WARNING→INFO. Returns `{ hazards[], summary: { critical, warning, info, passable } }`. 503 when `DATABASE_URL` absent, 400 on bad input.
+- **`RoutePanel` vehicle section**: `<select>` with 5 presets auto-fills 5 editable `<input type="number">` fields (mass/axle/bogie/height/width). Editing any field switches preset to "Custom".
+- **`RoutePanel` Route Assessment section**: `useEffect([route, vehicle])` debounced 600 ms — fetches `POST /api/route-intelligence` when route is set. Shows passable (green) or impassable (red) summary. Severity-colored hazard rows (clickable → `onHazardFocus`). Clearing intelligence is handled by the route-fetch effect's early return (waypoints < 2) and the intelligence effect's callback-only early return when `!route`.
+- **`MapWithNav` intelligence state**: `routeIntelligence: RouteIntelligence | null`, `focusedHazard: RouteHazard | null`. `handleHazardsChange` sets intelligence and clears `focusedHazard` when null. `handleHazardFocus` sets `focusedHazard` and builds InfoPanel rows (bridge: name/mass/height/status; road: mass/width/condition). InfoPanel `onClose` clears `focusedHazard`.
+- **`MapView` hazard layers**: `route-hazards-source` (GeoJSON) + three circle layers (`route-hazards-critical` red r=8, `route-hazards-warning` amber r=6, `route-hazards-info` slate r=5), all slot `top`. `useEffect([routeHazards])` converts array to `FeatureCollection`. `useEffect([focusedHazard])` calls `map.flyTo({ center, zoom: 15, duration: 800 })` and places a color-coded `mapboxgl.Marker` (`hazardFocusMarkerRef`); removed on next focus change or unmount.
 
 ## Collaborative Drawing Layers
 
