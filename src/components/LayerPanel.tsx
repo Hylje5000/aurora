@@ -145,7 +145,7 @@ export default function LayerPanel({
           />
           <LayerRow
             label="Coverage Circles"
-            dotColor="#06b6d4"
+            dotColor="#f97316"
             checked={visibility.cellCoverageCircles}
             onToggle={() => onToggle("cellCoverageCircles")}
           />

@@ -630,10 +630,11 @@ export default function MapView({
         id: "cell-towers-clusters",
         type: "circle",
         source: "cell-towers-source",
+        slot: "top",
         filter: ["has", "point_count"],
         layout: { visibility: clustersVisible ? "visible" : "none" },
         paint: {
-          "circle-color": "#94a3b8",
+          "circle-color": "#f97316",
           "circle-radius": [
             "step",
             ["get", "point_count"],
@@ -644,6 +645,8 @@ export default function MapView({
             24,
           ],
           "circle-opacity": 0.85,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
         },
       });
 
@@ -652,6 +655,7 @@ export default function MapView({
         id: "cell-towers-cluster-count",
         type: "symbol",
         source: "cell-towers-source",
+        slot: "top",
         filter: ["has", "point_count"],
         layout: {
           visibility: clustersVisible ? "visible" : "none",
@@ -710,6 +714,7 @@ export default function MapView({
           id,
           type: "symbol",
           source: "cell-towers-source",
+          slot: "top",
           filter: [
             "all",
             ["!", ["has", "point_count"]],
@@ -1532,13 +1537,13 @@ export default function MapView({
         id: "coverage-circles-fill",
         type: "fill",
         source: "coverage-circles-source",
-        slot: "bottom",
+        slot: "middle",
         layout: {
           visibility: DEFAULT_LAYER_VISIBILITY.cellCoverageCircles
             ? "visible"
             : "none",
         },
-        paint: { "fill-color": "#3b82f6", "fill-opacity": 0.07 },
+        paint: { "fill-color": "#f97316", "fill-opacity": 0.15 },
       });
       map.addLayer({
         id: "coverage-circles-line",
@@ -1551,9 +1556,9 @@ export default function MapView({
             : "none",
         },
         paint: {
-          "line-color": "#3b82f6",
-          "line-width": 1,
-          "line-opacity": 0.3,
+          "line-color": "#f97316",
+          "line-width": 1.5,
+          "line-opacity": 0.55,
         },
       });
 
