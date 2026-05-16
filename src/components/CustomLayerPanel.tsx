@@ -65,44 +65,31 @@ export function CustomLayerSection({
               style={{ backgroundColor: layer.color }}
             />
 
-            {/* Name + pencil — click to activate drawing on this layer */}
+            {/* Layer name — not clickable */}
+            <span className="flex-1 text-xs font-mono text-slate-300 truncate">
+              {layer.name}
+            </span>
+
+            {/* Explicit draw/stop button */}
             <button
               onClick={() =>
                 onSetActiveDrawingLayer(
                   activeDrawingLayerId === layer.id ? null : layer.id,
                 )
               }
-              className={`flex-1 flex items-center gap-1.5 min-w-0 text-left text-xs font-mono transition-colors ${
+              className={`flex-shrink-0 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded transition-colors ${
                 activeDrawingLayerId === layer.id
-                  ? "text-white"
-                  : "text-slate-300 hover:text-white"
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-600/40"
               }`}
               title={
                 activeDrawingLayerId === layer.id
-                  ? "Click to stop drawing on this layer"
-                  : "Click to draw on this layer"
+                  ? "Stop drawing on this layer"
+                  : "Draw on this layer"
               }
               data-testid={`layer-name-${layer.id}`}
             >
-              <span className="truncate">{layer.name}</span>
-              {/* SVG pencil — scales cleanly unlike Unicode ✏ */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${
-                  activeDrawingLayerId === layer.id
-                    ? "text-blue-400"
-                    : "text-slate-500"
-                }`}
-                aria-label={
-                  activeDrawingLayerId === layer.id
-                    ? "Active drawing layer"
-                    : "Click to draw"
-                }
-              >
-                <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L2.046 11.48a.75.75 0 0 0-.197.417l-.458 3.44a.75.75 0 0 0 .83.83l3.44-.458a.75.75 0 0 0 .418-.197l8.966-8.966a1.75 1.75 0 0 0 0-2.475ZM11.72 3.574l.707.707L5.03 11.677l-1.773.236.236-1.772 7.396-7.396.832-.17Zm-1.415-.707.707.707-.025.025-.707-.707.025-.025Z" />
-              </svg>
+              {activeDrawingLayerId === layer.id ? "Stop" : "Edit"}
             </button>
 
             {/* Delete */}
