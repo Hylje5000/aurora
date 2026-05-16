@@ -62,6 +62,15 @@ export default function MapWithNav() {
     useState<RouteIntelligence | null>(null);
   const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
 
+  // Whenever infoPanelData becomes non-null (any municipality/elevation click),
+  // guarantee the panel is uncollapsed and route panel is collapsed.
+  useEffect(() => {
+    if (infoPanelData) {
+      setInfoPanelCollapsed(false);
+      setRoutePanelExpanded(false);
+    }
+  }, [infoPanelData]);
+
   // Fetch all custom layers on mount
   useEffect(() => {
     fetch("/api/custom-layers")
@@ -108,11 +117,6 @@ export default function MapWithNav() {
 
   function handleInfoPanel(data: InfoPanelData | null) {
     setInfoPanelData(data);
-    if (data) {
-      // Opening info panel → collapse route panel
-      setInfoPanelCollapsed(false);
-      setRoutePanelExpanded(false);
-    }
   }
 
   function handleInfoPanelCollapsedChange(collapsed: boolean) {

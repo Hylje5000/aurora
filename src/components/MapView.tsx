@@ -435,6 +435,10 @@ export default function MapView({
   const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const elevationPopupRef = useRef<mapboxgl.Popup | null>(null);
 
+  // Always-current ref for onInfoPanel — style.load closure would otherwise capture stale prop
+  const onInfoPanelRef = useRef(onInfoPanel);
+  onInfoPanelRef.current = onInfoPanel;
+
   // Route layer refs
   const addingWaypointRef = useRef(addingWaypoint);
   const onWaypointClickRef = useRef(onWaypointClick);
@@ -1177,7 +1181,7 @@ export default function MapView({
           ? (JSON.parse(rawElection) as Record<string, number>)
           : null;
 
-        onInfoPanel?.({
+        onInfoPanelRef.current?.({
           title: name,
           rows,
           component: electionData ? (

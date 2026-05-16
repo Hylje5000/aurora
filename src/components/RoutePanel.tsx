@@ -343,7 +343,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             Route Planning
           </span>
           <button
-            onClick={() => setPanelExpanded((e) => !e)}
+            onClick={() => setPanelExpanded(!panelExpanded)}
             aria-label={
               panelExpanded ? "collapse route panel" : "expand route panel"
             }
