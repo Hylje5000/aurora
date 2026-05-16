@@ -406,6 +406,9 @@ export default function MapView({
   const activeDrawingToolRef = useRef<DrawingTool | null>(null);
   const pendingDrawFeatureRef = useRef<GeoJSON.Feature | null>(null);
 
+  // Elevation marker
+  const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
+
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
   const enabledCustomLayerIdsRef = useRef<Set<string>>(enabledCustomLayerIds);
@@ -1096,7 +1099,11 @@ export default function MapView({
             "municipality-highlight-source",
           ) as mapboxgl.GeoJSONSource
         ).setData({ type: "FeatureCollection", features: [f] });
-        startHighlightAnimation(map, highlightAnimFrameRef, highlightAnimStepRef);
+        startHighlightAnimation(
+          map,
+          highlightAnimFrameRef,
+          highlightAnimStepRef,
+        );
       });
 
       // Cursor handlers for infrastructure
@@ -1135,6 +1142,52 @@ export default function MapView({
           fetchLayer(map, "bridges-source", "/api/bridges");
         }
         fetchLayer(map, "railways-source", "/api/railways");
+
+        // Elevation click — fires on every map click (general handler, no layer filter)
+        map.on("click", async (e) => {
+          const { lng, lat } = e.lngLat;
+          elevationMarkerRef.current?.remove();
+          elevationMarkerRef.current = null;
+          try {
+            const res = await fetch(
+              `/api/elevation?lng=${lng.toFixed(6)}&lat=${lat.toFixed(6)}`,
+            );
+            if (!res.ok) return;
+            const data = (await res.json()) as {
+              elevation_m: number | null;
+              aoi_id?: string;
+              dist_m?: number;
+            };
+            if (data.elevation_m === null) {
+              onInfoPanel?.(null);
+              return;
+            }
+            const el = document.createElement("div");
+            el.style.cssText =
+              "width:14px;height:14px;border-radius:50%;" +
+              "background:#facc15;border:2px solid #fff;" +
+              "box-shadow:0 0 6px rgba(0,0,0,0.6);";
+            elevationMarkerRef.current = new mapboxgl.Marker({ element: el })
+              .setLngLat([lng, lat])
+              .addTo(map);
+            onInfoPanel?.({
+              title: "Terrain Elevation",
+              rows: [
+                ["Elevation", `${data.elevation_m.toFixed(1)} m`],
+                ["Coordinates", `${lat.toFixed(4)}°N  ${lng.toFixed(4)}°E`],
+                ["AOI", data.aoi_id ?? "—"],
+                ["Source", "NLS Finland DEM (50 m)"],
+                [
+                  "Source dist",
+                  data.dist_m != null ? `${data.dist_m.toFixed(0)} m` : "—",
+                ],
+              ],
+            });
+          } catch {
+            // Elevation is supplementary — fail silently
+          }
+        });
+
         eventsAttachedRef.current = true;
       }
 
@@ -1146,6 +1199,8 @@ export default function MapView({
       if (highlightAnimFrameRef.current !== null) {
         cancelAnimationFrame(highlightAnimFrameRef.current);
       }
+      elevationMarkerRef.current?.remove();
+      elevationMarkerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;
@@ -1325,12 +1380,12 @@ export default function MapView({
       cancelAnimationFrame(highlightAnimFrameRef.current);
       highlightAnimFrameRef.current = null;
     }
+    elevationMarkerRef.current?.remove();
+    elevationMarkerRef.current = null;
     const map = mapRef.current;
     if (map && styleLoadedRef.current) {
       (
-        map.getSource(
-          "municipality-highlight-source",
-        ) as mapboxgl.GeoJSONSource
+        map.getSource("municipality-highlight-source") as mapboxgl.GeoJSONSource
       )?.setData(EMPTY_COLLECTION);
     }
   }, [infoPanelOpen]);
