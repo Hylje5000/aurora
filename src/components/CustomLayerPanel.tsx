@@ -59,16 +59,6 @@ export function CustomLayerSection({
       {layers.map((layer) => (
         <div key={layer.id} className="flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5">
-            {/* Visibility toggle */}
-            <input
-              type="checkbox"
-              checked={enabledLayerIds.has(layer.id)}
-              onChange={() => onToggleLayer(layer.id)}
-              className="w-3.5 h-3.5 accent-emerald-500 cursor-pointer flex-shrink-0"
-              aria-label={`Toggle ${layer.name}`}
-              data-testid={`layer-toggle-${layer.id}`}
-            />
-
             {/* Colour dot */}
             <span
               className="w-2 h-2 rounded-full flex-shrink-0"
@@ -120,11 +110,21 @@ export function CustomLayerSection({
             >
               ✕
             </button>
+
+            {/* Visibility toggle — right side, matching regular layer rows */}
+            <input
+              type="checkbox"
+              checked={enabledLayerIds.has(layer.id)}
+              onChange={() => onToggleLayer(layer.id)}
+              className="w-3.5 h-3.5 accent-emerald-500 cursor-pointer flex-shrink-0"
+              aria-label={`Toggle ${layer.name}`}
+              data-testid={`layer-toggle-${layer.id}`}
+            />
           </div>
 
           {/* Inline delete confirm */}
           {confirmDeleteId === layer.id && (
-            <div className="ml-5 flex gap-1 items-center mt-0.5">
+            <div className="ml-3 flex gap-1 items-center mt-0.5">
               <span className="text-[9px] text-red-400 font-mono">Delete?</span>
               <button
                 onClick={() => handleDeleteConfirm(layer.id)}
