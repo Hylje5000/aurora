@@ -944,6 +944,36 @@ describe("MapView", () => {
     expect(mockAddTo).toHaveBeenCalled();
   });
 
+  it("calls onInfoPanel (not Popup) when municipalities-fill is clicked", async () => {
+    const onInfoPanel = vi.fn();
+    render(<MapView onInfoPanel={onInfoPanel} />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+    expect(clickHandler).toBeDefined();
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "Rusko",
+            name_sv: "Rusko",
+            nat_code: "704",
+            aoi_id: "turku",
+          },
+        },
+      ],
+      lngLat: { lng: 22.1, lat: 60.5 },
+    });
+
+    expect(onInfoPanel).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Rusko / Rusko" }),
+    );
+    expect(MockPopup).not.toHaveBeenCalled();
+  });
+
   it("shows bridges-symbol popup when bridges-symbol layer is clicked", async () => {
     render(<MapView />);
     await fireStyleLoad();

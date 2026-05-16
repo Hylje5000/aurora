@@ -10,6 +10,7 @@ import {
   type LayerVisibility,
 } from "@/lib/layers";
 import { createMilsymbolImage } from "@/lib/milsymbol";
+import type { InfoPanelData } from "@/components/InfoPanel";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -18,6 +19,7 @@ interface MapViewProps {
   zoom?: number;
   selectedAreaId?: string | null;
   layerVisibility?: LayerVisibility;
+  onInfoPanel?: (data: InfoPanelData | null) => void;
 }
 
 function buildAoiCollection() {
@@ -145,6 +147,7 @@ export default function MapView({
   zoom = 7,
   selectedAreaId = null,
   layerVisibility = DEFAULT_LAYER_VISIBILITY,
+  onInfoPanel,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -721,15 +724,13 @@ export default function MapView({
         const name = p.name_sv
           ? `${p.name_fi} / ${p.name_sv}`
           : ((p.name_fi as string) ?? "Municipality");
-        new mapboxgl.Popup({ className: "aurora-popup" })
-          .setLngLat(e.lngLat)
-          .setHTML(
-            popupStyle(name, [
-              ["Code", p.nat_code],
-              ["Region", p.aoi_id],
-            ]),
-          )
-          .addTo(map);
+        onInfoPanel?.({
+          title: name,
+          rows: [
+            ["Code", p.nat_code as string],
+            ["Region", p.aoi_id as string],
+          ],
+        });
       });
 
       // Cursor handlers

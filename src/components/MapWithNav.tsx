@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import AreaNav from "./AreaNav";
 import MapView from "./MapView";
 import LayerPanel from "./LayerPanel";
+import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import {
   DEFAULT_LAYER_VISIBILITY,
   type LayerKey,
@@ -14,6 +15,9 @@ export default function MapWithNav() {
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(
     DEFAULT_LAYER_VISIBILITY,
+  );
+  const [infoPanelData, setInfoPanelData] = useState<InfoPanelData | null>(
+    null,
   );
 
   const handleToggle = useCallback((key: LayerKey) => {
@@ -26,8 +30,10 @@ export default function MapWithNav() {
       <MapView
         selectedAreaId={selectedAreaId}
         layerVisibility={layerVisibility}
+        onInfoPanel={setInfoPanelData}
       />
       <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
+      <InfoPanel data={infoPanelData} onClose={() => setInfoPanelData(null)} />
     </div>
   );
 }

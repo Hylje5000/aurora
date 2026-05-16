@@ -24,17 +24,31 @@ vi.mock("@/components/MapView", () => ({
   default: ({
     selectedAreaId,
     layerVisibility,
+    onInfoPanel,
   }: {
     selectedAreaId: string | null;
     layerVisibility: LayerVisibility;
+    onInfoPanel?: (data: unknown) => void;
   }) => (
     <div
       data-testid="map-view"
       data-selected={selectedAreaId ?? ""}
       data-terrain3d={String(layerVisibility?.terrain3d ?? "")}
       data-hillshade={String(layerVisibility?.hillshade ?? "")}
-    />
+    >
+      <button
+        onClick={() => onInfoPanel?.({ title: "Test Municipality", rows: [] })}
+      >
+        Trigger InfoPanel
+      </button>
+    </div>
   ),
+}));
+
+// Stub InfoPanel
+vi.mock("@/components/InfoPanel", () => ({
+  default: ({ data }: { data: { title: string } | null }) =>
+    data ? <div data-testid="info-panel">{data.title}</div> : null,
 }));
 
 // Stub LayerPanel — renders a button that calls onToggle("hillshade")
@@ -122,6 +136,22 @@ describe("MapWithNav", () => {
     expect(screen.getByTestId("map-view")).toHaveAttribute(
       "data-hillshade",
       "false",
+    );
+  });
+
+  it("renders InfoPanel in the component tree (hidden when no data)", () => {
+    render(<MapWithNav />);
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
+  });
+
+  it("shows InfoPanel when onInfoPanel is called from MapView", async () => {
+    render(<MapWithNav />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Trigger InfoPanel" }),
+    );
+    expect(screen.getByTestId("info-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("info-panel")).toHaveTextContent(
+      "Test Municipality",
     );
   });
 
