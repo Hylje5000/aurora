@@ -940,8 +940,8 @@ export default function MapView({
         layout: { visibility: vis.roads ? "visible" : "none" },
         paint: {
           "line-color": "#0f172a",
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 7],
-          "line-opacity": 0.65,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2, 14, 4],
+          "line-opacity": 0.45,
         },
       });
       map.addLayer({
@@ -965,8 +965,8 @@ export default function MapView({
             "#22c55e",
             "#94a3b8",
           ],
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 14, 4],
-          "line-opacity": 1.0,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 14, 2.5],
+          "line-opacity": 0.6,
         },
       });
 
