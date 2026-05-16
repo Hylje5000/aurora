@@ -6,7 +6,7 @@ We are building a web application for the Junction Defence Hackathon (Challenge 
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 (React), Tailwind CSS v4, Mapbox GL JS, milsymbol (NATO APP-6 military symbols).
+- **Frontend**: Next.js 16 (React), Tailwind CSS v4, Mapbox GL JS, milsymbol (NATO APP-6 military symbols), `@mapbox/mapbox-gl-draw` + `mapbox-gl-draw-rectangle-mode` for collaborative drawing.
 - **Router**: App Router (`src/app/`), TypeScript, Turbopack in dev.
 - **Backend**: Next.js API Routes (`src/app/api/`) for GeoJSON overlay queries and dashboard aggregations.
 - **Map Layer**: Mapbox standard vector tiles for terrain, roads, and basemap. Custom overlay layers rendered as GeoJSON via API routes.
@@ -24,35 +24,58 @@ src/
 │   └── api/
 │       ├── features/
 │       │   └── route.ts        # GET /api/features?bbox=... → GeoJSON FeatureCollection (stub)
-│       └── cell-towers/
-│           └── route.ts        # GET /api/cell-towers?bbox=... → GeoJSON FeatureCollection (cell_towers table)
+│       ├── cell-towers/
+│       │   └── route.ts        # GET /api/cell-towers?bbox=... → GeoJSON FeatureCollection (cell_towers table)
+│       └── custom-layers/
+│           ├── route.ts        # GET list + POST create custom layers
+│           ├── [id]/
+│           │   ├── route.ts    # DELETE custom layer (cascades features)
+│           │   └── features/
+│           │       ├── route.ts        # GET bbox features + POST create feature
+│           │       └── [fid]/
+│           │           └── route.ts    # PUT update + DELETE single feature
 ├── components/
-│   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId + layerVisibility, composes AreaNav + MapView + LayerPanel
+│   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, layerVisibility,
+│   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId
 │   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
 │   ├── LayerPanel.tsx          # 'use client' — floating bottom-left toggle panel for terrain/contour/landcover layers
-│   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain sources/layers, cell tower overlay, visibility sync effect
+│   ├── CustomLayerPanel.tsx    # 'use client' — floating bottom-right panel: create/toggle/delete custom drawing layers
+│   ├── DrawingToolbar.tsx      # 'use client' — floating top-right tool palette (Point/Line/Polygon/Rectangle) + 8-colour palette
+│   ├── FeatureDialog.tsx       # 'use client' — modal: name + description for a newly drawn feature
+│   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control
 │   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
 ├── lib/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
 │   ├── layers.ts               # LayerKey, LayerVisibility, DEFAULT_LAYER_VISIBILITY, LAYER_GROUPS
+│   ├── customLayers.ts         # CustomLayer, CustomFeature, DrawingTool types; COLOUR_PALETTE (8 colours); DEFAULT_LAYER_COLOUR
 │   ├── milsymbol.ts            # createMilsymbolImage(opts) — NATO SIDC → SVG → HTMLImageElement (async)
 │   └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
+├── types/
+│   └── mapbox-gl-draw-rectangle-mode.d.ts   # minimal type declaration for untyped rectangle mode plugin
 └── test/
     ├── setup.ts                # @testing-library/jest-dom global matchers
     ├── api/
     │   ├── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
-    │   └── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
+    │   ├── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
+    │   ├── custom-layers.test.ts            # GET list + POST create (mocked DB)
+    │   ├── custom-layers-id.test.ts         # DELETE layer (mocked DB)
+    │   ├── custom-layers-features.test.ts   # GET bbox + POST feature (mocked DB)
+    │   └── custom-layers-features-fid.test.ts  # PUT + DELETE feature (mocked DB)
     ├── lib/
     │   ├── db.test.ts          # pool singleton guard + query passthrough
     │   ├── areas.test.ts       # AOI bbox validity, center-within-bbox, description presence
     │   ├── layers.test.ts      # LayerKey completeness, DEFAULT_LAYER_VISIBILITY defaults, LAYER_GROUPS mappings
-│   └── milsymbol.test.ts   # createMilsymbolImage — data URL format, option passthrough, onerror rejection
+    │   ├── milsymbol.test.ts   # createMilsymbolImage — data URL format, option passthrough, onerror rejection
+    │   └── customLayers.test.ts # COLOUR_PALETTE completeness/uniqueness, type shapes, milsymbol extensibility
     └── components/
-        ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain
-        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel)
+        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), full coverage of layers, draw flow, custom layers
+        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel)
         ├── LayerPanel.test.tsx # checkbox render, onToggle calls, collapse/expand
         ├── AreaNav.test.tsx    # button render + onSelect callback tests
-        └── MapLoader.test.tsx  # next/dynamic stub
+        ├── MapLoader.test.tsx  # next/dynamic stub
+        ├── CustomLayerPanel.test.tsx  # layer list, toggle, create form, delete confirm
+        ├── DrawingToolbar.test.tsx    # tool buttons, colour swatches, cancel, delete selected
+        └── FeatureDialog.test.tsx     # name/description form, save/discard, keyboard shortcuts
 ```
 
 ## Testing
@@ -60,16 +83,19 @@ src/
 - **Framework**: Vitest 3 + `@testing-library/react` + jsdom. Config: `vitest.config.ts` (excluded from `tsconfig.json` to avoid Vite version conflicts).
 - **Scripts**: `npm test` (run once), `npm run test:watch`, `npm run test:coverage` (v8 provider).
 - **Mock strategy**:
-  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `addImage`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`, `setConfigProperty`, `setLayoutProperty`, `setTerrain`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
-  - `@/lib/milsymbol` — `vi.mock("@/lib/milsymbol", () => ({ createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())) }))` in MapView tests so the async image-loading step resolves immediately.
+  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `addImage`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`, `setConfigProperty`, `setLayoutProperty`, `setTerrain`, `removeLayer`, `removeSource`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
+  - `@mapbox/mapbox-gl-draw` — `vi.hoisted()` mock with `changeMode`, `delete`, `trash` fns; `.modes` static property. Uses `eslint-disable @typescript-eslint/no-explicit-any` because the library uses `export =` syntax incompatible with `typeof` mock casting.
+  - `mapbox-gl-draw-rectangle-mode` — `vi.mock(…, () => ({ default: {} }))`.
+  - `@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css` — `vi.mock(…, () => ({}))`.
+  - `@/lib/milsymbol` — `vi.mock("@/lib/milsymbol", () => ({ createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())) }))` in MapView tests.
   - `milsymbol` — `vi.mock("milsymbol", () => ({ default: { Symbol: MockSymbol } }))` in milsymbol.ts unit tests.
-  - `global.fetch` — mocked with `vi.fn()` in MapView tests to simulate cell tower API responses.
+  - `global.fetch` — mocked with `vi.fn()` in MapView and MapWithNav tests.
   - `@/lib/db` — `vi.mock("@/lib/db", () => ({ query: vi.fn() }))` in API route tests.
   - `pg` — `vi.mock("pg")` + `vi.resetModules()` / `delete globalThis._pgPool` in db tests.
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
-  - Child components (`AreaNav`, `MapView`, `LayerPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
+  - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 119 tests)**: `areas.ts` 100%, `db.ts` 100%, `layers.ts` 100%, `milsymbol.ts` 100%, `features/route.ts` 100%, `cell-towers/route.ts` 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` ~99% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 225 tests)**: All API routes ≥96%, all lib modules 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `CustomLayerPanel.tsx` ~98%, `MapWithNav.tsx` ~95%, `MapView.tsx` ~95% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -92,6 +118,46 @@ src/
 - **Cell tower source filtering**: `filterByEnabled(data, vis)` returns a new `FeatureCollection` containing only features whose `radio` property matches an enabled type (fast-path returns `data` unchanged when all four types are on). Raw fetched data is kept in `rawTowerDataRef`; `layerVisibilityRef` gives async `moveend` handlers access to the current toggle state without closing over a stale value.
 - **3D terrain**: When `layerVisibility.terrain3d` is true, `map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })` enables terrain extrusion. When false, `map.setTerrain(null)` flattens the map. Hillshade and contours remain readable in 2D mode.
 
+## Collaborative Drawing Layers
+
+### Database Schema (run `.local/setup_custom_layers.sql` to create)
+
+Two PostGIS tables:
+- **`custom_layers`**: `id UUID`, `name TEXT`, `description TEXT`, `color TEXT`, `created_at`, `updated_at`. One row per user-created named layer.
+- **`custom_features`**: `id UUID`, `layer_id UUID` (FK → cascade), `name TEXT`, `description TEXT`, `feature_type TEXT` (`Point|LineString|Polygon|Rectangle`), `geom GEOMETRY(Geometry,4326)`, `color TEXT`, `properties JSONB`, `created_at`, `updated_at`. GIST index on `geom`. The `properties` JSONB column is reserved for future military symbol data (SIDC, milsymbol options) without schema migration.
+
+### API Routes (`/api/custom-layers`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/custom-layers` | List all layers |
+| POST | `/api/custom-layers` | Create a layer |
+| DELETE | `/api/custom-layers/[id]` | Delete layer + cascade features |
+| GET | `/api/custom-layers/[id]/features?bbox=...` | Bbox-scoped feature fetch |
+| POST | `/api/custom-layers/[id]/features` | Create a feature (ST_GeomFromGeoJSON) |
+| PUT | `/api/custom-layers/[id]/features/[fid]` | Update name/description/color |
+| DELETE | `/api/custom-layers/[id]/features/[fid]` | Delete a single feature |
+
+All routes degrade gracefully (empty response / 503) when `DATABASE_URL` is absent.
+
+### Drawing System
+
+- **`@mapbox/mapbox-gl-draw`** integrated into `MapView` via `drawRef`. Rectangle mode via `mapbox-gl-draw-rectangle-mode` plugin registered as `draw_rectangle` mode.
+- **Draw control** is initialised in the one-shot `useEffect` after map load; `map.addControl(draw)` makes it SSR-safe since `MapView` is already inside `MapLoader`'s `next/dynamic({ ssr: false })`.
+- **Draw events**: `draw.create` → opens `FeatureDialog`; on save → `POST /api/custom-layers/[id]/features` → refresh source. On discard → `draw.delete(featureId)`. `draw.selectionchange` → `hasDrawingSelection` state → shows "Delete Selected" button in `DrawingToolbar`.
+- **Per-layer Mapbox sources**: Each custom layer gets a Mapbox GeoJSON source `custom-layer-<id>` with three rendering layers: `-fill` (Polygon), `-line` (LineString+Polygon outline), `-circle` (Point). All use `["get", "color"]` data-driven expressions for per-feature colour.
+- **Viewport-scoped loading**: Custom layer features are fetched only when a layer is enabled, using current map bbox. Re-fetched on every `moveend` for all enabled layers.
+- **Drawing tools**: Point (`draw_point`), Line (`draw_line_string`), Polygon (`draw_polygon`), Rectangle (`draw_rectangle`).
+- **Colour palette**: 8 military colours — Red `#ef4444`, Orange `#f97316`, Yellow `#eab308`, Green `#22c55e`, Blue `#3b82f6`, Cyan `#06b6d4`, White `#f8fafc`, Purple `#a855f7`. Stored per feature in `custom_features.color`.
+
+### State Ownership
+
+- **`MapWithNav`** owns: `customLayers[]`, `enabledCustomLayerIds: Set<string>`, `activeDrawingLayerId: string|null`. Fetches layer list on mount. Handles `onCreateLayer`/`onDeleteLayer`/`onToggleLayer`/`onSetActiveDrawingLayer`/`onCancelDrawing`.
+- **`MapView`** owns internally: `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`, `dialogOpen`. Renders `DrawingToolbar` and `FeatureDialog` inside its own container (positioned absolutely within `relative w-full h-full` wrapper).
+- **`CustomLayerPanel`** (bottom-right): collapsible list with toggle checkbox, colour dot, active-drawing selector (click layer name), inline delete confirm, inline create form.
+- **`DrawingToolbar`** (top-right, only when a drawing layer is active): tool buttons, colour swatches, cancel button, "Delete Selected" (when Draw control has a selection).
+- **`FeatureDialog`**: modal that appears after `draw.create`; Name + Description fields; Save → POST to API; Discard → `draw.delete`.
+
 ## Environment Variables
 
 | Variable                   | Where used                                   |
@@ -105,15 +171,17 @@ Set both in `.env.local` (git-ignored).
 
 - **Base Map Layers (Terrain, General Roads, Elevation)**: Rendered natively via Mapbox's built-in standard vector tile APIs. No self-hosted tile server needed.
 - **Custom Overlay Layers (Cell Towers, Medical Facilities, Units, POIs)**: Fetched as GeoJSON from dedicated API routes (`/api/cell-towers`, `/api/features`, etc.) and rendered by Mapbox GL JS on the client. Cell towers are live — fetched on every viewport change.
+- **Collaborative Drawing Layers**: User-created named layers stored in PostGIS. Features drawn with `@mapbox/mapbox-gl-draw`, saved to `custom_features` table, and loaded on-demand per viewport when a layer is enabled.
 - **Dynamic Dashboard**: As the user pans/zooms, the frontend passes the bounding box to API routes to query PostGIS for summary statistics (population, bridge capacity, etc.).
 
 ## Key Features to Implement
 
 1. **Interactive Map Layer**: Critical infrastructure, terrain features (GO / SLOW GO / NO GO), weather impacts.
 2. **Dynamic Viewport Clustering**: Mapbox native `cluster: true` for dense point layers (cell towers implemented; demographics pending).
-3. **Military Symbology**: `milsymbol` library for NATO APP-6 / US MIL-STD-2525 icons — **implemented for cell towers** (SIDC `SFGPUUSR-------`, colour-coded per radio type). Pending: unit markers, infrastructure icons.
-4. **Chokepoint & Logistics Analysis**: Road segments with bridge weight/height limits for heavy armour / convoy routing.
-5. **Explainability Panel**: UI showing active data sources and timestamps for analyst trust.
+3. **Military Symbology**: `milsymbol` library for NATO APP-6 / US MIL-STD-2525 icons — **implemented for cell towers** (SIDC `SFGPUUSR-------`, colour-coded per radio type). Pending: unit markers on custom layers (SIDC field in `custom_features.properties` JSONB ready).
+4. **Collaborative Drawing**: **Implemented** — custom named layers with Point/Line/Polygon/Rectangle drawing, per-feature colours, free-text annotation, shared across all users via PostGIS.
+5. **Chokepoint & Logistics Analysis**: Road segments with bridge weight/height limits for heavy armour / convoy routing.
+6. **Explainability Panel**: UI showing active data sources and timestamps for analyst trust.
 
 ## Primary Open-Source Data Sources
 

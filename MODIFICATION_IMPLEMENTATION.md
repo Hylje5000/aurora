@@ -6,6 +6,8 @@
 
 **Phase 1 (2026-05-16):** Created `.local/setup_custom_layers.sql` (gitignored, for manual DB setup), `src/lib/customLayers.ts` (types + palette), and 10 unit tests. 129 tests pass. Discovered `.local/` is in `.gitignore` — SQL script will not be committed, only lives locally for the user to run.
 
+**Phase 6 (2026-05-16):** Coverage run: 225 tests, 95.23% stmts overall. All API routes ≥96%, all lib modules 100%, all new UI components ≥95%. Updated CLAUDE.md with full drawing system documentation. Cleanup committed.
+
 **Phase 5 (2026-05-16):** Updated MapWithNav with customLayers/enabledCustomLayerIds/activeDrawingLayerId state, fetch on mount, and CRUD handlers. Added CustomLayerPanel. Extended MapView stub and added 6 new MapWithNav tests. 225 tests pass.
 
 **Phase 4 (2026-05-16):** Integrated MapboxDraw into MapView with DrawRectangle plugin. Added per-layer Mapbox sources/layers (fill/line/circle with data-driven colour). Wired FeatureDialog and DrawingToolbar inside MapView JSX. Added 13 new MapView tests (Draw init, custom layer sources, draw.create→FeatureDialog flow, discard, cancel, delete, enabledCustomLayerIds fetch/clear, moveend refetch). Lessons: (1) `export = MapboxDraw` in types requires `any` cast for mock; (2) `setState` inside `useEffect` blocked by `react-hooks/set-state-in-effect` — solved by computing `effectiveTool = activeDrawingLayerId ? activeDrawingTool : null` as a derived value; (3) ref cleanup warning fixed by capturing ref value before returning from effect. 219 tests pass.
