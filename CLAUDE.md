@@ -26,6 +26,8 @@ src/
 │       │   └── route.ts        # GET /api/features?bbox=... → GeoJSON FeatureCollection (stub)
 │       ├── cell-towers/
 │       │   └── route.ts        # GET /api/cell-towers?bbox=... → GeoJSON FeatureCollection (cell_towers table)
+│       ├── weather/
+│       │   └── route.ts        # GET /api/weather?region&month&day → WeatherStats JSON (weather_observations table)
 │       └── custom-layers/
 │           ├── route.ts        # GET list + POST create custom layers
 │           ├── [id]/
@@ -36,7 +38,9 @@ src/
 │           │           └── route.ts    # PUT update + DELETE single feature
 ├── components/
 │   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, layerVisibility,
-│   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId, infoPanelData
+│   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId, infoPanelData, selectedDay
+│   ├── WeatherWidget.tsx       # 'use client' — fetches /api/weather, shows avg temp ± spread + rain stats
+│   ├── DatePicker.tsx          # 'use client' — two <select> dropdowns (month/day) with leap-year day clamping
 │   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
 │   ├── LayerPanel.tsx          # 'use client' — floating bottom-left toggle panel for terrain/contour/landcover layers
 │   ├── CustomLayerPanel.tsx    # 'use client' — floating bottom-right panel: create/toggle/delete custom drawing layers
@@ -58,6 +62,7 @@ src/
     ├── api/
     │   ├── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
     │   ├── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
+    │   ├── weather.test.ts     # GET /api/weather — params validation, aggregate stats, NULL precip, DB degradation
     │   ├── custom-layers.test.ts            # GET list + POST create (mocked DB)
     │   ├── custom-layers-id.test.ts         # DELETE layer (mocked DB)
     │   ├── custom-layers-features.test.ts   # GET bbox + POST feature (mocked DB)
@@ -70,11 +75,13 @@ src/
     │   └── customLayers.test.ts # COLOUR_PALETTE completeness/uniqueness, type shapes, milsymbol extensibility
     └── components/
         ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain
-        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel)
+        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel + WeatherWidget + DatePicker)
         ├── LayerPanel.test.tsx # checkbox render, onToggle calls, collapse/expand
         ├── AreaNav.test.tsx    # button render + onSelect callback tests
         ├── InfoPanel.test.tsx  # null data, title/row render, — fallback, onClose callback
         ├── MapLoader.test.tsx  # next/dynamic stub
+        ├── WeatherWidget.test.tsx     # loading, stats display, sampleSize=0 fallback, refetch on prop change
+        ├── DatePicker.test.tsx        # month/day selects, onChange, day clamping, option counts
         ├── CustomLayerPanel.test.tsx  # layer list, toggle, create form, delete confirm
         ├── DrawingToolbar.test.tsx    # tool buttons, colour swatches, cancel, delete selected
         └── FeatureDialog.test.tsx     # name/description form, save/discard, keyboard shortcuts
@@ -97,7 +104,7 @@ src/
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
   - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`, `InfoPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 225 tests)**: All API routes ≥96%, all lib modules 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `CustomLayerPanel.tsx` ~98%, `MapWithNav.tsx` ~95%, `MapView.tsx` ~95% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 279 tests)**: All API routes ≥96%, all lib modules 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~97%, `MapView.tsx` ~83% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -112,6 +119,9 @@ src/
 - **Cell tower overlay**: On `style.load` (async callback), `MapView` adds `cell-towers-source` (GeoJSON, `cluster:true`, `clusterMaxZoom:14`, `clusterRadius:50`) and six layers: `cell-towers-clusters` (circle, color `#94a3b8`), `cell-towers-cluster-count` (symbol), plus four per-radio-type **symbol** layers — `cell-towers-gsm`, `cell-towers-umts`, `cell-towers-lte`, `cell-towers-cdma` — each using a NATO milsymbol icon registered via `map.addImage()`. Icons are generated by `createMilsymbolImage` (SIDC `SFGPUUSR-------`, Friendly Ground Signal Radio Unit) with friendly blue `fillColor` (`#3b82f6`) and `uniqueDesignation` text (GSM/UMTS/LTE/CDMA). The four images are loaded in parallel via `Promise.all` before the layers are added. The two cluster layers start hidden if all four cell-type toggles are off. `fetchCellTowers(map, rawDataRef, visRef)` is called immediately after `style.load` and on every `moveend`; it fetches `/api/cell-towers?bbox=...`, stores the raw `FeatureCollection` in `rawTowerDataRef`, then pushes a filtered copy (via `filterByEnabled`) to the source so cluster counts only reflect enabled radio types.
 - **Cell tower popup**: Clicking any of the four per-type layers opens a `mapboxgl.Popup` showing radio type, AOI, estimated range (m), and average signal (dBm). Cursor changes to `pointer` on hover.
 - **InfoPanel**: Generic right-side panel (`absolute right-4 top-1/2 -translate-y-1/2`) driven by `InfoPanelData { title: string; rows: [string, string|null|undefined][] }`. `MapWithNav` owns `infoPanelData` state and passes `onInfoPanel={setInfoPanelData}` to `MapView`. Currently used for municipality clicks; any future layer can open it by calling `onInfoPanel?.({title, rows})`. Dismissed via the `×` button (`aria-label="close info panel"`).
+- **Weather widget**: When `selectedAreaId !== null`, `MapWithNav` renders a `WeatherWidget` + `DatePicker` block (`absolute left-4 top-16 z-10`). `selectedDay` state (default: today's month/day) is shared between them. `WeatherWidget` fetches `/api/weather?region&month&day` on prop change via `useEffect` + `AbortController`; shows avg temp ± spread, ↑max/↓min, rain probability %, avg mm on wet days. Falls back to "No data" when `sampleSize === 0`. `DatePicker` renders two `<select>` dropdowns (Month Jan–Dec, Day 1–31 clamped to month max); Feb max is 29 to allow leap years.
+- **Weather API**: `GET /api/weather?region=turku|karjala|lappi&month=1-12&day=1-31` — runs a single aggregate SQL over `weather_observations` table. `COUNT(precip_mm)` (non-NULL only) gives rain probability; `-1` precip was converted to `NULL` at ingestion so the SQL needs no special handling. Returns `WeatherStats` JSON; degrades gracefully to zeroed stats (200) when DB is absent or throws.
+- **Weather DB table**: `weather_observations` — columns `id, region_id, year, month, day, precip_mm (nullable), mean_temp, max_temp, min_temp`. Index on `(region_id, month, day)`. Ingested via `scripts/ingest_weather.py` from `data/weather/{region}_weather.csv` (FMI station data 2016–2026). `-1` precip stored as NULL; rows with missing temperature readings skipped.
 - **Layer toggle system**: `src/lib/layers.ts` exports `LayerKey` (13 values: `satellite`, `terrain3d`, `hillshade`, `contours`, `landcover`, `cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`, `roads`, `bridges`, `railways`, `municipalities`), `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY` (cell types all default `true`, terrain3d `false`, satellite `false`), and `LAYER_GROUPS` (maps each key to the Mapbox layer IDs it controls). `MapWithNav` owns `layerVisibility` state and a `handleToggle` callback, passing them to both `LayerPanel` and `MapView`.
 - **Dark theme**: On `style.load`, `map.setConfigProperty("basemap", "lightPreset", "night")` switches the Mapbox Standard basemap to night mode. Military basemap hardening also disables POI/transit labels, 3D objects, and sets water to dark blue (`#0d2137`). `globals.css` overrides `.mapboxgl-ctrl-group` styles to match the slate dark palette (`#1e293b` bg, `#334155` borders, inverted SVG icons). AreaNav inactive buttons use `border-white/30`.
 - **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style (night preset).
@@ -156,7 +166,7 @@ All routes degrade gracefully (empty response / 503) when `DATABASE_URL` is abse
 
 ### State Ownership
 
-- **`MapWithNav`** owns: `customLayers[]`, `enabledCustomLayerIds: Set<string>`, `activeDrawingLayerId: string|null`, `infoPanelData`. Fetches layer list on mount. Handles `onCreateLayer`/`onDeleteLayer`/`onToggleLayer`/`onSetActiveDrawingLayer`/`onCancelDrawing`.
+- **`MapWithNav`** owns: `customLayers[]`, `enabledCustomLayerIds: Set<string>`, `activeDrawingLayerId: string|null`, `infoPanelData`, `selectedDay: {month, day}` (defaults to today). Fetches layer list on mount. Handles `onCreateLayer`/`onDeleteLayer`/`onToggleLayer`/`onSetActiveDrawingLayer`/`onCancelDrawing`.
 - **`MapView`** owns internally: `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`, `dialogOpen`. Renders `DrawingToolbar` and `FeatureDialog` inside its own container (positioned absolutely within `relative w-full h-full` wrapper).
 - **`CustomLayerPanel`** (bottom-right): collapsible list with toggle checkbox, colour dot, active-drawing selector (click layer name), inline delete confirm, inline create form.
 - **`DrawingToolbar`** (top-right, only when a drawing layer is active): tool buttons, colour swatches, cancel button, "Delete Selected" (when Draw control has a selection).

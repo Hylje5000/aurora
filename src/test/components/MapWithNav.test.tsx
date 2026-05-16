@@ -79,6 +79,47 @@ vi.mock("@/components/LayerPanel", () => ({
   ),
 }));
 
+// Stub WeatherWidget — shows region/month/day as data attributes
+vi.mock("@/components/WeatherWidget", () => ({
+  default: ({
+    region,
+    month,
+    day,
+  }: {
+    region: string;
+    month: number;
+    day: number;
+  }) => (
+    <div
+      data-testid="weather-widget"
+      data-region={region}
+      data-month={String(month)}
+      data-day={String(day)}
+    />
+  ),
+}));
+
+// Stub DatePicker — exposes onChange trigger
+vi.mock("@/components/DatePicker", () => ({
+  default: ({
+    month,
+    day,
+    onChange,
+  }: {
+    month: number;
+    day: number;
+    onChange: (month: number, day: number) => void;
+  }) => (
+    <div
+      data-testid="date-picker"
+      data-month={String(month)}
+      data-day={String(day)}
+    >
+      <button onClick={() => onChange(12, 1)}>PickDec1</button>
+    </div>
+  ),
+}));
+
 // Stub CustomLayerPanel — exposes callbacks as buttons
 vi.mock("@/components/CustomLayerPanel", () => ({
   default: ({
@@ -386,5 +427,62 @@ describe("MapWithNav", () => {
       "data-drawing-layer",
       "",
     );
+  });
+
+  it("does not render WeatherWidget or DatePicker when no area is selected", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    expect(screen.queryByTestId("weather-widget")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("date-picker")).not.toBeInTheDocument();
+  });
+
+  it("renders WeatherWidget and DatePicker when an area is selected", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByRole("button", { name: "Karjala" }));
+    expect(screen.getByTestId("weather-widget")).toBeInTheDocument();
+    expect(screen.getByTestId("weather-widget")).toHaveAttribute(
+      "data-region",
+      "karjala",
+    );
+    expect(screen.getByTestId("date-picker")).toBeInTheDocument();
+  });
+
+  it("passes selected day to WeatherWidget and DatePicker", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByRole("button", { name: "Lappi" }));
+
+    const widget = screen.getByTestId("weather-widget");
+    const picker = screen.getByTestId("date-picker");
+    // Both should show the same month/day (today's defaults)
+    expect(widget.getAttribute("data-month")).toBe(
+      picker.getAttribute("data-month"),
+    );
+    expect(widget.getAttribute("data-day")).toBe(
+      picker.getAttribute("data-day"),
+    );
+  });
+
+  it("updates WeatherWidget when DatePicker calls onChange", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByRole("button", { name: "Karjala" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "PickDec1" }));
+
+    expect(screen.getByTestId("weather-widget")).toHaveAttribute(
+      "data-month",
+      "12",
+    );
+    expect(screen.getByTestId("weather-widget")).toHaveAttribute(
+      "data-day",
+      "1",
+    );
+    expect(screen.getByTestId("date-picker")).toHaveAttribute(
+      "data-month",
+      "12",
+    );
+    expect(screen.getByTestId("date-picker")).toHaveAttribute("data-day", "1");
   });
 });

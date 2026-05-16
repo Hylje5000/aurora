@@ -1089,7 +1089,11 @@ export default function MapView({
             "municipality-highlight-source",
           ) as mapboxgl.GeoJSONSource
         ).setData({ type: "FeatureCollection", features: [f] });
-        startHighlightAnimation(map, highlightAnimFrameRef, highlightAnimStepRef);
+        startHighlightAnimation(
+          map,
+          highlightAnimFrameRef,
+          highlightAnimStepRef,
+        );
       });
 
       // Cursor handlers for infrastructure
@@ -1321,9 +1325,7 @@ export default function MapView({
     const map = mapRef.current;
     if (map && styleLoadedRef.current) {
       (
-        map.getSource(
-          "municipality-highlight-source",
-        ) as mapboxgl.GeoJSONSource
+        map.getSource("municipality-highlight-source") as mapboxgl.GeoJSONSource
       )?.setData(EMPTY_COLLECTION);
     }
   }, [infoPanelOpen]);

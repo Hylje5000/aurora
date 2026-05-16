@@ -6,6 +6,8 @@ import MapView from "./MapView";
 import LayerPanel from "./LayerPanel";
 import CustomLayerPanel from "./CustomLayerPanel";
 import InfoPanel, { type InfoPanelData } from "./InfoPanel";
+import WeatherWidget from "./WeatherWidget";
+import DatePicker from "./DatePicker";
 import {
   DEFAULT_LAYER_VISIBILITY,
   type LayerKey,
@@ -15,6 +17,13 @@ import type { CustomLayer } from "@/lib/customLayers";
 
 export default function MapWithNav() {
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<{
+    month: number;
+    day: number;
+  }>(() => {
+    const now = new Date();
+    return { month: now.getMonth() + 1, day: now.getDate() };
+  });
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(
     DEFAULT_LAYER_VISIBILITY,
   );
@@ -114,6 +123,20 @@ export default function MapWithNav() {
         onSetActiveDrawingLayer={setActiveDrawingLayerId}
       />
       <InfoPanel data={infoPanelData} onClose={() => setInfoPanelData(null)} />
+      {selectedAreaId && (
+        <div className="absolute left-4 top-16 z-10 flex items-start gap-2">
+          <WeatherWidget
+            region={selectedAreaId}
+            month={selectedDay.month}
+            day={selectedDay.day}
+          />
+          <DatePicker
+            month={selectedDay.month}
+            day={selectedDay.day}
+            onChange={(month, day) => setSelectedDay({ month, day })}
+          />
+        </div>
+      )}
     </div>
   );
 }
