@@ -21,6 +21,8 @@ const {
   mockAddTo,
   mockRemoveLayer,
   mockRemoveSource,
+  mockGetStyle,
+  mockSetStyle,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -46,6 +48,11 @@ const {
   const mockSetTerrain = vi.fn();
   const mockRemoveLayer = vi.fn();
   const mockRemoveSource = vi.fn();
+  const mockGetStyle = vi.fn(() => ({
+    url: "mapbox://styles/mapbox/standard",
+    sprite: "standard",
+  }));
+  const mockSetStyle = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -72,6 +79,8 @@ const {
     setTerrain: mockSetTerrain,
     removeLayer: mockRemoveLayer,
     removeSource: mockRemoveSource,
+    getStyle: mockGetStyle,
+    setStyle: mockSetStyle,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -94,6 +103,8 @@ const {
     mockAddTo,
     mockRemoveLayer,
     mockRemoveSource,
+    mockGetStyle,
+    mockSetStyle,
     MockMap,
     MockNavigationControl,
     MockPopup,
@@ -1164,5 +1175,31 @@ describe("MapView", () => {
 
     fireEvent.click(screen.getByTestId("drawing-toolbar-delete"));
     expect(mockDrawTrash).toHaveBeenCalledOnce();
+  });
+
+  it("calls setStyle when satellite visibility changes", async () => {
+    const { rerender } = render(<MapView />);
+    await fireStyleLoad();
+    mockSetStyle.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          satellite: true,
+          terrain3d: false,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
+        }}
+      />,
+    );
+
+    expect(mockSetStyle).toHaveBeenCalledWith(
+      "mapbox://styles/mapbox/satellite-streets-v12",
+    );
   });
 });

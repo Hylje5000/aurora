@@ -9,6 +9,8 @@ This plan outlines the steps to implement a global satellite style toggle in the
 | 2026-05-16 | Initial | Plan created.                                                                                                               |
 | 2026-05-16 | Phase 1 | Updated `src/lib/layers.ts` and `src/test/lib/layers.test.ts`. Fixed broken tests in `MapView.test.tsx`. All tests passing. |
 | 2026-05-16 | Phase 2 | Added "Basemap" section and "Satellite View" toggle to `LayerPanel.tsx`. Updated `LayerPanel.test.tsx`. All tests passing. |
+| 2026-05-16 | Phase 3 | Refactored `MapView.tsx` to handle style transitions cleanly using `layerVisibilityRef` inside `style.load` and correctly managing event listeners. Added `getStyle` mocking and specific test to `MapView.test.tsx`. All tests passing. |
+
 
 ## Phase 1: Preparation & Initial State
 
@@ -39,16 +41,16 @@ This plan outlines the steps to implement a global satellite style toggle in the
 
 ## Phase 3: MapView Refactoring & Style Logic
 
-- [ ] Refactor `src/components/MapView.tsx` to handle style transitions.
-  - [ ] Move initialization logic into reusable functions that can be called on `style.load`.
-  - [ ] Add `useEffect` to trigger `map.setStyle()` when `layerVisibility.satellite` changes.
-  - [ ] Ensure all custom sources, layers, icons, and event listeners are re-registered after style change.
-- [ ] Create/modify unit tests for `MapView.tsx` (mocking `setStyle` and style load events).
-- [ ] Run `next lint --fix`.
-- [ ] Run `tsc --noEmit`.
-- [ ] Run `npm test`.
-- [ ] Run `prettier --write .`.
-- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
+- [x] Refactor `src/components/MapView.tsx` to handle style transitions.
+  - [x] Move initialization logic into reusable functions that can be called on `style.load`.
+  - [x] Add `useEffect` to trigger `map.setStyle()` when `layerVisibility.satellite` changes.
+  - [x] Ensure all custom sources, layers, icons, and event listeners are re-registered after style change.
+- [x] Create/modify unit tests for `MapView.tsx` (mocking `setStyle` and style load events).
+- [x] Run `next lint --fix`.
+- [x] Run `tsc --noEmit`.
+- [x] Run `npm test`.
+- [x] Run `prettier --write .`.
+- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
 - [ ] Use `git diff` to verify the changes, and create a suitable commit message.
 - [ ] Wait for approval before committing.
 

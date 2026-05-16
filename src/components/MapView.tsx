@@ -306,6 +306,7 @@ export default function MapView({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
   const styleLoadedRef = useRef(false);
+  const eventsAttachedRef = useRef(false);
 
   // Cell tower state
   const rawTowerDataRef = useRef<GeoJSON.FeatureCollection>({
@@ -366,13 +367,17 @@ export default function MapView({
       const map = mapRef.current;
       if (!map) return;
 
-      map.setConfigProperty("basemap", "lightPreset", "night");
+      registeredCustomLayerIdsRef.current.clear();
 
-      // Military basemap hardening — suppress civilian noise
-      map.setConfigProperty("basemap", "showPointOfInterestLabels", false);
-      map.setConfigProperty("basemap", "showTransitLabels", false);
-      map.setConfigProperty("basemap", "show3dObjects", false);
-      map.setConfigProperty("basemap", "colorWater", "#0d2137");
+      if (!layerVisibilityRef.current.satellite) {
+        map.setConfigProperty("basemap", "lightPreset", "night");
+
+        // Military basemap hardening — suppress civilian noise
+        map.setConfigProperty("basemap", "showPointOfInterestLabels", false);
+        map.setConfigProperty("basemap", "showTransitLabels", false);
+        map.setConfigProperty("basemap", "show3dObjects", false);
+        map.setConfigProperty("basemap", "colorWater", "#0d2137");
+      }
 
       // AOI highlight layers
       map.addSource("aoi-source", {
@@ -398,7 +403,7 @@ export default function MapView({
         },
       });
 
-      const vis = layerVisibility;
+      const vis = layerVisibilityRef.current;
       const clustersVisible =
         vis.cellGSM || vis.cellUMTS || vis.cellLTE || vis.cellCDMA;
 
@@ -518,75 +523,77 @@ export default function MapView({
         "cell-towers-cdma",
       ];
 
-      for (const layerId of TOWER_LAYER_IDS) {
-        map.on("click", layerId, (e) => {
-          const feature = e.features?.[0];
-          if (!feature) return;
-          const { radio, aoi_id, range_m, avg_signal } =
-            feature.properties as Record<string, unknown>;
-          const coords = (
-            feature.geometry as GeoJSON.Point
-          ).coordinates.slice() as [number, number];
-          new mapboxgl.Popup({ className: "aurora-popup" })
-            .setLngLat(coords)
-            .setHTML(
-              `<div style="
-                background:#0f172a;
-                color:#e2e8f0;
-                border:1px solid #334155;
-                border-radius:6px;
-                padding:10px 14px;
-                font-family:monospace;
-                font-size:12px;
-                line-height:1.8;
-                min-width:160px;
-                touch-action:none;
-              ">
-                <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${radio}</div>
-                <div><span style="color:#64748b">AOI</span>&nbsp;&nbsp;&nbsp;&nbsp;${aoi_id}</div>
-                <div><span style="color:#64748b">RANGE</span>&nbsp;&nbsp;${range_m != null ? `${range_m} m` : "—"}</div>
-                <div><span style="color:#64748b">SIGNAL</span>&nbsp;${avg_signal != null ? `${avg_signal} dBm` : "—"}</div>
-              </div>`,
-            )
-            .addTo(map);
-        });
+      if (!eventsAttachedRef.current) {
+        for (const layerId of TOWER_LAYER_IDS) {
+          map.on("click", layerId, (e) => {
+            const feature = e.features?.[0];
+            if (!feature) return;
+            const { radio, aoi_id, range_m, avg_signal } =
+              feature.properties as Record<string, unknown>;
+            const coords = (
+              feature.geometry as GeoJSON.Point
+            ).coordinates.slice() as [number, number];
+            new mapboxgl.Popup({ className: "aurora-popup" })
+              .setLngLat(coords)
+              .setHTML(
+                `<div style="
+                  background:#0f172a;
+                  color:#e2e8f0;
+                  border:1px solid #334155;
+                  border-radius:6px;
+                  padding:10px 14px;
+                  font-family:monospace;
+                  font-size:12px;
+                  line-height:1.8;
+                  min-width:160px;
+                  touch-action:none;
+                ">
+                  <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${radio}</div>
+                  <div><span style="color:#64748b">AOI</span>&nbsp;&nbsp;&nbsp;&nbsp;${aoi_id}</div>
+                  <div><span style="color:#64748b">RANGE</span>&nbsp;&nbsp;${range_m != null ? `${range_m} m` : "—"}</div>
+                  <div><span style="color:#64748b">SIGNAL</span>&nbsp;${avg_signal != null ? `${avg_signal} dBm` : "—"}</div>
+                </div>`,
+              )
+              .addTo(map);
+          });
 
-        map.on("mouseenter", layerId, () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", layerId, () => {
-          map.getCanvas().style.cursor = "";
-        });
-      }
-
-      // ── Draw events ────────────────────────────────────────────────────
-      map.on("draw.create", (e: { features: GeoJSON.Feature[] }) => {
-        const feature = e.features[0];
-        if (!feature) return;
-        const layerId = activeDrawingLayerIdRef.current;
-        if (!layerId) {
-          drawRef.current?.delete(feature.id as string);
-          return;
+          map.on("mouseenter", layerId, () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", layerId, () => {
+            map.getCanvas().style.cursor = "";
+          });
         }
 
-        const geomType = (feature.geometry as GeoJSON.Geometry).type;
-        const featureType: DrawingTool =
-          activeDrawingToolRef.current === "Rectangle"
-            ? "Rectangle"
-            : geomType === "Point"
-              ? "Point"
-              : geomType === "LineString"
-                ? "LineString"
-                : "Polygon";
+        // ── Draw events ────────────────────────────────────────────────────
+        map.on("draw.create", (e: { features: GeoJSON.Feature[] }) => {
+          const feature = e.features[0];
+          if (!feature) return;
+          const layerId = activeDrawingLayerIdRef.current;
+          if (!layerId) {
+            drawRef.current?.delete(feature.id as string);
+            return;
+          }
 
-        pendingDrawFeatureRef.current = feature;
-        setDialogFeatureType(featureType);
-        setDialogOpen(true);
-      });
+          const geomType = (feature.geometry as GeoJSON.Geometry).type;
+          const featureType: DrawingTool =
+            activeDrawingToolRef.current === "Rectangle"
+              ? "Rectangle"
+              : geomType === "Point"
+                ? "Point"
+                : geomType === "LineString"
+                  ? "LineString"
+                  : "Polygon";
 
-      map.on("draw.selectionchange", (e: { features: GeoJSON.Feature[] }) => {
-        setHasDrawingSelection(e.features.length > 0);
-      });
+          pendingDrawFeatureRef.current = feature;
+          setDialogFeatureType(featureType);
+          setDialogOpen(true);
+        });
+
+        map.on("draw.selectionchange", (e: { features: GeoJSON.Feature[] }) => {
+          setHasDrawingSelection(e.features.length > 0);
+        });
+      }
 
       // Add sources/layers for any custom layers already in props at init time
       for (const layer of customLayers) {
@@ -719,15 +726,18 @@ export default function MapView({
       }
 
       // ── Fetch on every pan/zoom and immediately on load ────────────────
-      map.on("moveend", () => {
-        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
-        for (const layerId of enabledCustomLayerIdsRef.current) {
-          if (registeredCustomLayerIdsRef.current.has(layerId)) {
-            void fetchCustomLayerFeatures(map, layerId);
+      if (!eventsAttachedRef.current) {
+        map.on("moveend", () => {
+          fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+          for (const layerId of enabledCustomLayerIdsRef.current) {
+            if (registeredCustomLayerIdsRef.current.has(layerId)) {
+              void fetchCustomLayerFeatures(map, layerId);
+            }
           }
-        }
-      });
-      fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+        });
+        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+        eventsAttachedRef.current = true;
+      }
 
       styleLoadedRef.current = true;
     });
@@ -750,6 +760,23 @@ export default function MapView({
 
     const map = mapRef.current;
     if (!map || !styleLoadedRef.current) return;
+
+    // Handle satellite style switch
+    const targetStyle = layerVisibility.satellite
+      ? "mapbox://styles/mapbox/satellite-streets-v12"
+      : "mapbox://styles/mapbox/standard";
+
+    const style = map.getStyle();
+    const isSatelliteNow =
+      style?.sprite?.includes("satellite") ||
+      style?.name?.toLowerCase().includes("satellite") ||
+      false;
+
+    if (layerVisibility.satellite !== isSatelliteNow) {
+      styleLoadedRef.current = false; // pause other syncs while style loads
+      map.setStyle(targetStyle);
+      return; // The style.load event will re-sync everything
+    }
 
     (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
       filterByEnabled(rawTowerDataRef.current, layerVisibility),
