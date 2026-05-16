@@ -105,4 +105,24 @@ describe("WeatherWidget", () => {
     await waitFor(() => screen.getByText(/0% rain/));
     expect(screen.queryByText(/mm/)).toBeNull();
   });
+
+  it("bare=true omits the outer panel wrapper", () => {
+    vi.spyOn(global, "fetch").mockReturnValueOnce(new Promise(() => {}));
+    const { container } = render(
+      <WeatherWidget bare region="turku" month={5} day={16} />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root?.className).not.toContain("rounded-lg");
+    expect(root?.className).not.toContain("border");
+  });
+
+  it("bare=true no-data branch omits outer panel wrapper", async () => {
+    mockFetch({ ...MOCK_STATS, sampleSize: 0 });
+    const { container } = render(
+      <WeatherWidget bare region="turku" month={5} day={16} />,
+    );
+    await waitFor(() => screen.getByText("No data"));
+    const root = container.firstElementChild as HTMLElement;
+    expect(root?.className).not.toContain("rounded-lg");
+  });
 });

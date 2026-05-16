@@ -7,6 +7,7 @@ interface WeatherWidgetProps {
   region: string;
   month: number;
   day: number;
+  bare?: boolean;
 }
 
 function fmt(n: number, decimals = 1): string {
@@ -17,6 +18,7 @@ export default function WeatherWidget({
   region,
   month,
   day,
+  bare = false,
 }: WeatherWidgetProps) {
   const [stats, setStats] = useState<WeatherStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,24 +45,26 @@ export default function WeatherWidget({
     return () => controller.abort();
   }, [region, month, day]);
 
+  const panelClass = bare
+    ? "px-3 py-2 font-mono text-xs text-slate-400"
+    : "rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 font-mono text-xs text-slate-400 shadow-lg backdrop-blur-sm";
+
   if (loading) {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 font-mono text-xs text-slate-400 shadow-lg backdrop-blur-sm">
-        Loading…
-      </div>
-    );
+    return <div className={panelClass}>Loading…</div>;
   }
 
   if (!stats || stats.sampleSize === 0) {
-    return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 font-mono text-xs text-slate-400 shadow-lg backdrop-blur-sm">
-        No data
-      </div>
-    );
+    return <div className={panelClass}>No data</div>;
   }
 
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm">
+    <div
+      className={
+        bare
+          ? "px-3 py-2 font-mono text-xs text-slate-200"
+          : "rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm"
+      }
+    >
       <div className="text-slate-400 mb-1 text-[10px] uppercase tracking-widest">
         Historical avg · {stats.sampleSize} yr
       </div>
