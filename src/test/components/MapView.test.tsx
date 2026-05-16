@@ -106,6 +106,21 @@ function mockFetchOk() {
   } as unknown as Response);
 }
 
+function mockFetchWithTowers(radios: string[]) {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: () =>
+      Promise.resolve({
+        type: "FeatureCollection",
+        features: radios.map((radio) => ({
+          type: "Feature",
+          properties: { radio },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        })),
+      }),
+  } as unknown as Response);
+}
+
 function fireStyleLoad() {
   const call = mockOn.mock.calls.find(([event]) => event === "style.load");
   const cb = call![1] as () => void;
@@ -325,6 +340,92 @@ describe("MapView", () => {
       "visibility",
       "visible",
     );
+  });
+
+  it("filters source data by enabled types when a cell type is toggled off", async () => {
+    mockFetchWithTowers(["GSM", "LTE", "LTE"]);
+    const { rerender } = render(<MapView />);
+    await act(async () => fireStyleLoad());
+    mockSetData.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: false,
+          cellCDMA: true,
+        }}
+      />,
+    );
+
+    const lastCall =
+      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
+    expect(lastCall.features).toHaveLength(1);
+    expect(lastCall.features[0].properties.radio).toBe("GSM");
+  });
+
+  it("produces empty source when all cell types are toggled off", async () => {
+    mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
+    const { rerender } = render(<MapView />);
+    await act(async () => fireStyleLoad());
+    mockSetData.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+          cellGSM: false,
+          cellUMTS: false,
+          cellLTE: false,
+          cellCDMA: false,
+        }}
+      />,
+    );
+
+    const lastCall =
+      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
+    expect(lastCall.features).toHaveLength(0);
+  });
+
+  it("restores full data when all cell types are re-enabled", async () => {
+    mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
+    const allOff = {
+      terrain3d: false,
+      hillshade: true,
+      contours: true,
+      landcover: true,
+      cellGSM: false,
+      cellUMTS: false,
+      cellLTE: false,
+      cellCDMA: false,
+    };
+    const { rerender } = render(<MapView layerVisibility={allOff} />);
+    await act(async () => fireStyleLoad());
+    mockSetData.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          ...allOff,
+          cellGSM: true,
+          cellUMTS: true,
+          cellLTE: true,
+          cellCDMA: true,
+        }}
+      />,
+    );
+
+    const lastCall =
+      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
+    expect(lastCall.features).toHaveLength(4);
   });
 
   it("adds four per-type tower layers with correct filters and colors", async () => {

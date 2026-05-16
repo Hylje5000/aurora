@@ -44,7 +44,29 @@ function buildAoiCollection() {
   };
 }
 
-async function fetchCellTowers(map: mapboxgl.Map): Promise<void> {
+function filterByEnabled(
+  data: GeoJSON.FeatureCollection,
+  vis: LayerVisibility,
+): GeoJSON.FeatureCollection {
+  if (vis.cellGSM && vis.cellUMTS && vis.cellLTE && vis.cellCDMA) return data;
+  const enabled = new Set<string>();
+  if (vis.cellGSM) enabled.add("GSM");
+  if (vis.cellUMTS) enabled.add("UMTS");
+  if (vis.cellLTE) enabled.add("LTE");
+  if (vis.cellCDMA) enabled.add("CDMA");
+  return {
+    type: "FeatureCollection",
+    features: data.features.filter(
+      (f) => f.properties != null && enabled.has(f.properties.radio as string),
+    ),
+  };
+}
+
+async function fetchCellTowers(
+  map: mapboxgl.Map,
+  rawDataRef: { current: GeoJSON.FeatureCollection },
+  visRef: { current: LayerVisibility },
+): Promise<void> {
   const bounds = map.getBounds();
   if (!bounds) return;
   const bbox = [
@@ -57,9 +79,10 @@ async function fetchCellTowers(map: mapboxgl.Map): Promise<void> {
   try {
     const res = await fetch(`/api/cell-towers?bbox=${bbox}`);
     if (!res.ok) return;
-    const data = await res.json();
+    const data = (await res.json()) as GeoJSON.FeatureCollection;
+    rawDataRef.current = data;
     (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
-      data,
+      filterByEnabled(data, visRef.current),
     );
   } catch (err) {
     console.error("[cell-towers] fetch failed", err);
@@ -75,6 +98,11 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const styleLoadedRef = useRef(false);
+  const rawTowerDataRef = useRef<GeoJSON.FeatureCollection>({
+    type: "FeatureCollection",
+    features: [],
+  });
+  const layerVisibilityRef = useRef(layerVisibility);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -275,8 +303,10 @@ export default function MapView({
       }
 
       // Fetch on every pan/zoom and immediately on load
-      map.on("moveend", () => fetchCellTowers(map));
-      fetchCellTowers(map);
+      map.on("moveend", () =>
+        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef),
+      );
+      fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
 
       // ── Terrain & intelligence layers ──────────────────────────────────
 
@@ -408,8 +438,15 @@ export default function MapView({
 
   // Sync layer visibility changes to the live map after style has loaded
   useEffect(() => {
+    layerVisibilityRef.current = layerVisibility;
+
     const map = mapRef.current;
     if (!map || !styleLoadedRef.current) return;
+
+    // Re-filter source data so cluster counts reflect only enabled radio types
+    (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
+      filterByEnabled(rawTowerDataRef.current, layerVisibility),
+    );
 
     for (const [key, layerIds] of Object.entries(LAYER_GROUPS) as [
       keyof typeof LAYER_GROUPS,
