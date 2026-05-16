@@ -339,16 +339,7 @@ function removeCustomLayerFromMap(
   }
 }
 
-const DASH_SEQ: number[][] = [
-  [0, 4],
-  [0.5, 3.5],
-  [1, 3],
-  [1.5, 2.5],
-  [2, 2],
-  [2.5, 1.5],
-  [3, 1],
-  [3.5, 0.5],
-];
+const PULSE_SEQ = [1, 0.65, 0.35, 0.65, 1];
 
 function startHighlightAnimation(
   map: mapboxgl.Map,
@@ -359,12 +350,12 @@ function startHighlightAnimation(
   stepRef.current = 0;
   let prevTs = 0;
   function tick(ts: number) {
-    if (ts - prevTs >= 60) {
+    if (ts - prevTs >= 200) {
       prevTs = ts;
       map.setPaintProperty(
         "municipality-highlight-line",
-        "line-dasharray",
-        DASH_SEQ[stepRef.current % DASH_SEQ.length],
+        "line-opacity",
+        PULSE_SEQ[stepRef.current % PULSE_SEQ.length],
       );
       stepRef.current++;
     }
@@ -870,16 +861,25 @@ export default function MapView({
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
+      // Dark casing first so white outline has contrast against any background
+      map.addLayer({
+        id: "municipality-highlight-casing",
+        type: "line",
+        source: "municipality-highlight-source",
+        paint: {
+          "line-color": "#000000",
+          "line-width": 9,
+          "line-opacity": 0.55,
+        },
+      });
       map.addLayer({
         id: "municipality-highlight-line",
         type: "line",
         source: "municipality-highlight-source",
-        slot: "top",
         paint: {
           "line-color": "#ffffff",
-          "line-width": 3,
+          "line-width": 4,
           "line-opacity": 1,
-          "line-dasharray": [0, 4],
         },
       });
 

@@ -543,6 +543,12 @@ describe("MapView", () => {
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: "municipality-highlight-casing",
+        type: "line",
+      }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
         id: "municipality-highlight-line",
         type: "line",
       }),
