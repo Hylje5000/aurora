@@ -86,10 +86,10 @@ export function CustomLayerSection({
             >
               <span className="truncate">{layer.name}</span>
               <span
-                className={`text-[10px] flex-shrink-0 transition-colors ${
+                className={`text-sm flex-shrink-0 transition-colors ${
                   activeDrawingLayerId === layer.id
                     ? "text-blue-400"
-                    : "text-slate-600 group-hover:text-slate-400"
+                    : "text-slate-500"
                 }`}
                 aria-label={
                   activeDrawingLayerId === layer.id
