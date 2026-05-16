@@ -382,11 +382,12 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
           REQUIRED STRUCTURE:
           
           1. TACTICAL SCOREBOARD
-          Route Suitability: [1-10 score]
-          Travel Speed Est.: [Estimated speed for this unit type]
-          Obstacle Impact: [Low/Med/High impact on timeline]
-          Risk Level: [Overall operational risk]
-          Logistical Support: [Recommended maneuvers at destination]
+          (DO NOT use Markdown tables. Use only this plain text format:)
+          Route Suitability: [score]/10
+          Travel Speed Estimate: [value]
+          Obstacle Impact: [level]
+          Risk Level: [level]
+          Logistical Support: [maneuvers]
 
           2. MOBILITY ASSESSMENT
           (Concise explanation of the suitability score and speed estimate)
