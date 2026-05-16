@@ -9,6 +9,7 @@ import {
   LAYER_GROUPS,
   type LayerVisibility,
 } from "@/lib/layers";
+import { createMilsymbolImage } from "@/lib/milsymbol";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -116,7 +117,7 @@ export default function MapView({
 
     mapRef.current.addControl(new mapboxgl.NavigationControl());
 
-    mapRef.current.on("style.load", () => {
+    mapRef.current.on("style.load", async () => {
       const map = mapRef.current;
       if (!map) return;
 
@@ -201,7 +202,8 @@ export default function MapView({
         paint: { "text-color": "#ffffff" },
       });
 
-      // Individual tower dots — one layer per radio type for per-type visibility toggling
+      // Individual tower markers — one NATO milsymbol layer per radio type
+      const SIDC = "SFGPUUSR-------";
       const towerLayers: Array<{
         id: string;
         radio: string;
@@ -234,22 +236,31 @@ export default function MapView({
         },
       ];
 
-      for (const { id, radio, color, visible } of towerLayers) {
+      await Promise.all(
+        towerLayers.map(({ id, radio, color }) =>
+          createMilsymbolImage({
+            sidc: SIDC,
+            fillColor: color,
+            uniqueDesignation: radio,
+          }).then((img) => map.addImage(`${id}-icon`, img)),
+        ),
+      );
+
+      for (const { id, radio, visible } of towerLayers) {
         map.addLayer({
           id,
-          type: "circle",
+          type: "symbol",
           source: "cell-towers-source",
           filter: [
             "all",
             ["!", ["has", "point_count"]],
             ["==", ["get", "radio"], radio],
           ],
-          layout: { visibility: visible ? "visible" : "none" },
-          paint: {
-            "circle-radius": 5,
-            "circle-color": color,
-            "circle-stroke-width": 1,
-            "circle-stroke-color": "rgba(0,0,0,0.5)",
+          layout: {
+            visibility: visible ? "visible" : "none",
+            "icon-image": `${id}-icon`,
+            "icon-size": 0.6,
+            "icon-allow-overlap": true,
           },
         });
       }

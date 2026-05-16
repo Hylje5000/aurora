@@ -57,30 +57,30 @@ _Updated after each phase._
 
 ## Phase 3 — Replace circle layers with symbol layers in `MapView.tsx`
 
-- [ ] Import `createMilsymbolImage` from `@/lib/milsymbol` in `MapView.tsx`.
-- [ ] Define `TOWER_CONFIGS` array (id, radio, color, visible) — replaces the existing inline `towerLayers` array.
-- [ ] Define `SIDC = "SFGPUUSR-------"`.
-- [ ] Wrap the `style.load` callback as `async`.
-- [ ] Inside `style.load`, after adding cluster layers:
+- [x] Import `createMilsymbolImage` from `@/lib/milsymbol` in `MapView.tsx`.
+- [x] Define `TOWER_CONFIGS` array (id, radio, color, visible) — replaces the existing inline `towerLayers` array.
+- [x] Define `SIDC = "SFGPUUSR-------"`.
+- [x] Wrap the `style.load` callback as `async`.
+- [x] Inside `style.load`, after adding cluster layers:
   - `await Promise.all(TOWER_CONFIGS.map(...))` — generate and register one milsymbol image per radio type via `map.addImage()`.
-- [ ] Replace the existing `circle`-type `addLayer` calls with `symbol`-type layers:
+- [x] Replace the existing `circle`-type `addLayer` calls with `symbol`-type layers:
   - `type: "symbol"`
   - `layout`: `"icon-image": "${id}-icon"`, `"icon-size": 0.6`, `"icon-allow-overlap": true`, `"visibility": ...`
   - Remove all `paint` properties (no `circle-radius`, `circle-color`, etc.)
-- [ ] Verify the popup and hover handlers reference the same layer IDs — no changes needed there.
-- [ ] Verify `LAYER_GROUPS` in `src/lib/layers.ts` — layer IDs are unchanged, so no edits required.
-- [ ] After completing tasks above, add any TODOs as new tasks if anything was skipped or left incomplete.
-- [ ] Update `src/test/components/MapView.test.tsx`:
+- [x] Verify the popup and hover handlers reference the same layer IDs — no changes needed there.
+- [x] Verify `LAYER_GROUPS` in `src/lib/layers.ts` — layer IDs are unchanged, so no edits required.
+- [x] After completing tasks above, add any TODOs as new tasks if anything was skipped or left incomplete.
+- [x] Update `src/test/components/MapView.test.tsx`:
   - Mock `createMilsymbolImage` from `@/lib/milsymbol` using `vi.mock` — return a resolved promise with a stub `HTMLImageElement`.
   - Assert `map.addImage` is called 4 times (once per radio type icon).
   - Update layer assertions from `type: "circle"` to `type: "symbol"` for the four per-radio layers.
   - Assert `icon-image` is set in the layout (not `circle-radius` in paint).
-- [ ] Run `tsc --noEmit` — fix any type errors.
-- [ ] Run `npm test` — all tests must pass (hard blocker if not).
-- [ ] Run `next lint --fix`.
-- [ ] Run `prettier --write .`.
-- [ ] Re-read MODIFICATION_IMPLEMENTATION.md to check for any missed tasks.
-- [ ] Update MODIFICATION_IMPLEMENTATION.md Journal.
+- [x] Run `tsc --noEmit` — fix any type errors.
+- [x] Run `npm test` — all tests must pass (hard blocker if not).
+- [x] Run `next lint --fix`.
+- [x] Run `prettier --write .`.
+- [x] Re-read MODIFICATION_IMPLEMENTATION.md to check for any missed tasks.
+- [x] Update MODIFICATION_IMPLEMENTATION.md Journal.
 - [ ] `git diff` — review changes, draft commit message, present to user:
   ```
   feat(map): replace circle cell-tower markers with NATO milsymbol icons
@@ -118,7 +118,7 @@ _Updated after each phase._
 
 ### Phase 3
 
-_To be filled in._
+`MapView.tsx`: imported `createMilsymbolImage`, made `style.load` callback async, replaced the `circle`-type tower layers with `symbol`-type layers using `map.addImage()` + `icon-image`. SIDC `SFGPUUSR-------` (Friendly, Ground, Signal — Radio Unit). `LAYER_GROUPS`, popup, hover, and visibility sync `useEffect` untouched — layer IDs unchanged. Tests: added `mockAddImage` to the Map mock, mocked `@/lib/milsymbol`, made `fireStyleLoad` properly async, replaced the old circle-layer test with two new tests (addImage × 4, symbol layers with icon-image). 119 tests pass. `tsc` and lint clean.
 
 ### Phase 4 — Coverage summary
 
