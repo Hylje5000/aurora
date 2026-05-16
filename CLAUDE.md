@@ -1,4 +1,4 @@
-# Project Context: Automated IPB (Intelligence Preparation of the Battlespace)
+# Project Context: Automated (Intelligence Preparation of the Battlespace)
 
 ## Overview
 
@@ -18,7 +18,7 @@ We are building a web application for the Junction Defence Hackathon (Challenge 
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # Root layout — dark theme, Geist font, Aurora IPB metadata
+│   ├── layout.tsx              # Root layout — dark theme, Geist font, Aurora metadata
 │   ├── page.tsx                # Home — full-screen MapLoader (h-screen)
 │   ├── globals.css             # Tailwind v4 + html/body height:100%, dark background
 │   └── api/
@@ -240,10 +240,10 @@ All routes degrade gracefully (empty response / 503) when `DATABASE_URL` is abse
 
 ## Environment Variables
 
-| Variable                   | Where used                                   |
-| -------------------------- | -------------------------------------------- |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | `MapView.tsx` — `mapboxgl.accessToken`       |
-| `DATABASE_URL`             | `src/lib/db.ts` — `pg.Pool` connectionString |
+| Variable                   | Where used                                                             |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | `MapView.tsx` — `mapboxgl.accessToken`                                 |
+| `DATABASE_URL`             | `src/lib/db.ts` — `pg.Pool` connectionString                           |
 | `CM_BASE_URL`              | `src/lib/ai.ts` — ConfidentialMind project endpoint (server-side only) |
 | `CM_API_KEY`               | `src/lib/ai.ts` — ConfidentialMind JWT bearer token (server-side only) |
 | `CM_MODEL_NAME`            | `src/lib/ai.ts` — model ID, defaults to `google/gemma-4-31B-it`        |

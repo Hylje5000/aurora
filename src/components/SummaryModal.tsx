@@ -62,43 +62,39 @@ export default function SummaryModal({
           {summary ? (
             <ReactMarkdown
               components={{
-                h1: ({ node: _node, ...props }) => (
+                h1: ({ ...props }) => (
                   <h1
                     className="text-sm font-bold text-white uppercase mt-4 mb-2"
                     {...props}
                   />
                 ),
-                h2: ({ node: _node, ...props }) => (
+                h2: ({ ...props }) => (
                   <h2
                     className="text-xs font-bold text-blue-400 uppercase mt-3 mb-1 tracking-wider"
                     {...props}
                   />
                 ),
-                h3: ({ node: _node, ...props }) => (
+                h3: ({ ...props }) => (
                   <h3
                     className="text-[11px] font-bold text-slate-200 mt-2 mb-1"
                     {...props}
                   />
                 ),
-                p: ({ node: _node, ...props }) => (
-                  <p className="mb-2" {...props} />
-                ),
-                ul: ({ node: _node, ...props }) => (
+                p: ({ ...props }) => <p className="mb-2" {...props} />,
+                ul: ({ ...props }) => (
                   <ul
                     className="list-disc pl-4 mb-2 space-y-1 marker:text-slate-600"
                     {...props}
                   />
                 ),
-                ol: ({ node: _node, ...props }) => (
+                ol: ({ ...props }) => (
                   <ol
                     className="list-decimal pl-4 mb-2 space-y-1 marker:text-slate-600"
                     {...props}
                   />
                 ),
-                li: ({ node: _node, ...props }) => (
-                  <li className="" {...props} />
-                ),
-                strong: ({ node: _node, ...props }) => (
+                li: ({ ...props }) => <li className="" {...props} />,
+                strong: ({ ...props }) => (
                   <strong className="font-bold text-white" {...props} />
                 ),
               }}

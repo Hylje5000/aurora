@@ -782,4 +782,39 @@ describe("RoutePanel", () => {
       "No cellular coverage",
     );
   });
+
+  it("calls onExportPDF when export button is clicked", async () => {
+    const onExportPDF = vi.fn();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(MOCK_ROUTE), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(MOCK_INTELLIGENCE), { status: 200 }),
+      );
+
+    const ref = createRef<RoutePanelHandle>();
+    render(<RoutePanel ref={ref} {...makeProps({ onExportPDF })} />);
+
+    act(() => {
+      ref.current?.addWaypoint([24.94, 60.17]);
+      ref.current?.addWaypoint([25.01, 60.23]);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+
+    const exportBtn = screen.getByTestId("export-pdf-btn");
+    fireEvent.click(exportBtn);
+
+    expect(onExportPDF).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "Infantry" }),
+      MOCK_INTELLIGENCE,
+    );
+  });
 });

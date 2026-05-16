@@ -34,6 +34,7 @@ interface RoutePanelProps {
   ) => void;
   onHazardsChange?: (intel: RouteIntelligence | null) => void;
   onHazardFocus?: (hazard: RouteHazard) => void;
+  onExportPDF?: (vehicle: VehicleProfile, intel: RouteIntelligence) => void;
   onClose: () => void;
   /** When provided, expanded state is controlled externally. */
   expanded?: boolean;
@@ -113,6 +114,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       onRouteChange,
       onHazardsChange,
       onHazardFocus,
+      onExportPDF,
       onClose,
       expanded: expandedProp,
       onExpandedChange,
@@ -374,7 +376,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
           - Dimensions: ${vehicle.width_m}m (W) x ${vehicle.height_m}m (H)
 
           Hazards (Critical: ${intelligence.summary.critical}, Warning: ${intelligence.summary.warning}, Info: ${intelligence.summary.info}):
-          ${intelligence.hazards.map(h => `- [${h.severity.toUpperCase()}] ${h.message}`).join('\n')}
+          ${intelligence.hazards.map((h) => `- [${h.severity.toUpperCase()}] ${h.message}`).join("\n")}
 
           Comms Coverage:
           ${intelligence.coverage ? `- Covered: ${intelligence.coverage.covered_pct}%\n- Gaps: ${intelligence.coverage.gap_count} (Max: ${intelligence.coverage.longest_gap_m}m)` : "- No data"}
@@ -422,7 +424,14 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       };
 
       fetchAI();
-    }, [intelligence, route, profile, vehicle, onSummaryChange, onSummaryLoadingChange]);
+    }, [
+      intelligence,
+      route,
+      profile,
+      vehicle,
+      onSummaryChange,
+      onSummaryLoadingChange,
+    ]);
 
     return (
       <div
@@ -697,16 +706,29 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
                     Route Assessment
                   </span>
-                  {(summaryLoading || routeSummary) && (
-                    <button
-                      onClick={onSummaryModalOpen}
-                      disabled={summaryLoading}
-                      className="text-[9px] font-mono px-2 py-0.5 rounded border border-blue-500/50 bg-blue-900/30 text-blue-300 hover:bg-blue-800/50 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      data-testid="ai-summary-btn"
-                    >
-                      {summaryLoading ? "Generating..." : "AI Summary"}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {(summaryLoading || routeSummary) && (
+                      <button
+                        onClick={onSummaryModalOpen}
+                        disabled={summaryLoading}
+                        className="text-[9px] font-mono px-2 py-0.5 rounded border border-blue-500/50 bg-blue-900/30 text-blue-300 hover:bg-blue-800/50 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-testid="ai-summary-btn"
+                      >
+                        {summaryLoading ? "Generating..." : "AI Summary"}
+                      </button>
+                    )}
+                    {intelligence && (
+                      <button
+                        onClick={() => onExportPDF?.(vehicle, intelligence)}
+                        className="text-[9px] font-mono px-2 py-0.5 rounded border border-emerald-500/50 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-800/50 hover:text-white transition-colors flex items-center gap-1"
+                        data-testid="export-pdf-btn"
+                        title="Export Tactical Report (PDF)"
+                      >
+                        <span>📄</span>
+                        <span>Export</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {intelligenceLoading && (
@@ -783,73 +805,74 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                 )}
 
                 {/* COMMS Coverage */}
-              {!intelligenceLoading && (
-                <div
-                  className="border-t border-slate-700/40 pt-1.5 mt-0.5"
-                  data-testid="coverage-section"
-                >
-                  <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                    Comms Coverage
-                  </span>
-                  {intelligence?.coverage &&
-                  intelligence.coverage.covered_pct > 0 ? (
-                    <div className="mt-0.5">
-                      {intelligence.coverage.covered_pct === 100 ? (
-                        <p
-                          className="text-[10px] font-mono font-semibold text-green-400"
-                          data-testid="coverage-full"
-                        >
-                          ✓ Full cellular coverage
-                        </p>
-                      ) : (
-                        <>
+                {!intelligenceLoading && (
+                  <div
+                    className="border-t border-slate-700/40 pt-1.5 mt-0.5"
+                    data-testid="coverage-section"
+                  >
+                    <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                      Comms Coverage
+                    </span>
+                    {intelligence?.coverage &&
+                    intelligence.coverage.covered_pct > 0 ? (
+                      <div className="mt-0.5">
+                        {intelligence.coverage.covered_pct === 100 ? (
                           <p
-                            className="text-[10px] font-mono text-slate-300"
-                            data-testid="coverage-bar"
+                            className="text-[10px] font-mono font-semibold text-green-400"
+                            data-testid="coverage-full"
                           >
-                            {Array.from({ length: 12 }, (_, i) =>
-                              i <
-                              Math.round(
-                                intelligence.coverage!.covered_pct / (100 / 12),
-                              )
-                                ? "▓"
-                                : "░",
-                            ).join("")}{" "}
-                            {intelligence.coverage.covered_pct}%
+                            ✓ Full cellular coverage
                           </p>
-                          <p
-                            className="text-[9px] font-mono text-slate-500"
-                            data-testid="coverage-gaps"
-                          >
-                            {intelligence.coverage.gap_count} gap
-                            {intelligence.coverage.gap_count !== 1 ? "s" : ""} ·
-                            longest{" "}
-                            {intelligence.coverage.longest_gap_m >= 1000
-                              ? `${(intelligence.coverage.longest_gap_m / 1000).toFixed(1)} km`
-                              : `${intelligence.coverage.longest_gap_m} m`}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <p
-                      className="text-[10px] font-mono font-semibold text-red-400"
-                      data-testid="coverage-unavailable"
-                    >
-                      ✗ No cellular coverage
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                        ) : (
+                          <>
+                            <p
+                              className="text-[10px] font-mono text-slate-300"
+                              data-testid="coverage-bar"
+                            >
+                              {Array.from({ length: 12 }, (_, i) =>
+                                i <
+                                Math.round(
+                                  intelligence.coverage!.covered_pct /
+                                    (100 / 12),
+                                )
+                                  ? "▓"
+                                  : "░",
+                              ).join("")}{" "}
+                              {intelligence.coverage.covered_pct}%
+                            </p>
+                            <p
+                              className="text-[9px] font-mono text-slate-500"
+                              data-testid="coverage-gaps"
+                            >
+                              {intelligence.coverage.gap_count} gap
+                              {intelligence.coverage.gap_count !== 1
+                                ? "s"
+                                : ""}{" "}
+                              · longest{" "}
+                              {intelligence.coverage.longest_gap_m >= 1000
+                                ? `${(intelligence.coverage.longest_gap_m / 1000).toFixed(1)} km`
+                                : `${intelligence.coverage.longest_gap_m} m`}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <p
+                        className="text-[10px] font-mono font-semibold text-red-400"
+                        data-testid="coverage-unavailable"
+                      >
+                        ✗ No cellular coverage
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
-
     );
   },
 );
 
 export default RoutePanel;
-

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, act, screen } from "@testing-library/react";
 
 const {
+  mockToDataURL,
   mockQueryRenderedFeatures,
   mockRemove,
   mockAddControl,
@@ -53,7 +54,11 @@ const {
   }));
   const mockSetData = vi.fn();
   const mockGetSource = vi.fn(() => ({ setData: mockSetData }));
-  const mockGetCanvas = vi.fn(() => ({ style: { cursor: "" } }));
+  const mockToDataURL = vi.fn(() => "data:image/png;base64,mock");
+  const mockGetCanvas = vi.fn(() => ({
+    style: { cursor: "" },
+    toDataURL: mockToDataURL,
+  }));
   const mockSetConfigProperty = vi.fn();
   const mockSetLayoutProperty = vi.fn();
   const mockSetTerrain = vi.fn();
@@ -116,6 +121,7 @@ const {
   }));
   const MockNavigationControl = vi.fn();
   return {
+    mockToDataURL,
     mockQueryRenderedFeatures,
     mockRemove,
     mockAddControl,
@@ -204,7 +210,7 @@ vi.mock("@/components/ElectionPieChart", () => ({
   default: () => <div data-testid="election-pie-chart" />,
 }));
 
-import MapView from "@/components/MapView";
+import MapView, { type MapViewHandle } from "@/components/MapView";
 import type { CustomLayer } from "@/lib/customLayers";
 import type { PlannedRoute, RouteHazard, Waypoint } from "@/lib/routing";
 
@@ -275,7 +281,12 @@ describe("MapView", () => {
     mockGetBounds.mockClear();
     mockSetData.mockClear();
     mockGetSource.mockClear();
-    mockGetCanvas.mockClear();
+    mockGetCanvas.mockImplementation(() => ({
+      style: { cursor: "" },
+      toDataURL: mockToDataURL,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
     mockSetConfigProperty.mockClear();
     mockSetLayoutProperty.mockClear();
     mockSetTerrain.mockClear();
@@ -1129,6 +1140,7 @@ describe("MapView", () => {
       style: { cursor: "" },
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
+      toDataURL: vi.fn(),
     };
     mockGetCanvas.mockReturnValue(canvas);
 
@@ -1148,6 +1160,7 @@ describe("MapView", () => {
       style: { cursor: "crosshair" },
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
+      toDataURL: vi.fn(),
     };
     mockGetCanvas.mockReturnValue(canvas);
 
@@ -1502,5 +1515,15 @@ describe("MapView", () => {
         source: "coverage-circles-source",
       }),
     );
+  });
+
+  it("exposes getMapScreenshot via ref", async () => {
+    const ref = { current: null as unknown as MapViewHandle };
+    render(<MapView ref={ref} />);
+    await fireStyleLoad();
+
+    const screenshot = ref.current?.getMapScreenshot();
+    expect(screenshot).toBe("data:image/png;base64,mock");
+    expect(mockToDataURL).toHaveBeenCalled();
   });
 });

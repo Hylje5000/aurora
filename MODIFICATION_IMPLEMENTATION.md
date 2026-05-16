@@ -1,49 +1,84 @@
-# Implementation Plan - AI Route Executive Summary
+# Modification Implementation: Route Analysis PDF Export
 
-## Phase 1: Foundation & Verification
-- [x] Run all tests to ensure the project is in a good state before starting modifications.
-    - `npm test`
-- [x] Research and define the AI System Prompt for "military-grade" tactical summaries.
+## Overview
 
-## Phase 2: State Management & UI Components
-- [x] Create `src/components/SummaryModal.tsx` based on `FeatureDialog.tsx` styling.
-- [x] Update `MapWithNav.tsx` to include:
-    - State for `routeSummary` (string | null).
-    - State for `summaryLoading` (boolean).
-    - State for `summaryModalOpen` (boolean).
-    - Handlers `handleSummaryChange` and `handleSummaryModalOpen`.
-- [x] Update `RoutePanel.tsx` props to accept summary state and handlers.
+Implementation plan for adding PDF export functionality to route analysis results.
 
-## Phase 3: AI Integration & Background Fetching
-- [x] Implement AI fetch logic in `RoutePanel.tsx`:
-    - Add a `useEffect` that triggers when `intelligence` is updated.
-    - Call `POST /api/ai` with a structured prompt containing route details, vehicle profile, hazards, and comms data.
-    - Update summary state in `MapWithNav`.
-- [x] Add the "AI Summary" button to the `RoutePanel` (Route Assessment section):
-    - Show loading spinner if `summaryLoading` is true.
-    - Show button if `routeSummary` exists.
+## Phase 1: Preparation & Environment
 
-## Phase 4: Validation & Cleanup
-- [x] Create/modify unit tests for testing the code added or modified in this phase.
-    - `src/test/components/SummaryModal.test.tsx`
-    - Update `RoutePanel.test.tsx` and `MapWithNav.test.tsx`.
-- [x] Run `next lint --fix` (or `eslint --fix`) to auto-fix lint issues.
-- [x] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
-- [x] Run `npm test` and make sure **all tests pass**.
-- [x] Run `prettier --write .` to make sure formatting is correct.
-- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
-- [x] Use `git diff` to verify the changes, and create a suitable commit message.
-- [x] Wait for approval before committing.
-- [x] After committing, verify changes in the browser.
+- [ ] Run all tests to ensure the project is in a good state before starting modifications.
+- [ ] Install `@react-pdf/renderer` dependency.
+  - `npm install @react-pdf/renderer`
+- [ ] Run `npm test` to verify environment stability.
 
-## Phase 5: Finalization
-- [x] Run `npm run test:coverage` and record the coverage summary in the Journal.
-- [x] Update any `README.md` or `CLAUDE.md` file if necessary.
-- [x] Ask the user to inspect the running app.
+## Phase 2: Map Capture Capability
+
+- [ ] Modify `src/components/MapView.tsx`:
+  - [ ] Wrap `MapView` in `forwardRef`.
+  - [ ] Update `mapboxgl.Map` constructor to include `preserveDrawingBuffer: true`.
+  - [ ] Implement `useImperativeHandle` to expose `getMapScreenshot()` which returns `map.getCanvas().toDataURL()`.
+- [ ] Update `src/components/MapWithNav.tsx`:
+  - [ ] Create a `mapViewRef` using `useRef`.
+  - [ ] Pass `mapViewRef` to the `MapView` component.
+- [ ] Verify screenshot capability via a temporary console log or test.
+- [ ] Run `npm test` and fix any regressions.
+
+## Phase 3: PDF Document Component
+
+- [ ] Create `src/components/RoutePDF.tsx`:
+  - [ ] Define `PDFStyles` optimized for printing (Light mode).
+  - [ ] Implement `RoutePDF` component taking `route`, `intelligence`, `summary`, `screenshot`, and `vehicle`.
+  - [ ] Implement a basic markdown-to-pdf converter for the `summary` text (handling headers, lists, and bold text).
+  - [ ] Order hazards by severity: Critical -> Warning -> Info.
+- [ ] Add basic unit tests for `RoutePDF` (rendering check).
+
+## Phase 4: UI Integration & Export Flow
+
+- [ ] Modify `src/components/RoutePanel.tsx`:
+  - [ ] Add `onExportPDF` prop to `RoutePanelProps`.
+  - [ ] Add "Export Report (PDF)" button in the "Route Assessment" section (disabled if no route or intelligence).
+  - [ ] Use a "Document" icon for the button.
+- [ ] Update `src/components/MapWithNav.tsx`:
+  - [ ] Implement `handleExportPDF` callback.
+  - [ ] Inside `handleExportPDF`:
+    - [ ] Call `mapViewRef.current?.getMapScreenshot()`.
+    - [ ] Use `@react-pdf/renderer`'s `pdf()` function to generate the blob.
+    - [ ] Trigger a browser download of the generated PDF.
+- [ ] Run `next lint --fix` and `tsc --noEmit`.
+- [ ] Run `npm test` and verify all tests pass.
+
+## Phase 5: Validation & Final Polish
+
+- [ ] Create/modify unit tests for testing the code added or modified in this phase.
+  - [ ] Test `MapView` imperative handle.
+  - [ ] Test `RoutePanel` export button interaction.
+- [ ] Run `next lint --fix` (or `eslint --fix`) to auto-fix lint issues.
+- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
+- [ ] Run `npm test` and make sure **all tests pass**.
+- [ ] Run `prettier --write .` to make sure formatting is correct.
+- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal.
+- [ ] Update any `README.md` or `CLAUDE.md` file.
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
+- [ ] Wait for approval before committing.
+- [ ] After committing the change, verify changes in the browser.
 
 ## Journal
-- **2026-05-17**: Initialized implementation plan.
-- **2026-05-17**: Ran baseline tests. All 467 tests passed.
-- **2026-05-17**: Created `SummaryModal.tsx` and wired it into `MapWithNav.tsx`.
-- **2026-05-17**: Updated `RoutePanel.tsx` with AI fetching logic and an "AI Summary" button.
-- **2026-05-17**: Wrote unit tests for `SummaryModal.tsx` and ran coverage suite. All 475 tests passed. Coverage for `SummaryModal.tsx` is at 100%. `eslint` warnings fixed. Ready to commit.
+
+### [2026-05-17] Initial Setup
+
+- Started the implementation plan.
+- Identified the need for `preserveDrawingBuffer` in Mapbox.
+- Decided on `@react-pdf/renderer` for high-quality output.
+
+### [2026-05-17] Implementation Phase
+
+- Installed `@react-pdf/renderer`.
+- Modified `MapView` to wrap in `forwardRef` and expose `getMapScreenshot` imperative handle.
+- Enabled `preserveDrawingBuffer: true` in `mapboxgl.Map` to allow canvas capturing.
+- Created `RoutePDF.tsx` with tactical reporting layout and print-optimized styles.
+- Implemented basic markdown-to-text rendering for the AI tactical summary in the PDF.
+- Integrated "Export Report (PDF)" button in `RoutePanel`.
+- Implemented `handleExportPDF` in `MapWithNav` to orchestrate screenshot capture, PDF generation, and download.
+- Fixed several lint errors including pre-existing immutability issues in `ElectionPieChart.tsx`.
+- Updated test suite to verify imperative handle and export button interaction.
+- All 477 tests passed with high coverage.

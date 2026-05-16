@@ -5,7 +5,7 @@ import SummaryModal from "@/components/SummaryModal";
 describe("SummaryModal", () => {
   it("does not render when open is false", () => {
     const { container } = render(
-      <SummaryModal open={false} summary="Test" onClose={vi.fn()} />
+      <SummaryModal open={false} summary="Test" onClose={vi.fn()} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
