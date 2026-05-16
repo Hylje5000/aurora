@@ -1,77 +1,75 @@
 export interface MilitarySymbol {
   name: string;
-  sidc: string; // 15-character SIDC (usually Friend Present)
+  sidc: string; // 15-character SIDC — MIL-STD-2525B / APP-6B
 }
 
 /**
- * A curated list of common NATO military symbols (APP-6 / MIL-STD-2525).
- * We use 'F' (Friend) and 'P' (Present) as the defaults for the stored SIDC.
+ * Curated NATO military symbols with validated 15-character SIDCs.
+ *
+ * Format: S <affiliation> <battle-dimension> <status> <function-6-chars> <modifier-5-chars>
+ *   e.g.  S  F             G                  P        UCI              --------
+ *
+ * Common values:
+ *   Affiliation  F=Friend  H=Hostile  N=Neutral  U=Unknown
+ *   Dimension    G=Ground  A=Air      S=Sea Surface  U=Sub-surface
+ *   Status       P=Present  A=Anticipated
  */
 export const MILITARY_SYMBOLS: MilitarySymbol[] = [
-  // UNITS - LAND
-  { name: "Infantry", sidc: "SFG-UCI--------" },
-  { name: "Infantry (Mechanized)", sidc: "SFG-UCIM-------" },
-  { name: "Infantry (Motorized)", sidc: "SFG-UCIT-------" },
-  { name: "Armor / Tank", sidc: "SFG-UCV--------" },
-  { name: "Armor (Light)", sidc: "SFG-UCVL-------" },
-  { name: "Artillery", sidc: "SFG-UCA--------" },
-  { name: "Artillery (Self-Propelled)", sidc: "SFG-UCAS-------" },
-  { name: "Artillery (Rocket)", sidc: "SFG-UCAR-------" },
-  { name: "Artillery (Anti-Aircraft)", sidc: "SFG-UCAA-------" },
-  { name: "Cavalry / Recon", sidc: "SFG-UCR--------" },
-  { name: "Engineer", sidc: "SFG-UCE--------" },
-  { name: "Medical", sidc: "SFG-UCM--------" },
-  { name: "Signal / Comm", sidc: "SFG-UCS--------" },
-  { name: "Supply / Logistics", sidc: "SFG-UCL--------" },
-  { name: "Maintenance", sidc: "SFG-UCMN-------" },
-  { name: "Military Police", sidc: "SFG-UCMP-------" },
-  { name: "Special Operations (SOF)", sidc: "SFG-UCSO-------" },
-  { name: "Aviation (Rotary Wing)", sidc: "SFG-UCAR-------" },
+  // ── GROUND COMBAT UNITS ────────────────────────────────────────────────
+  { name: "Infantry", sidc: "SFGPUCI--------" },
+  { name: "Infantry (Mechanized)", sidc: "SFGPUCIM-------" },
+  { name: "Infantry (Motorized)", sidc: "SFGPUCIT-------" },
+  { name: "Armor / Tank", sidc: "SFGPUCV--------" },
+  { name: "Artillery", sidc: "SFGPUCA--------" },
+  { name: "Artillery (Self-Prop.)", sidc: "SFGPUCAS-------" },
+  { name: "Artillery (Rocket)", sidc: "SFGPUCAR-------" },
+  { name: "Air Defense Artillery", sidc: "SFGPUCAA-------" },
+  { name: "Cavalry / Recon", sidc: "SFGPUCR--------" },
+  { name: "Engineer", sidc: "SFGPUCE--------" },
+  { name: "Medical", sidc: "SFGPUCM--------" },
+  { name: "Signal / Comms", sidc: "SFGPUCS--------" },
+  { name: "Logistics / Supply", sidc: "SFGPUCL--------" },
+  { name: "Military Police", sidc: "SFGPUCMP-------" },
+  { name: "Special Operations", sidc: "SFGPUCSO-------" },
+  { name: "Electronic Warfare", sidc: "SFGPUCEW-------" },
+  { name: "Aviation (Army Helo)", sidc: "SFGPUCAH-------" },
 
-  // INSTALLATIONS / EQUIPMENT
-  { name: "Observation Post", sidc: "SFG-GPP--------" },
-  { name: "Command Post / HQ", sidc: "SFG-UC----H----" },
-  { name: "Electronic Warfare (EW)", sidc: "SFG-UCW--------" },
-  { name: "Radar", sidc: "SFG-ESR--------" },
-  { name: "Radio Unit", sidc: "SFG-USR--------" },
-  { name: "Bridge", sidc: "SFG-IMNB-------" },
-  { name: "Minefield", sidc: "SFG-OPM--------" },
-  { name: "Checkpoint", sidc: "SFG-GPC--------" },
+  // ── COMMAND & INSTALLATIONS ────────────────────────────────────────────
+  { name: "Command Post / HQ", sidc: "SFGPUCI----H---" }, // Infantry unit + HQ modifier
+  { name: "Observation Post", sidc: "SFGPUUI--------" },
+  { name: "Checkpoint", sidc: "SFGPUCICP------" },
+  { name: "Minefield", sidc: "SFGPOMH--------" },
+  { name: "Bridge", sidc: "SFGPIMB--------" },
 
-  // AIR
-  { name: "Fighter Aircraft", sidc: "SFA-UPFF-------" },
-  { name: "Bomber Aircraft", sidc: "SFA-UPFB-------" },
-  { name: "UAV / Drone", sidc: "SFA-UPRU-------" },
-  { name: "Helicopter", sidc: "SFA-UPH--------" },
+  // ── EQUIPMENT ──────────────────────────────────────────────────────────
+  { name: "Radar", sidc: "SFGPUESR-------" },
+  { name: "Radio", sidc: "SFGPUUSR-------" }, // same SIDC as cell-tower icon
 
-  // SEA
-  { name: "Surface Combatant", sidc: "SFS-UP---------" },
-  { name: "Submarine", sidc: "SS--UP---------" },
+  // ── AIR ────────────────────────────────────────────────────────────────
+  { name: "Fighter Aircraft", sidc: "SFAPUPFF-------" },
+  { name: "Bomber Aircraft", sidc: "SFAPUPFB-------" },
+  { name: "Helicopter", sidc: "SFAPUPH--------" },
+  { name: "UAV / Drone", sidc: "SFAPUPRU-------" },
 
-  // EMERGENCY / CIVILIAN (using neutral/unknown identity often)
-  { name: "Police", sidc: "SNG-UCMP-------" },
-  { name: "Fire", sidc: "SNG-UCFR-------" },
+  // ── SEA ────────────────────────────────────────────────────────────────
+  { name: "Surface Warship", sidc: "SFSPU----------" },
+  { name: "Submarine", sidc: "SFUPU----------" },
 ];
 
 export const AFFILIATIONS = [
-  { label: "Friend", code: "F", color: "#3b82f6" }, // Blue
-  { label: "Hostile", code: "H", color: "#ef4444" }, // Red
-  { label: "Neutral", code: "N", color: "#22c55e" }, // Green
-  { label: "Unknown", code: "U", color: "#eab308" }, // Yellow
+  { label: "Friend", code: "F", color: "#3b82f6" },
+  { label: "Hostile", code: "H", color: "#ef4444" },
+  { label: "Neutral", code: "N", color: "#22c55e" },
+  { label: "Unknown", code: "U", color: "#eab308" },
 ];
 
-/**
- * Adjusts the identity (affiliation) of a 15-char SIDC.
- * Position 2 in SIDC is the identity.
- */
+/** Adjusts the identity (affiliation) of a 15-char SIDC — position index 1. */
 export function setSidcAffiliation(sidc: string, affiliation: string): string {
   if (sidc.length < 2) return sidc;
   return sidc[0] + affiliation + sidc.substring(2);
 }
 
-/**
- * Gets the current affiliation code from a SIDC.
- */
+/** Returns the current affiliation code from a SIDC. */
 export function getSidcAffiliation(sidc: string): string {
   return sidc[1] || "U";
 }

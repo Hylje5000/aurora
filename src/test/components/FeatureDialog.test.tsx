@@ -98,9 +98,9 @@ describe("FeatureDialog", () => {
       target: { value: "Friendly Inf" },
     });
 
-    // Default symbol should be Infantry (SFG-UCI--------)
+    // Default symbol should be Infantry (SFGPUCI--------)
     fireEvent.click(screen.getByTestId("feature-dialog-save"));
-    expect(onSave).toHaveBeenCalledWith("Friendly Inf", "", "SFG-UCI--------");
+    expect(onSave).toHaveBeenCalledWith("Friendly Inf", "", "SFGPUCI--------");
   });
 
   it("calls onSave with selected symbol from SymbolPicker", () => {
@@ -115,8 +115,8 @@ describe("FeatureDialog", () => {
     fireEvent.click(screen.getByText("Armor / Tank"));
 
     fireEvent.click(screen.getByTestId("feature-dialog-save"));
-    // Hostile Armor SIDC
-    expect(onSave).toHaveBeenCalledWith("Armor", "", "SHG-UCV--------");
+    // Hostile Armor Present SIDC
+    expect(onSave).toHaveBeenCalledWith("Armor", "", "SHGPUCV--------");
   });
 
   it("calls onSave on Enter key when name is filled", () => {
