@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 
 export interface InfoPanelData {
   title: string;
@@ -14,32 +14,48 @@ interface InfoPanelProps {
 }
 
 export default function InfoPanel({ data, onClose }: InfoPanelProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
   if (!data) return null;
 
   return (
-    <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 min-w-48 rounded-lg border border-slate-700 bg-slate-900/90 p-4 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm">
-      <div className="mb-3 flex items-start justify-between gap-4">
-        <span className="text-sm font-bold tracking-wide text-white">
+    <div className="absolute right-4 top-20 z-20 w-72 max-h-[60vh] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/90 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm">
+      {/* Header row — always visible */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        <span className="text-sm font-bold tracking-wide text-white flex-1 truncate">
           {data.title}
         </span>
         <button
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={collapsed ? "expand info panel" : "collapse info panel"}
+          className="shrink-0 text-slate-400 hover:text-white text-[10px]"
+        >
+          {collapsed ? "▸" : "▾"}
+        </button>
+        <button
           onClick={onClose}
           aria-label="close info panel"
-          className="ml-2 shrink-0 text-slate-400 hover:text-white"
+          className="shrink-0 text-slate-400 hover:text-white"
         >
           ×
         </button>
       </div>
-      <div className="space-y-1 leading-relaxed">
-        {data.rows.map(([label, value]) => (
-          <div key={label}>
-            <span className="text-slate-500">{label}</span>
-            {"  "}
-            {value ?? "—"}
+
+      {/* Collapsible body */}
+      {!collapsed && (
+        <div className="px-4 pb-4">
+          <div className="space-y-1 leading-relaxed">
+            {data.rows.map(([label, value]) => (
+              <div key={label}>
+                <span className="text-slate-500">{label}</span>
+                {"  "}
+                {value ?? "—"}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      {data.component}
+          {data.component}
+        </div>
+      )}
     </div>
   );
 }

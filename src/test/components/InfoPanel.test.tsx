@@ -81,4 +81,26 @@ describe("InfoPanel", () => {
     render(<InfoPanel data={baseData} onClose={vi.fn()} />);
     expect(screen.getByText("Rusko / Rusko")).toBeInTheDocument();
   });
+
+  it("collapses body when the chevron button is clicked", async () => {
+    render(<InfoPanel data={baseData} onClose={vi.fn()} />);
+    expect(screen.getByText("Code")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /collapse info panel/i }),
+    );
+    expect(screen.queryByText("Code")).not.toBeInTheDocument();
+    expect(screen.getByText("Rusko / Rusko")).toBeInTheDocument();
+  });
+
+  it("expands body again after second chevron click", async () => {
+    render(<InfoPanel data={baseData} onClose={vi.fn()} />);
+    const chevron = screen.getByRole("button", {
+      name: /collapse info panel/i,
+    });
+    await userEvent.click(chevron);
+    await userEvent.click(
+      screen.getByRole("button", { name: /expand info panel/i }),
+    );
+    expect(screen.getByText("Code")).toBeInTheDocument();
+  });
 });

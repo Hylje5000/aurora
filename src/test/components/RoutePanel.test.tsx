@@ -588,4 +588,46 @@ describe("RoutePanel", () => {
     expect(onHazardsChange).toHaveBeenLastCalledWith(null);
     expect(screen.queryByTestId("route-assessment")).not.toBeInTheDocument();
   });
+
+  it("collapses panel body when the chevron button is clicked", () => {
+    render(
+      <RoutePanel
+        ref={createRef()}
+        onAddingWaypointChange={vi.fn()}
+        onRouteChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // Profile selector is visible when expanded
+    expect(
+      screen.getByRole("group", { name: /travel profile/i }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /collapse route panel/i }),
+    );
+    expect(
+      screen.queryByRole("group", { name: /travel profile/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("expands panel body again after second chevron click", () => {
+    render(
+      <RoutePanel
+        ref={createRef()}
+        onAddingWaypointChange={vi.fn()}
+        onRouteChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const chevron = screen.getByRole("button", {
+      name: /collapse route panel/i,
+    });
+    fireEvent.click(chevron);
+    fireEvent.click(
+      screen.getByRole("button", { name: /expand route panel/i }),
+    );
+    expect(
+      screen.getByRole("group", { name: /travel profile/i }),
+    ).toBeInTheDocument();
+  });
 });
