@@ -34,7 +34,7 @@ export const MILITARY_SYMBOLS: MilitarySymbol[] = [
   { name: "Electronic Warfare (EW)", sidc: "SFG-UCW--------" },
   { name: "Radar", sidc: "SFG-ESR--------" },
   { name: "Radio Unit", sidc: "SFG-USR--------" },
-  { name: "Bridge", sidc: "SFG-EHB--------" },
+  { name: "Bridge", sidc: "SFG-IMNB-------" },
   { name: "Minefield", sidc: "SFG-OPM--------" },
   { name: "Checkpoint", sidc: "SFG-GPC--------" },
 

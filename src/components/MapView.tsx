@@ -826,7 +826,7 @@ export default function MapView({
       // ── Infrastructure layers ──────────────────────────────────────────
 
       // Bridge NATO milsymbol icons (SIDC: Friendly Ground Installation)
-      const BRIDGE_SIDC = "SFGPIBE--------";
+      const BRIDGE_SIDC = "SFGPIMNB-------";
       const [bridgeActiveImg, bridgeInactiveImg] = await Promise.all([
         createMilsymbolImage({ sidc: BRIDGE_SIDC, fillColor: "#facc15" }),
         createMilsymbolImage({ sidc: BRIDGE_SIDC, fillColor: "#94a3b8" }),
