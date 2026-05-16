@@ -44,3 +44,9 @@ next-env.d.ts
 .local/
 
 venv/
+
+# NLS Finland raw height data (ASC grids — ~3.3 GB, pre-ingested into PostGIS)
+data/*/heights/
+
+# Ingest progress tracker (transient, re-generated on each run)
+scripts/height_data_progress.json
