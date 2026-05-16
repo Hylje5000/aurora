@@ -874,9 +874,11 @@ export default function MapView({
         id: "municipality-highlight-line",
         type: "line",
         source: "municipality-highlight-source",
+        slot: "top",
         paint: {
           "line-color": "#ffffff",
           "line-width": 3,
+          "line-opacity": 1,
           "line-dasharray": [0, 4],
         },
       });
