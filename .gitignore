@@ -47,3 +47,5 @@ venv/
 
 # Ingest progress tracker (transient, re-generated on each run)
 scripts/height_data_progress.json
+
+.hintrc
