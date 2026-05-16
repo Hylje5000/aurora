@@ -1,67 +1,125 @@
-# Implementation Plan: Fix Cell-Tower Cluster Visibility Sync
+# Implementation Plan: NATO Milsymbol Cell Tower Markers
 
 ## Journal
 
-_(Updated after each phase)_
+_Updated after each phase._
 
 ---
 
-## Phase 0 — Baseline check
+## Phase 0 — Baseline health check
 
-- [ ] Run `npm test` to confirm the suite is green before any changes.
-
----
-
-## Phase 1 — Fix `MapView.tsx`
-
-Two targeted edits to `src/components/MapView.tsx`:
-
-### 1a. `style.load` — set initial cluster layer visibility
-
-In the `style.load` handler, immediately after the `const vis = layerVisibility;` line,
-compute `clustersVisible` and pass it to both cluster `addLayer` calls as `layout.visibility`.
-
-```ts
-const clustersVisible =
-  vis.cellGSM || vis.cellUMTS || vis.cellLTE || vis.cellCDMA;
-```
-
-- `cell-towers-clusters` → add `layout: { visibility: clustersVisible ? "visible" : "none" }`
-- `cell-towers-cluster-count` → add `layout: { visibility: clustersVisible ? "visible" : "none" }`
-
-### 1b. `layerVisibility` `useEffect` — live sync
-
-After the existing `LAYER_GROUPS` loop, append:
-
-```ts
-const clustersVisible =
-  layerVisibility.cellGSM ||
-  layerVisibility.cellUMTS ||
-  layerVisibility.cellLTE ||
-  layerVisibility.cellCDMA;
-for (const id of ["cell-towers-clusters", "cell-towers-cluster-count"]) {
-  map.setLayoutProperty(id, "visibility", clustersVisible ? "visible" : "none");
-}
-```
-
-After completing Phase 1:
-
-- [ ] After completing tasks, if you added any TODOs or left anything unfinished, add new tasks.
-- [ ] Update `src/test/components/MapView.test.tsx` to assert that both cluster layers are hidden when all cell types are off, and visible when at least one is on.
-- [ ] Run `next lint --fix` and fix any remaining lint issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — all tests must pass (hard blocker).
-- [ ] Run `prettier --write .` for consistent formatting.
-- [ ] Re-read this file and handle any changes.
-- [ ] Update this file with learnings, surprises, or deviations; check off completed items.
-- [ ] Run `git diff` and draft a commit message; present it to the user for approval.
-- [ ] Wait for user approval before committing or moving on.
-- [ ] After committing, verify the fix looks correct in the running dev server.
+- [x] Run `npm test` and confirm all tests pass before starting.
 
 ---
 
-## Phase 2 — Final verification & docs
+## Phase 1 — Install milsymbol
 
-- [ ] Run `npm run test:coverage` and record the summary in the Journal.
-- [ ] Update `CLAUDE.md` so the **Layer toggle system** and **Cell tower overlay** sections accurately describe cluster visibility behaviour.
-- [ ] Ask the user to inspect the running app and confirm they are satisfied.
+- [x] Run `npm install milsymbol` to add the package.
+- [x] Verify `milsymbol` appears in `package.json` dependencies and that TypeScript types are included (milsymbol ships its own `.d.ts`).
+- [x] Run `tsc --noEmit` to confirm no type errors introduced by the new package.
+- [x] Run `npm test` — all tests must still pass (no code changed yet).
+- [x] Run `next lint --fix`.
+- [x] Run `prettier --write .`.
+- [x] Update MODIFICATION_IMPLEMENTATION.md Journal with findings.
+- [ ] Present the following commit for user approval:
+  ```
+  chore(deps): add milsymbol for NATO military symbology rendering
+  ```
+- [ ] Wait for approval, then commit.
+
+---
+
+## Phase 2 — Add `src/lib/milsymbol.ts` utility
+
+- [ ] Create `src/lib/milsymbol.ts` with `createMilsymbolImage(opts)` as designed:
+  - Accepts `{ sidc, size?, fillColor?, uniqueDesignation? }`
+  - Instantiates `new ms.Symbol(sidc, options)`
+  - Calls `.asSVG()` to get the SVG string
+  - Returns a `Promise<HTMLImageElement>` via data URL → `<img onload>`
+- [ ] Create `src/test/lib/milsymbol.test.ts`:
+  - `vi.mock("milsymbol")` — mock `Symbol` class with `.asSVG()` returning a minimal SVG string
+  - Mock the global `Image` class so `onload` fires synchronously
+  - Assert `img.src` contains `data:image/svg+xml`
+  - Assert the returned value is the `HTMLImageElement`
+  - Assert that error path (`onerror`) rejects the promise
+- [ ] Run `tsc --noEmit` — fix any type errors.
+- [ ] Run `npm test` — all tests must pass (including the new milsymbol tests).
+- [ ] Run `next lint --fix`.
+- [ ] Run `prettier --write .`.
+- [ ] Update MODIFICATION_IMPLEMENTATION.md Journal.
+- [ ] Present commit for user approval:
+  ```
+  feat(lib): add createMilsymbolImage utility for NATO symbol generation
+  ```
+- [ ] Wait for approval, then commit.
+
+---
+
+## Phase 3 — Replace circle layers with symbol layers in `MapView.tsx`
+
+- [ ] Import `createMilsymbolImage` from `@/lib/milsymbol` in `MapView.tsx`.
+- [ ] Define `TOWER_CONFIGS` array (id, radio, color, visible) — replaces the existing inline `towerLayers` array.
+- [ ] Define `SIDC = "SFGPUUSR-------"`.
+- [ ] Wrap the `style.load` callback as `async`.
+- [ ] Inside `style.load`, after adding cluster layers:
+  - `await Promise.all(TOWER_CONFIGS.map(...))` — generate and register one milsymbol image per radio type via `map.addImage()`.
+- [ ] Replace the existing `circle`-type `addLayer` calls with `symbol`-type layers:
+  - `type: "symbol"`
+  - `layout`: `"icon-image": "${id}-icon"`, `"icon-size": 0.6`, `"icon-allow-overlap": true`, `"visibility": ...`
+  - Remove all `paint` properties (no `circle-radius`, `circle-color`, etc.)
+- [ ] Verify the popup and hover handlers reference the same layer IDs — no changes needed there.
+- [ ] Verify `LAYER_GROUPS` in `src/lib/layers.ts` — layer IDs are unchanged, so no edits required.
+- [ ] After completing tasks above, add any TODOs as new tasks if anything was skipped or left incomplete.
+- [ ] Update `src/test/components/MapView.test.tsx`:
+  - Mock `createMilsymbolImage` from `@/lib/milsymbol` using `vi.mock` — return a resolved promise with a stub `HTMLImageElement`.
+  - Assert `map.addImage` is called 4 times (once per radio type icon).
+  - Update layer assertions from `type: "circle"` to `type: "symbol"` for the four per-radio layers.
+  - Assert `icon-image` is set in the layout (not `circle-radius` in paint).
+- [ ] Run `tsc --noEmit` — fix any type errors.
+- [ ] Run `npm test` — all tests must pass (hard blocker if not).
+- [ ] Run `next lint --fix`.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read MODIFICATION_IMPLEMENTATION.md to check for any missed tasks.
+- [ ] Update MODIFICATION_IMPLEMENTATION.md Journal.
+- [ ] `git diff` — review changes, draft commit message, present to user:
+  ```
+  feat(map): replace circle cell-tower markers with NATO milsymbol icons
+  ```
+- [ ] Wait for approval, then commit.
+- [ ] Verify hot-reload in browser — NATO symbols should appear on the map in place of the dots.
+
+---
+
+## Phase 4 — Final checks, docs, coverage
+
+- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal below.
+- [ ] Update `CLAUDE.md` to reflect:
+  - `milsymbol` is now a dependency
+  - `src/lib/milsymbol.ts` exists and what it does
+  - Cell tower individual markers are now `symbol` layers using NATO APP-6 icons (SIDC `SFGPUUSR-------`)
+- [ ] Check if `README.md` exists and needs updating (unlikely; update only if relevant).
+- [ ] Ask the user to inspect the running app and confirm they are satisfied, or note any modifications needed.
+
+---
+
+## Journal
+
+### Phase 0
+
+114 tests pass. Baseline green.
+
+### Phase 1
+
+`milsymbol@3.0.4` installed. Types ship with the package at `node_modules/milsymbol/index.d.ts` — no separate `@types/milsymbol` needed. `tsc --noEmit` clean. All 114 tests still pass. Note: `next lint --fix` does not accept `--fix`; use `npm run lint` (calls `eslint` directly) instead in future phases.
+
+### Phase 2
+
+_To be filled in._
+
+### Phase 3
+
+_To be filled in._
+
+### Phase 4 — Coverage summary
+
+_To be filled in._
