@@ -32,6 +32,18 @@ const DRAW_MODE_MAP: Record<DrawingTool, string> = {
   Rectangle: "draw_rectangle",
 };
 
+// Layers that have their own click popups — elevation is suppressed when these are hit
+const INTERACTIVE_LAYER_IDS = new Set([
+  "cell-towers-gsm",
+  "cell-towers-umts",
+  "cell-towers-lte",
+  "cell-towers-cdma",
+  "roads-line",
+  "bridges-symbol",
+  "railways-line",
+  "municipalities-fill",
+]);
+
 interface MapViewProps {
   center?: [number, number];
   zoom?: number;
@@ -397,6 +409,10 @@ export default function MapView({
   const activeDrawingColourRef = useRef<string>(COLOUR_PALETTE[0].hex);
   const activeDrawingToolRef = useRef<DrawingTool | null>(null);
   const pendingDrawFeatureRef = useRef<GeoJSON.Feature | null>(null);
+
+  // Elevation marker + popup (both replaced on each click, cleared on teardown)
+  const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const elevationPopupRef = useRef<mapboxgl.Popup | null>(null);
 
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
@@ -1167,6 +1183,72 @@ export default function MapView({
           fetchLayer(map, "bridges-source", "/api/bridges");
         }
         fetchLayer(map, "railways-source", "/api/railways");
+
+        // Elevation click — fires on every map click (general handler, no layer filter)
+        map.on("click", async (e) => {
+          const { lng, lat } = e.lngLat;
+
+          // Always clear the previous elevation context on any click
+          elevationMarkerRef.current?.remove();
+          elevationMarkerRef.current = null;
+          elevationPopupRef.current?.remove();
+          elevationPopupRef.current = null;
+
+          // Yield to layer-specific handlers (cell towers, roads, etc. and custom layers)
+          const hitInteractive = map
+            .queryRenderedFeatures(e.point)
+            .some(
+              (f) =>
+                f.layer != null &&
+                (INTERACTIVE_LAYER_IDS.has(f.layer.id) ||
+                  f.layer.id.startsWith("custom-layer-")),
+            );
+          if (hitInteractive) return;
+
+          try {
+            const res = await fetch(
+              `/api/elevation?lng=${lng.toFixed(6)}&lat=${lat.toFixed(6)}`,
+            );
+            if (!res.ok) return;
+            const data = (await res.json()) as {
+              elevation_m: number | null;
+              aoi_id?: string;
+              dist_m?: number;
+            };
+            if (data.elevation_m === null) return;
+
+            const el = document.createElement("div");
+            el.style.cssText =
+              "width:14px;height:14px;border-radius:50%;" +
+              "background:#facc15;border:2px solid #fff;" +
+              "box-shadow:0 0 6px rgba(0,0,0,0.6);";
+            elevationMarkerRef.current = new mapboxgl.Marker({ element: el })
+              .setLngLat([lng, lat])
+              .addTo(map);
+
+            elevationPopupRef.current = new mapboxgl.Popup({
+              className: "aurora-popup",
+              offset: 15,
+            })
+              .setLngLat([lng, lat])
+              .setHTML(
+                popupStyle("Terrain Elevation", [
+                  ["Elevation", `${data.elevation_m.toFixed(1)} m`],
+                  ["Coordinates", `${lat.toFixed(4)}°N  ${lng.toFixed(4)}°E`],
+                  ["AOI", data.aoi_id ?? "—"],
+                  ["Source", "NLS Finland DEM (50 m)"],
+                  [
+                    "Source dist",
+                    data.dist_m != null ? `${data.dist_m.toFixed(0)} m` : "—",
+                  ],
+                ]),
+              )
+              .addTo(map);
+          } catch {
+            // Elevation is supplementary — fail silently
+          }
+        });
+
         eventsAttachedRef.current = true;
       }
 
@@ -1178,6 +1260,10 @@ export default function MapView({
       if (highlightAnimFrameRef.current !== null) {
         cancelAnimationFrame(highlightAnimFrameRef.current);
       }
+      elevationMarkerRef.current?.remove();
+      elevationMarkerRef.current = null;
+      elevationPopupRef.current?.remove();
+      elevationPopupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, act, screen } from "@testing-library/react";
 
 const {
+  mockQueryRenderedFeatures,
   mockRemove,
   mockAddControl,
   mockOn,
@@ -27,7 +28,13 @@ const {
   MockMap,
   MockNavigationControl,
   MockPopup,
+  mockPopupRemove,
+  mockMarkerRemove,
+  mockMarkerSetLngLat,
+  mockMarkerAddTo,
+  MockMarker,
 } = vi.hoisted(() => {
+  const mockQueryRenderedFeatures = vi.fn(() => [] as unknown[]);
   const mockRemove = vi.fn();
   const mockAddControl = vi.fn();
   const mockOn = vi.fn();
@@ -60,16 +67,28 @@ const {
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
   const mockAddTo = vi.fn();
+  const mockPopupRemove = vi.fn();
   const MockPopup = vi.fn(() => ({
     setLngLat: mockSetLngLat.mockReturnThis(),
     setHTML: mockSetHTML.mockReturnThis(),
     addTo: mockAddTo.mockReturnThis(),
+    remove: mockPopupRemove,
+  }));
+
+  const mockMarkerRemove = vi.fn();
+  const mockMarkerSetLngLat = vi.fn();
+  const mockMarkerAddTo = vi.fn();
+  const MockMarker = vi.fn(() => ({
+    setLngLat: mockMarkerSetLngLat.mockReturnThis(),
+    addTo: mockMarkerAddTo.mockReturnThis(),
+    remove: mockMarkerRemove,
   }));
 
   const MockMap = vi.fn(() => ({
     addControl: mockAddControl,
     remove: mockRemove,
     on: mockOn,
+    queryRenderedFeatures: mockQueryRenderedFeatures,
     addSource: mockAddSource,
     addLayer: mockAddLayer,
     addImage: mockAddImage,
@@ -89,6 +108,7 @@ const {
   }));
   const MockNavigationControl = vi.fn();
   return {
+    mockQueryRenderedFeatures,
     mockRemove,
     mockAddControl,
     mockOn,
@@ -115,6 +135,11 @@ const {
     MockMap,
     MockNavigationControl,
     MockPopup,
+    mockPopupRemove,
+    mockMarkerRemove,
+    mockMarkerSetLngLat,
+    mockMarkerAddTo,
+    MockMarker,
   };
 });
 
@@ -150,6 +175,7 @@ vi.mock("mapbox-gl", () => ({
     Map: MockMap,
     NavigationControl: MockNavigationControl,
     Popup: MockPopup,
+    Marker: MockMarker,
     accessToken: "",
   },
 }));
@@ -253,6 +279,12 @@ describe("MapView", () => {
     mockDrawChangeMode.mockClear();
     mockDrawDelete.mockClear();
     mockDrawTrash.mockClear();
+    mockQueryRenderedFeatures.mockReturnValue([]);
+    mockPopupRemove.mockClear();
+    MockMarker.mockClear();
+    mockMarkerRemove.mockClear();
+    mockMarkerSetLngLat.mockClear();
+    mockMarkerAddTo.mockClear();
     mockFetchOk();
   });
 
@@ -909,6 +941,147 @@ describe("MapView", () => {
 
     expect(mockSetStyle).toHaveBeenCalledWith(
       "mapbox://styles/mapbox/satellite-streets-v12",
+    );
+  });
+
+  // ── Elevation click tests ─────────────────────────────────────────────
+
+  function findGeneralClickHandler() {
+    // General map.on("click", handler) has 2 args; layer-specific have 3
+    const call = mockOn.mock.calls.find(
+      ([event, second]) => event === "click" && typeof second === "function",
+    );
+    return call?.[1] as ((e: unknown) => Promise<void>) | undefined;
+  }
+
+  it("registers a general click handler on the map after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    expect(findGeneralClickHandler()).toBeDefined();
+  });
+
+  it("fetches /api/elevation with the clicked lng/lat and opens a Popup with elevation data", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+    mockSetLngLat.mockClear();
+    mockSetHTML.mockClear();
+    mockAddTo.mockClear();
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          elevation_m: 6.5,
+          aoi_id: "turku",
+          dist_m: 12,
+        }),
+    } as unknown as Response);
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({ lngLat: { lng: 22.27, lat: 60.45 } });
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation?lng=22.270000&lat=60.450000"),
+    );
+    expect(MockPopup).toHaveBeenCalledTimes(1);
+    expect(mockSetLngLat).toHaveBeenCalledWith([22.27, 60.45]);
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Terrain Elevation"),
+    );
+    expect(mockSetHTML).toHaveBeenCalledWith(expect.stringContaining("6.5 m"));
+    expect(mockAddTo).toHaveBeenCalled();
+    expect(MockMarker).toHaveBeenCalledTimes(1);
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([22.27, 60.45]);
+  });
+
+  it("does not open a Popup or place a marker when elevation_m is null (outside AOI or too far)", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ elevation_m: null }),
+    } as unknown as Response);
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({ lngLat: { lng: 10.0, lat: 50.0 } });
+    });
+
+    expect(MockMarker).not.toHaveBeenCalled();
+    // Only pre-existing popup calls (none in this test path)
+    const elevationPopupCalls = MockPopup.mock.calls.filter((args) =>
+      JSON.stringify(args).includes("aurora-popup"),
+    );
+    expect(elevationPopupCalls).toHaveLength(0);
+  });
+
+  it("does not open a Popup when the elevation fetch throws", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+
+    global.fetch = vi.fn().mockRejectedValue(new Error("network error"));
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({ lngLat: { lng: 22.27, lat: 60.45 } });
+    });
+
+    expect(MockMarker).not.toHaveBeenCalled();
+    expect(MockPopup).not.toHaveBeenCalled();
+  });
+
+  it("suppresses elevation when clicking on an interactive feature layer", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+    MockMarker.mockClear();
+
+    // Simulate clicking on a cell tower
+    mockQueryRenderedFeatures.mockReturnValue([
+      { layer: { id: "cell-towers-lte" } },
+    ]);
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({
+        lngLat: { lng: 22.27, lat: 60.45 },
+        point: { x: 100, y: 200 },
+      });
+    });
+
+    expect(MockMarker).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation"),
+    );
+  });
+
+  it("suppresses elevation when clicking on a custom drawing layer feature", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+    MockMarker.mockClear();
+
+    // Simulate clicking on a custom layer
+    mockQueryRenderedFeatures.mockReturnValue([
+      { layer: { id: "custom-layer-abc123-fill" } },
+    ]);
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({
+        lngLat: { lng: 22.27, lat: 60.45 },
+        point: { x: 100, y: 200 },
+      });
+    });
+
+    expect(MockMarker).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation"),
     );
   });
 });
