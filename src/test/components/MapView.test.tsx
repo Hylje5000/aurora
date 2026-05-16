@@ -225,6 +225,108 @@ describe("MapView", () => {
     );
   });
 
+  it("cluster layers start visible when cell types are on (default)", async () => {
+    render(<MapView />);
+    await act(async () => fireStyleLoad());
+
+    const clusterLayer = mockAddLayer.mock.calls.find(
+      ([l]) => l.id === "cell-towers-clusters",
+    )?.[0];
+    const countLayer = mockAddLayer.mock.calls.find(
+      ([l]) => l.id === "cell-towers-cluster-count",
+    )?.[0];
+    expect(clusterLayer?.layout?.visibility).toBe("visible");
+    expect(countLayer?.layout?.visibility).toBe("visible");
+  });
+
+  it("cluster layers start hidden when all cell types are off", async () => {
+    render(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+          cellGSM: false,
+          cellUMTS: false,
+          cellLTE: false,
+          cellCDMA: false,
+        }}
+      />,
+    );
+    await act(async () => fireStyleLoad());
+
+    const clusterLayer = mockAddLayer.mock.calls.find(
+      ([l]) => l.id === "cell-towers-clusters",
+    )?.[0];
+    const countLayer = mockAddLayer.mock.calls.find(
+      ([l]) => l.id === "cell-towers-cluster-count",
+    )?.[0];
+    expect(clusterLayer?.layout?.visibility).toBe("none");
+    expect(countLayer?.layout?.visibility).toBe("none");
+  });
+
+  it("hides cluster layers when all cell types are toggled off", async () => {
+    const { rerender } = render(<MapView />);
+    await act(async () => fireStyleLoad());
+    mockSetLayoutProperty.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          terrain3d: false,
+          hillshade: true,
+          contours: true,
+          landcover: true,
+          cellGSM: false,
+          cellUMTS: false,
+          cellLTE: false,
+          cellCDMA: false,
+        }}
+      />,
+    );
+
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "cell-towers-clusters",
+      "visibility",
+      "none",
+    );
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "cell-towers-cluster-count",
+      "visibility",
+      "none",
+    );
+  });
+
+  it("shows cluster layers when at least one cell type is toggled on", async () => {
+    const allOff = {
+      terrain3d: false,
+      hillshade: true,
+      contours: true,
+      landcover: true,
+      cellGSM: false,
+      cellUMTS: false,
+      cellLTE: false,
+      cellCDMA: false,
+    };
+    const { rerender } = render(<MapView layerVisibility={allOff} />);
+    await act(async () => fireStyleLoad());
+    mockSetLayoutProperty.mockClear();
+
+    rerender(<MapView layerVisibility={{ ...allOff, cellLTE: true }} />);
+
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "cell-towers-clusters",
+      "visibility",
+      "visible",
+    );
+    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
+      "cell-towers-cluster-count",
+      "visibility",
+      "visible",
+    );
+  });
+
   it("adds four per-type tower layers with correct filters and colors", async () => {
     render(<MapView />);
     await act(async () => fireStyleLoad());
