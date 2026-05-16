@@ -218,6 +218,7 @@ const infraOn = {
   cellUMTS: true,
   cellLTE: true,
   cellCDMA: true,
+  cellCoverageCircles: false,
   roads: true,
   bridges: true,
   railways: true,
@@ -514,9 +515,11 @@ describe("MapView", () => {
 
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/cell-towers?bbox="),
+      expect.objectContaining({ signal: expect.anything() }),
     );
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/roads?bbox="),
+      expect.objectContaining({ signal: expect.anything() }),
     );
   });
 
@@ -1408,5 +1411,96 @@ describe("MapView", () => {
 
     expect(mockMarkerRemove).toHaveBeenCalled();
     expect(mockPopupRemove).toHaveBeenCalled();
+  });
+
+  // ── Coverage gap overlay ─────────────────────────────────────────────
+
+  it("adds route-coverage-gaps-source and line layer after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "route-coverage-gaps-source",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "route-coverage-gaps-line",
+        type: "line",
+        source: "route-coverage-gaps-source",
+      }),
+    );
+  });
+
+  it("syncs gap geometry to route-coverage-gaps-source when routeCoverageGaps is set", async () => {
+    const gapGeom: GeoJSON.Geometry = {
+      type: "LineString",
+      coordinates: [
+        [24.96, 60.19],
+        [24.98, 60.21],
+      ],
+    };
+
+    const { rerender } = render(<MapView routeCoverageGaps={null} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+    mockGetSource.mockClear();
+
+    rerender(<MapView routeCoverageGaps={gapGeom} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("route-coverage-gaps-source");
+    const setDataCall = mockSetData.mock.calls.find(
+      (c) => (c[0] as GeoJSON.Feature)?.geometry?.type === "LineString",
+    );
+    expect(setDataCall).toBeDefined();
+  });
+
+  it("clears route-coverage-gaps-source when routeCoverageGaps is null", async () => {
+    const gapGeom: GeoJSON.Geometry = {
+      type: "LineString",
+      coordinates: [
+        [24.96, 60.19],
+        [24.98, 60.21],
+      ],
+    };
+
+    const { rerender } = render(<MapView routeCoverageGaps={gapGeom} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+    mockGetSource.mockClear();
+
+    rerender(<MapView routeCoverageGaps={null} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("route-coverage-gaps-source");
+    const lastCall = mockSetData.mock.calls[mockSetData.mock.calls.length - 1];
+    expect((lastCall?.[0] as GeoJSON.FeatureCollection)?.features).toHaveLength(
+      0,
+    );
+  });
+
+  // ── Coverage circle layers ────────────────────────────────────────────
+
+  it("adds coverage-circles-source and two layers after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "coverage-circles-source",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "coverage-circles-fill",
+        type: "fill",
+        source: "coverage-circles-source",
+      }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "coverage-circles-line",
+        type: "line",
+        source: "coverage-circles-source",
+      }),
+    );
   });
 });

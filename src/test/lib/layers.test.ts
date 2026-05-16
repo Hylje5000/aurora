@@ -15,6 +15,7 @@ const ALL_KEYS: LayerKey[] = [
   "cellUMTS",
   "cellLTE",
   "cellCDMA",
+  "cellCoverageCircles",
 ];
 
 describe("DEFAULT_LAYER_VISIBILITY", () => {
@@ -43,6 +44,10 @@ describe("DEFAULT_LAYER_VISIBILITY", () => {
     expect(DEFAULT_LAYER_VISIBILITY.cellUMTS).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.cellLTE).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.cellCDMA).toBe(true);
+  });
+
+  it("has cellCoverageCircles off by default", () => {
+    expect(DEFAULT_LAYER_VISIBILITY.cellCoverageCircles).toBe(false);
   });
 });
 
@@ -91,5 +96,12 @@ describe("LAYER_GROUPS", () => {
 
   it("cellCDMA maps to cell-towers-cdma layer", () => {
     expect(LAYER_GROUPS.cellCDMA).toEqual(["cell-towers-cdma"]);
+  });
+
+  it("cellCoverageCircles maps to coverage circle layers", () => {
+    expect(LAYER_GROUPS.cellCoverageCircles).toEqual([
+      "coverage-circles-fill",
+      "coverage-circles-line",
+    ]);
   });
 });

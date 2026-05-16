@@ -63,6 +63,14 @@ export interface RouteHazard {
   properties: Record<string, unknown>;
 }
 
+export interface CoverageAnalysis {
+  route_length_m: number;
+  covered_pct: number;
+  gap_count: number;
+  longest_gap_m: number;
+  gap_geometry: GeoJSON.Geometry | null;
+}
+
 export interface RouteIntelligence {
   hazards: RouteHazard[];
   summary: {
@@ -71,6 +79,7 @@ export interface RouteIntelligence {
     info: number;
     passable: boolean;
   };
+  coverage?: CoverageAnalysis | null;
 }
 
 export interface Waypoint {

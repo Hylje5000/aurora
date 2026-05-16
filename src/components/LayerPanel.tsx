@@ -143,6 +143,12 @@ export default function LayerPanel({
             checked={visibility.cellCDMA}
             onToggle={() => onToggle("cellCDMA")}
           />
+          <LayerRow
+            label="Coverage Circles"
+            dotColor="#06b6d4"
+            checked={visibility.cellCoverageCircles}
+            onToggle={() => onToggle("cellCoverageCircles")}
+          />
 
           <SectionHeading label="Infrastructure" />
           <LayerRow

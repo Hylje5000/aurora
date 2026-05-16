@@ -22,6 +22,7 @@ describe("LayerPanel", () => {
     expect(screen.getByLabelText(/UMTS/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/LTE/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/CDMA/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Coverage Circles/i)).toBeInTheDocument();
   });
 
   it("renders the COMMS section heading", () => {
@@ -42,6 +43,8 @@ describe("LayerPanel", () => {
     expect(screen.getByLabelText(/UMTS/i)).toBeChecked();
     expect(screen.getByLabelText(/LTE/i)).toBeChecked();
     expect(screen.getByLabelText(/CDMA/i)).toBeChecked();
+    // Coverage Circles is false by default
+    expect(screen.getByLabelText(/Coverage Circles/i)).not.toBeChecked();
   });
 
   it("calls onToggle with 'satellite' when Satellite View checkbox is clicked", async () => {
@@ -123,6 +126,15 @@ describe("LayerPanel", () => {
     );
     await userEvent.click(screen.getByLabelText(/CDMA/i));
     expect(onToggle).toHaveBeenCalledWith("cellCDMA");
+  });
+
+  it("calls onToggle with 'cellCoverageCircles' when Coverage Circles checkbox is clicked", async () => {
+    const onToggle = vi.fn();
+    render(
+      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+    );
+    await userEvent.click(screen.getByLabelText(/Coverage Circles/i));
+    expect(onToggle).toHaveBeenCalledWith("cellCoverageCircles");
   });
 
   it("collapses layer rows when header button is clicked", async () => {

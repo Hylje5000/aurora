@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { LayerKey, LayerVisibility } from "@/lib/layers";
 import type { CustomLayer } from "@/lib/customLayers";
 import type { RouteHazard, RouteIntelligence } from "@/lib/routing";
+import type GeoJSON from "geojson";
 
 // Stub AreaNav — renders buttons that call onSelect
 vi.mock("@/components/AreaNav", () => ({
@@ -34,6 +35,7 @@ vi.mock("@/components/MapView", () => ({
     addingWaypoint,
     onWaypointClick,
     routeHazards,
+    routeCoverageGaps,
     focusedHazard,
   }: {
     selectedAreaId: string | null;
@@ -46,6 +48,7 @@ vi.mock("@/components/MapView", () => ({
     addingWaypoint?: boolean;
     onWaypointClick?: (coords: [number, number]) => void;
     routeHazards?: RouteHazard[];
+    routeCoverageGaps?: GeoJSON.Geometry | null;
     focusedHazard?: RouteHazard | null;
   }) => (
     <div
@@ -58,6 +61,7 @@ vi.mock("@/components/MapView", () => ({
       data-drawing-layer={activeDrawingLayerId ?? ""}
       data-adding-waypoint={String(addingWaypoint ?? false)}
       data-hazard-count={String(routeHazards?.length ?? 0)}
+      data-has-coverage-gaps={String(routeCoverageGaps != null)}
       data-focused-hazard={focusedHazard?.id ?? ""}
     >
       <button onClick={onCancelDrawing}>CancelDrawing</button>
@@ -87,6 +91,25 @@ const MOCK_INTEL: RouteIntelligence = {
   summary: { critical: 1, warning: 0, info: 0, passable: false },
 };
 
+const GAP_GEOMETRY: GeoJSON.Geometry = {
+  type: "LineString",
+  coordinates: [
+    [24.95, 60.18],
+    [24.96, 60.19],
+  ],
+};
+
+const MOCK_INTEL_WITH_COVERAGE: RouteIntelligence = {
+  ...MOCK_INTEL,
+  coverage: {
+    route_length_m: 10000,
+    covered_pct: 70,
+    gap_count: 1,
+    longest_gap_m: 3000,
+    gap_geometry: GAP_GEOMETRY,
+  },
+};
+
 // Stub RoutePanel — exposes onAddingWaypointChange, onHazardsChange, onHazardFocus via buttons
 vi.mock("@/components/RoutePanel", () => ({
   default: vi.fn(
@@ -108,6 +131,9 @@ vi.mock("@/components/RoutePanel", () => ({
         <button onClick={onClose}>CloseRoutePanel</button>
         <button onClick={() => onHazardsChange?.(MOCK_INTEL)}>
           TriggerHazards
+        </button>
+        <button onClick={() => onHazardsChange?.(MOCK_INTEL_WITH_COVERAGE)}>
+          TriggerHazardsWithCoverage
         </button>
         <button onClick={() => onHazardsChange?.(null)}>ClearHazards</button>
         <button onClick={() => onHazardFocus?.(MOCK_INTEL.hazards[0])}>
@@ -675,6 +701,30 @@ describe("MapWithNav", () => {
     expect(screen.getByTestId("map-view")).toHaveAttribute(
       "data-focused-hazard",
       "",
+    );
+  });
+
+  it("passes null routeCoverageGaps to MapView by default", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-has-coverage-gaps",
+      "false",
+    );
+  });
+
+  it("passes routeCoverageGaps to MapView when intelligence includes gap geometry", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "TriggerHazardsWithCoverage" }),
+    );
+
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-has-coverage-gaps",
+      "true",
     );
   });
 

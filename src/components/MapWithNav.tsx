@@ -213,6 +213,7 @@ export default function MapWithNav() {
         addingWaypoint={addingWaypoint}
         onWaypointClick={handleWaypointClick}
         routeHazards={routeIntelligence?.hazards ?? []}
+        routeCoverageGaps={routeIntelligence?.coverage?.gap_geometry ?? null}
         focusedHazard={focusedHazard}
       />
       <LayerPanel

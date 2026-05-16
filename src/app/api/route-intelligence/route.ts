@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import type { RouteHazard, RouteIntelligence, VehicleProfile } from "@/lib/routing";
+import type {
+  CoverageAnalysis,
+  RouteHazard,
+  RouteIntelligence,
+  VehicleProfile,
+} from "@/lib/routing";
 
 const SEVERITY_ORDER = { critical: 0, warning: 1, info: 2 } as const;
 
@@ -37,6 +42,15 @@ interface BridgeRow {
   geojson: string;
 }
 
+interface CoverageRow {
+  gap_geojson: string | null;
+  route_length_m: number;
+  covered_length_m: number;
+  uncovered_length_m: number;
+  gap_count: number | null;
+  longest_gap_m: number | null;
+}
+
 function pavementLabel(type: number | null): string {
   if (type === 2) return "Gravel";
   if (type === 3) return "Dirt/Other";
@@ -45,7 +59,9 @@ function pavementLabel(type: number | null): string {
 
 function classifyRoadHazards(row: RoadRow, v: VehicleProfile): RouteHazard[] {
   const hazards: RouteHazard[] = [];
-  const coords = (JSON.parse(row.closest_pt) as { coordinates: [number, number] }).coordinates;
+  const coords = (
+    JSON.parse(row.closest_pt) as { coordinates: [number, number] }
+  ).coordinates;
 
   function add(severity: RouteHazard["severity"], message: string) {
     hazards.push({
@@ -80,7 +96,10 @@ function classifyRoadHazards(row: RoadRow, v: VehicleProfile): RouteHazard[] {
   // Digiroad condition_class scale: 1 = erittäin huono (very bad) … 5 = hyvä tai erittäin hyvä (good).
   // Lower is worse — only class 1 and 2 are worth flagging.
   if (row.condition_class === 1) {
-    add("warning", `Very poor road surface (${row.condition_text ?? "erittäin huono"})`);
+    add(
+      "warning",
+      `Very poor road surface (${row.condition_text ?? "erittäin huono"})`,
+    );
   } else if (row.condition_class === 2) {
     add("info", `Poor road surface (${row.condition_text ?? "huono"})`);
   }
@@ -89,35 +108,79 @@ function classifyRoadHazards(row: RoadRow, v: VehicleProfile): RouteHazard[] {
     add("warning", `Significant rutting (${row.rut_depth_mm} mm)`);
   }
 
-  if (row.pavement_type != null && (row.pavement_type === 2 || row.pavement_type === 3)) {
+  if (
+    row.pavement_type != null &&
+    (row.pavement_type === 2 || row.pavement_type === 3)
+  ) {
     add("info", `Unpaved surface (${pavementLabel(row.pavement_type)})`);
   }
 
   // Vehicle mass checks (skip when vehicle mass is 0 — infantry)
-  if (v.mass_t > 0 && row.max_mass_kg != null && row.max_mass_kg > 0 && v.mass_t * 1000 > row.max_mass_kg) {
-    add("critical", `Road weight limit exceeded (${row.max_mass_kg} kg) — vehicle is ${v.mass_t * 1000} kg`);
+  if (
+    v.mass_t > 0 &&
+    row.max_mass_kg != null &&
+    row.max_mass_kg > 0 &&
+    v.mass_t * 1000 > row.max_mass_kg
+  ) {
+    add(
+      "critical",
+      `Road weight limit exceeded (${row.max_mass_kg} kg) — vehicle is ${v.mass_t * 1000} kg`,
+    );
   }
 
-  if (v.bogie_mass_t > 0 && row.max_bogie_mass_kg != null && row.max_bogie_mass_kg > 0 && v.bogie_mass_t * 1000 > row.max_bogie_mass_kg) {
-    add("critical", `Road bogie limit exceeded (${row.max_bogie_mass_kg} kg) — vehicle is ${v.bogie_mass_t * 1000} kg`);
+  if (
+    v.bogie_mass_t > 0 &&
+    row.max_bogie_mass_kg != null &&
+    row.max_bogie_mass_kg > 0 &&
+    v.bogie_mass_t * 1000 > row.max_bogie_mass_kg
+  ) {
+    add(
+      "critical",
+      `Road bogie limit exceeded (${row.max_bogie_mass_kg} kg) — vehicle is ${v.bogie_mass_t * 1000} kg`,
+    );
   }
 
-  if (v.axle_mass_t > 0 && row.max_axle_mass_kg != null && row.max_axle_mass_kg > 0 && v.axle_mass_t * 1000 > row.max_axle_mass_kg) {
-    add("critical", `Road axle limit exceeded (${row.max_axle_mass_kg} kg) — vehicle is ${v.axle_mass_t * 1000} kg`);
+  if (
+    v.axle_mass_t > 0 &&
+    row.max_axle_mass_kg != null &&
+    row.max_axle_mass_kg > 0 &&
+    v.axle_mass_t * 1000 > row.max_axle_mass_kg
+  ) {
+    add(
+      "critical",
+      `Road axle limit exceeded (${row.max_axle_mass_kg} kg) — vehicle is ${v.axle_mass_t * 1000} kg`,
+    );
   }
 
-  if (row.width_cm != null && row.width_cm > 0 && v.width_m * 100 > row.width_cm) {
-    add("critical", `Road too narrow for vehicle (${row.width_cm} cm) — vehicle is ${Math.round(v.width_m * 100)} cm`);
+  if (
+    row.width_cm != null &&
+    row.width_cm > 0 &&
+    v.width_m * 100 > row.width_cm
+  ) {
+    add(
+      "critical",
+      `Road too narrow for vehicle (${row.width_cm} cm) — vehicle is ${Math.round(v.width_m * 100)} cm`,
+    );
   }
 
-  if (row.max_height_cm != null && row.max_height_cm > 0 && v.height_m * 100 > row.max_height_cm) {
-    add("critical", `Height restriction on road (${row.max_height_cm} cm) — vehicle is ${Math.round(v.height_m * 100)} cm`);
+  if (
+    row.max_height_cm != null &&
+    row.max_height_cm > 0 &&
+    v.height_m * 100 > row.max_height_cm
+  ) {
+    add(
+      "critical",
+      `Height restriction on road (${row.max_height_cm} cm) — vehicle is ${Math.round(v.height_m * 100)} cm`,
+    );
   }
 
   return hazards;
 }
 
-function classifyBridgeHazards(row: BridgeRow, v: VehicleProfile): RouteHazard[] {
+function classifyBridgeHazards(
+  row: BridgeRow,
+  v: VehicleProfile,
+): RouteHazard[] {
   const hazards: RouteHazard[] = [];
   const geom = JSON.parse(row.geojson) as { coordinates: [number, number] };
   const coords = geom.coordinates;
@@ -144,30 +207,67 @@ function classifyBridgeHazards(row: BridgeRow, v: VehicleProfile): RouteHazard[]
     });
   }
 
-  if (row.status != null && row.status.trim() !== "" && !/^ok$/i.test(row.status.trim())) {
+  if (
+    row.status != null &&
+    row.status.trim() !== "" &&
+    !/^ok$/i.test(row.status.trim())
+  ) {
     add("warning", `Bridge condition: ${row.status}`);
   }
 
-  if (v.mass_t > 0 && row.max_vehicle_mass_t != null && row.max_vehicle_mass_t > 0 && v.mass_t > row.max_vehicle_mass_t) {
-    add("critical", `Bridge vehicle limit exceeded (${row.max_vehicle_mass_t} t) — vehicle is ${v.mass_t} t`);
+  if (
+    v.mass_t > 0 &&
+    row.max_vehicle_mass_t != null &&
+    row.max_vehicle_mass_t > 0 &&
+    v.mass_t > row.max_vehicle_mass_t
+  ) {
+    add(
+      "critical",
+      `Bridge vehicle limit exceeded (${row.max_vehicle_mass_t} t) — vehicle is ${v.mass_t} t`,
+    );
   }
 
-  if (v.bogie_mass_t > 0 && row.max_bogie_mass_t != null && row.max_bogie_mass_t > 0 && v.bogie_mass_t > row.max_bogie_mass_t) {
-    add("critical", `Bridge bogie limit exceeded (${row.max_bogie_mass_t} t) — vehicle is ${v.bogie_mass_t} t`);
+  if (
+    v.bogie_mass_t > 0 &&
+    row.max_bogie_mass_t != null &&
+    row.max_bogie_mass_t > 0 &&
+    v.bogie_mass_t > row.max_bogie_mass_t
+  ) {
+    add(
+      "critical",
+      `Bridge bogie limit exceeded (${row.max_bogie_mass_t} t) — vehicle is ${v.bogie_mass_t} t`,
+    );
   }
 
-  if (v.axle_mass_t > 0 && row.max_axle_mass_t != null && row.max_axle_mass_t > 0 && v.axle_mass_t > row.max_axle_mass_t) {
-    add("critical", `Bridge axle limit exceeded (${row.max_axle_mass_t} t) — vehicle is ${v.axle_mass_t} t`);
+  if (
+    v.axle_mass_t > 0 &&
+    row.max_axle_mass_t != null &&
+    row.max_axle_mass_t > 0 &&
+    v.axle_mass_t > row.max_axle_mass_t
+  ) {
+    add(
+      "critical",
+      `Bridge axle limit exceeded (${row.max_axle_mass_t} t) — vehicle is ${v.axle_mass_t} t`,
+    );
   }
 
-  if (row.height_restriction_m != null && row.height_restriction_m > 0 && v.height_m > row.height_restriction_m) {
-    add("critical", `Height restriction (${row.height_restriction_m} m) — vehicle is ${v.height_m} m`);
+  if (
+    row.height_restriction_m != null &&
+    row.height_restriction_m > 0 &&
+    v.height_m > row.height_restriction_m
+  ) {
+    add(
+      "critical",
+      `Height restriction (${row.height_restriction_m} m) — vehicle is ${v.height_m} m`,
+    );
   }
 
   return hazards;
 }
 
-function isValidLineString(geom: unknown): geom is { type: "LineString"; coordinates: [number, number][] } {
+function isValidLineString(
+  geom: unknown,
+): geom is { type: "LineString"; coordinates: [number, number][] } {
   if (!geom || typeof geom !== "object") return false;
   const g = geom as Record<string, unknown>;
   return (
@@ -182,11 +282,16 @@ function isValidVehicle(v: unknown): v is VehicleProfile {
   const veh = v as Record<string, unknown>;
   return (
     typeof veh.label === "string" &&
-    typeof veh.mass_t === "number" && veh.mass_t >= 0 &&
-    typeof veh.axle_mass_t === "number" && veh.axle_mass_t >= 0 &&
-    typeof veh.bogie_mass_t === "number" && veh.bogie_mass_t >= 0 &&
-    typeof veh.height_m === "number" && veh.height_m > 0 &&
-    typeof veh.width_m === "number" && veh.width_m > 0
+    typeof veh.mass_t === "number" &&
+    veh.mass_t >= 0 &&
+    typeof veh.axle_mass_t === "number" &&
+    veh.axle_mass_t >= 0 &&
+    typeof veh.bogie_mass_t === "number" &&
+    veh.bogie_mass_t >= 0 &&
+    typeof veh.height_m === "number" &&
+    veh.height_m > 0 &&
+    typeof veh.width_m === "number" &&
+    veh.width_m > 0
   );
 }
 
@@ -207,14 +312,20 @@ export async function POST(req: NextRequest) {
 
   if (!isValidLineString(routeGeometry)) {
     return NextResponse.json(
-      { error: "routeGeometry must be a GeoJSON LineString with at least 2 coordinates" },
+      {
+        error:
+          "routeGeometry must be a GeoJSON LineString with at least 2 coordinates",
+      },
       { status: 400 },
     );
   }
 
   if (!isValidVehicle(vehicle)) {
     return NextResponse.json(
-      { error: "vehicle must include label, mass_t, axle_mass_t, bogie_mass_t, height_m (>0), width_m (>0)" },
+      {
+        error:
+          "vehicle must include label, mass_t, axle_mass_t, bogie_mass_t, height_m (>0), width_m (>0)",
+      },
       { status: 400 },
     );
   }
@@ -272,20 +383,115 @@ export async function POST(req: NextRequest) {
       hazards.push(...classifyBridgeHazards(row, vehicle));
     }
 
-    hazards.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+    hazards.sort(
+      (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+    );
 
     const critical = hazards.filter((h) => h.severity === "critical").length;
     const warning = hazards.filter((h) => h.severity === "warning").length;
     const info = hazards.filter((h) => h.severity === "info").length;
 
+    // Coverage query is isolated — a failure here must not block hazard results.
+    let coverage: CoverageAnalysis | null = null;
+    try {
+      const coverageResult = await query<CoverageRow>(
+        `
+        WITH
+        route AS (
+          SELECT ST_GeomFromGeoJSON($1) AS geom
+        ),
+        towers AS (
+          SELECT
+            geom,
+            COALESCE(range_m, 500)::float AS range_m
+          FROM cell_towers
+          WHERE ST_DWithin(
+            geom::geography,
+            (SELECT geom::geography FROM route),
+            15000
+          )
+        ),
+        coverage_union AS (
+          SELECT ST_Union(
+            ST_Buffer(t.geom::geography, t.range_m)::geometry
+          ) AS geom
+          FROM towers t
+        ),
+        uncovered AS (
+          SELECT ST_Difference(
+            (SELECT geom FROM route),
+            COALESCE(
+              (SELECT geom FROM coverage_union),
+              'GEOMETRYCOLLECTION EMPTY'::geometry
+            )
+          ) AS geom
+        ),
+        covered AS (
+          SELECT ST_Intersection(
+            (SELECT geom FROM route),
+            COALESCE(
+              (SELECT geom FROM coverage_union),
+              'GEOMETRYCOLLECTION EMPTY'::geometry
+            )
+          ) AS geom
+        )
+        SELECT
+          ST_AsGeoJSON(u.geom)                           AS gap_geojson,
+          ST_Length((SELECT geom::geography FROM route)) AS route_length_m,
+          ST_Length(c.geom::geography)                   AS covered_length_m,
+          ST_Length(u.geom::geography)                   AS uncovered_length_m,
+          ST_NumGeometries(u.geom)                       AS gap_count,
+          (
+            SELECT MAX(ST_Length(part::geography))
+            FROM ST_Dump(u.geom) AS d(path, part)
+          )                                              AS longest_gap_m
+        FROM uncovered u, covered c
+        `,
+        [routeGeoJSON],
+      );
+
+      if (coverageResult.rows.length > 0) {
+        const r = coverageResult.rows[0];
+        const routeLen = r.route_length_m ?? 0;
+        const coveredLen = r.covered_length_m ?? 0;
+        const coveredPct =
+          routeLen > 0 ? Math.round((coveredLen / routeLen) * 100) : 0;
+        const gapGeom = r.gap_geojson
+          ? (JSON.parse(r.gap_geojson) as GeoJSON.Geometry)
+          : null;
+        const isEmpty =
+          !gapGeom ||
+          gapGeom.type === "GeometryCollection" ||
+          (gapGeom as { coordinates?: unknown[] }).coordinates?.length === 0;
+
+        coverage = {
+          route_length_m: Math.round(routeLen),
+          covered_pct: isEmpty ? 100 : coveredPct,
+          gap_count: isEmpty ? 0 : (r.gap_count ?? 0),
+          longest_gap_m: isEmpty ? 0 : Math.round(r.longest_gap_m ?? 0),
+          gap_geometry: isEmpty ? null : gapGeom,
+        };
+      }
+    } catch (coverageErr) {
+      console.error(
+        "[/api/route-intelligence] coverage query failed:",
+        coverageErr,
+      );
+      // coverage stays null — hazard results are unaffected
+    }
+
     const intelligence: RouteIntelligence = {
       hazards,
       summary: { critical, warning, info, passable: critical === 0 },
+      coverage,
     };
 
     return NextResponse.json(intelligence);
   } catch (err) {
     console.error("[/api/route-intelligence]", err);
-    return NextResponse.json({ error: "Database query failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Database query failed" },
+      { status: 500 },
+    );
   }
 }

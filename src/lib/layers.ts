@@ -8,6 +8,7 @@ export type LayerKey =
   | "cellUMTS"
   | "cellLTE"
   | "cellCDMA"
+  | "cellCoverageCircles"
   | "roads"
   | "bridges"
   | "railways"
@@ -23,6 +24,7 @@ export interface LayerVisibility extends Record<LayerKey, boolean> {
   cellUMTS: boolean;
   cellLTE: boolean;
   cellCDMA: boolean;
+  cellCoverageCircles: boolean;
   roads: boolean;
   bridges: boolean;
   railways: boolean;
@@ -39,6 +41,7 @@ export const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
   cellUMTS: true,
   cellLTE: true,
   cellCDMA: true,
+  cellCoverageCircles: false,
   roads: true,
   bridges: true,
   railways: true,
@@ -58,6 +61,7 @@ export const LAYER_GROUPS: Record<LayerKey, string[]> = {
   cellUMTS: ["cell-towers-umts"],
   cellLTE: ["cell-towers-lte"],
   cellCDMA: ["cell-towers-cdma"],
+  cellCoverageCircles: ["coverage-circles-fill", "coverage-circles-line"],
   roads: ["roads-line-casing", "roads-line"],
   bridges: ["bridges-symbol"],
   railways: ["railways-line"],

@@ -69,6 +69,7 @@ interface MapViewProps {
   onWaypointClick?: (coords: [number, number]) => void;
   routeHazards?: RouteHazard[];
   focusedHazard?: RouteHazard | null;
+  routeCoverageGaps?: GeoJSON.Geometry | null;
 }
 
 function buildAoiCollection() {
@@ -119,6 +120,21 @@ const EMPTY_COLLECTION: GeoJSON.FeatureCollection = {
   features: [],
 };
 
+function towerToCirclePolygon(
+  lng: number,
+  lat: number,
+  radiusM: number,
+): GeoJSON.Polygon {
+  const latRad = (lat * Math.PI) / 180;
+  const dLat = radiusM / 111320;
+  const dLng = radiusM / (111320 * Math.cos(latRad));
+  const coords: [number, number][] = Array.from({ length: 65 }, (_, i) => {
+    const a = (i / 64) * 2 * Math.PI;
+    return [lng + dLng * Math.sin(a), lat + dLat * Math.cos(a)];
+  });
+  return { type: "Polygon", coordinates: [coords] };
+}
+
 function getBbox(map: mapboxgl.Map): string {
   const bounds = map.getBounds();
   if (!bounds) return "";
@@ -130,23 +146,54 @@ function getBbox(map: mapboxgl.Map): string {
   ].join(",");
 }
 
+function buildCoverageCircles(
+  data: GeoJSON.FeatureCollection,
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: data.features
+      .filter(
+        (f) =>
+          f.geometry.type === "Point" &&
+          f.properties != null &&
+          (f.properties.range_m ?? 0) > 0,
+      )
+      .map((f) => {
+        const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+        const r = (f.properties?.range_m as number) ?? 500;
+        return {
+          type: "Feature" as const,
+          properties: f.properties,
+          geometry: towerToCirclePolygon(lng, lat, r),
+        };
+      }),
+  };
+}
+
 async function fetchCellTowers(
   map: mapboxgl.Map,
   rawDataRef: { current: GeoJSON.FeatureCollection },
   visRef: { current: LayerVisibility },
+  signal?: AbortSignal,
 ): Promise<void> {
   const bbox = getBbox(map);
   if (!bbox) return;
 
   try {
-    const res = await fetch(`/api/cell-towers?bbox=${bbox}`);
+    const res = await fetch(`/api/cell-towers?bbox=${bbox}`, { signal });
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
     rawDataRef.current = data;
     (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
       filterByEnabled(data, visRef.current),
     );
+    if (visRef.current.cellCoverageCircles) {
+      (
+        map.getSource("coverage-circles-source") as mapboxgl.GeoJSONSource
+      )?.setData(buildCoverageCircles(data));
+    }
   } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
     console.error("[cell-towers] fetch failed", err);
   }
 }
@@ -155,15 +202,17 @@ async function fetchLayer(
   map: mapboxgl.Map,
   sourceId: string,
   endpoint: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const bbox = getBbox(map);
   if (!bbox) return;
   try {
-    const res = await fetch(`${endpoint}?bbox=${bbox}`);
+    const res = await fetch(`${endpoint}?bbox=${bbox}`, { signal });
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
     (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(data);
   } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
     console.error(`[${endpoint}] fetch failed`, err);
   }
 }
@@ -194,6 +243,7 @@ function popupStyle(title: string, rows: [string, unknown][]): string {
 async function fetchCustomLayerFeatures(
   map: mapboxgl.Map,
   layerId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const bbox = getBbox(map);
   if (!bbox) return;
@@ -201,6 +251,7 @@ async function fetchCustomLayerFeatures(
   try {
     const res = await fetch(
       `/api/custom-layers/${layerId}/features?bbox=${bbox}`,
+      { signal },
     );
     if (!res.ok) return;
     const data = (await res.json()) as GeoJSON.FeatureCollection;
@@ -211,6 +262,7 @@ async function fetchCustomLayerFeatures(
       map.getSource(`custom-layer-${layerId}`) as mapboxgl.GeoJSONSource
     )?.setData(data);
   } catch (err) {
+    if ((err as { name?: string }).name === "AbortError") return;
     console.error(`[custom-layer] fetch failed for ${layerId}`, err);
   }
 }
@@ -414,6 +466,7 @@ export default function MapView({
   onWaypointClick,
   routeHazards = [],
   focusedHazard = null,
+  routeCoverageGaps = null,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -454,6 +507,13 @@ export default function MapView({
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
   const enabledCustomLayerIdsRef = useRef<Set<string>>(enabledCustomLayerIds);
+
+  // Abort controllers — each cancels its previous in-flight fetch on new moveend
+  const cellTowersAbortRef = useRef<AbortController | null>(null);
+  const roadsAbortRef = useRef<AbortController | null>(null);
+  const bridgesAbortRef = useRef<AbortController | null>(null);
+  const railwaysAbortRef = useRef<AbortController | null>(null);
+  const customLayerAbortRefs = useRef<Map<string, AbortController>>(new Map());
 
   // UI state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1227,24 +1287,76 @@ export default function MapView({
       // ── Fetch on every pan/zoom and immediately on load ────────────────
       if (!eventsAttachedRef.current) {
         map.on("moveend", () => {
-          fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+          cellTowersAbortRef.current?.abort();
+          const cellCtrl = new AbortController();
+          cellTowersAbortRef.current = cellCtrl;
+          fetchCellTowers(
+            map,
+            rawTowerDataRef,
+            layerVisibilityRef,
+            cellCtrl.signal,
+          );
+
           if (map.getZoom() >= 12) {
-            fetchLayer(map, "roads-source", "/api/roads");
-            fetchLayer(map, "bridges-source", "/api/bridges");
+            roadsAbortRef.current?.abort();
+            const roadsCtrl = new AbortController();
+            roadsAbortRef.current = roadsCtrl;
+            fetchLayer(map, "roads-source", "/api/roads", roadsCtrl.signal);
+
+            bridgesAbortRef.current?.abort();
+            const bridgesCtrl = new AbortController();
+            bridgesAbortRef.current = bridgesCtrl;
+            fetchLayer(
+              map,
+              "bridges-source",
+              "/api/bridges",
+              bridgesCtrl.signal,
+            );
           }
-          fetchLayer(map, "railways-source", "/api/railways");
+
+          railwaysAbortRef.current?.abort();
+          const railCtrl = new AbortController();
+          railwaysAbortRef.current = railCtrl;
+          fetchLayer(map, "railways-source", "/api/railways", railCtrl.signal);
+
           for (const layerId of enabledCustomLayerIdsRef.current) {
             if (registeredCustomLayerIdsRef.current.has(layerId)) {
-              void fetchCustomLayerFeatures(map, layerId);
+              customLayerAbortRefs.current.get(layerId)?.abort();
+              const ctrl = new AbortController();
+              customLayerAbortRefs.current.set(layerId, ctrl);
+              void fetchCustomLayerFeatures(map, layerId, ctrl.signal);
             }
           }
         });
-        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
-        if (map.getZoom() >= 12) {
-          fetchLayer(map, "roads-source", "/api/roads");
-          fetchLayer(map, "bridges-source", "/api/bridges");
+
+        {
+          cellTowersAbortRef.current?.abort();
+          const cellCtrl = new AbortController();
+          cellTowersAbortRef.current = cellCtrl;
+          fetchCellTowers(
+            map,
+            rawTowerDataRef,
+            layerVisibilityRef,
+            cellCtrl.signal,
+          );
         }
-        fetchLayer(map, "railways-source", "/api/railways");
+        if (map.getZoom() >= 12) {
+          roadsAbortRef.current?.abort();
+          const roadsCtrl = new AbortController();
+          roadsAbortRef.current = roadsCtrl;
+          fetchLayer(map, "roads-source", "/api/roads", roadsCtrl.signal);
+
+          bridgesAbortRef.current?.abort();
+          const bridgesCtrl = new AbortController();
+          bridgesAbortRef.current = bridgesCtrl;
+          fetchLayer(map, "bridges-source", "/api/bridges", bridgesCtrl.signal);
+        }
+        {
+          railwaysAbortRef.current?.abort();
+          const railCtrl = new AbortController();
+          railwaysAbortRef.current = railCtrl;
+          fetchLayer(map, "railways-source", "/api/railways", railCtrl.signal);
+        }
 
         // Elevation click — fires on every map click (general handler, no layer filter)
         map.on("click", async (e) => {
@@ -1392,11 +1504,71 @@ export default function MapView({
         },
       });
 
+      // ── Coverage gap overlay ───────────────────────────────────────────
+      map.addSource("route-coverage-gaps-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "route-coverage-gaps-line",
+        type: "line",
+        source: "route-coverage-gaps-source",
+        slot: "top",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#ef4444",
+          "line-width": 6,
+          "line-dasharray": [6, 4],
+          "line-opacity": 0.85,
+        },
+      });
+
+      // ── Cell tower coverage circles ────────────────────────────────────
+      map.addSource("coverage-circles-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "coverage-circles-fill",
+        type: "fill",
+        source: "coverage-circles-source",
+        slot: "bottom",
+        layout: {
+          visibility: DEFAULT_LAYER_VISIBILITY.cellCoverageCircles
+            ? "visible"
+            : "none",
+        },
+        paint: { "fill-color": "#3b82f6", "fill-opacity": 0.07 },
+      });
+      map.addLayer({
+        id: "coverage-circles-line",
+        type: "line",
+        source: "coverage-circles-source",
+        slot: "bottom",
+        layout: {
+          visibility: DEFAULT_LAYER_VISIBILITY.cellCoverageCircles
+            ? "visible"
+            : "none",
+        },
+        paint: {
+          "line-color": "#3b82f6",
+          "line-width": 1,
+          "line-opacity": 0.3,
+        },
+      });
+
       styleLoadedRef.current = true;
     });
 
     const registeredIds = registeredCustomLayerIdsRef.current;
+    const customAborts = customLayerAbortRefs.current;
     return () => {
+      cellTowersAbortRef.current?.abort();
+      roadsAbortRef.current?.abort();
+      bridgesAbortRef.current?.abort();
+      railwaysAbortRef.current?.abort();
+      for (const ctrl of customAborts.values()) ctrl.abort();
+
       if (highlightAnimFrameRef.current !== null) {
         cancelAnimationFrame(highlightAnimFrameRef.current);
       }
@@ -1707,6 +1879,27 @@ export default function MapView({
       })),
     });
   }, [routeHazards]);
+
+  // ── Sync coverage gap overlay ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    const source = map.getSource("route-coverage-gaps-source") as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    if (routeCoverageGaps) {
+      source.setData({
+        type: "Feature",
+        properties: {},
+        geometry: routeCoverageGaps,
+      });
+    } else {
+      source.setData(EMPTY_COLLECTION);
+    }
+  }, [routeCoverageGaps]);
 
   // ── Focused hazard: fly-to + marker + popup ───────────────────────────
   useEffect(() => {
