@@ -20,6 +20,7 @@ interface MapViewProps {
   selectedAreaId?: string | null;
   layerVisibility?: LayerVisibility;
   onInfoPanel?: (data: InfoPanelData | null) => void;
+  infoPanelOpen?: boolean;
 }
 
 function buildAoiCollection() {
@@ -142,12 +143,47 @@ function popupStyle(title: string, rows: [string, unknown][]): string {
   </div>`;
 }
 
+const DASH_SEQ: number[][] = [
+  [0, 4],
+  [0.5, 3.5],
+  [1, 3],
+  [1.5, 2.5],
+  [2, 2],
+  [2.5, 1.5],
+  [3, 1],
+  [3.5, 0.5],
+];
+
+function startHighlightAnimation(
+  map: mapboxgl.Map,
+  frameRef: { current: number | null },
+  stepRef: { current: number },
+) {
+  if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  stepRef.current = 0;
+  let prevTs = 0;
+  function tick(ts: number) {
+    if (ts - prevTs >= 60) {
+      prevTs = ts;
+      map.setPaintProperty(
+        "municipality-highlight-line",
+        "line-dasharray",
+        DASH_SEQ[stepRef.current % DASH_SEQ.length],
+      );
+      stepRef.current++;
+    }
+    frameRef.current = requestAnimationFrame(tick);
+  }
+  frameRef.current = requestAnimationFrame(tick);
+}
+
 export default function MapView({
   center = [21.5, 60.2],
   zoom = 7,
   selectedAreaId = null,
   layerVisibility = DEFAULT_LAYER_VISIBILITY,
   onInfoPanel,
+  infoPanelOpen = false,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -157,6 +193,8 @@ export default function MapView({
     features: [],
   });
   const layerVisibilityRef = useRef(layerVisibility);
+  const highlightAnimFrameRef = useRef<number | null>(null);
+  const highlightAnimStepRef = useRef(0);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -522,6 +560,21 @@ export default function MapView({
           "line-width": 1,
         },
       });
+      map.addSource("municipality-highlight-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "municipality-highlight-line",
+        type: "line",
+        source: "municipality-highlight-source",
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 3,
+          "line-dasharray": [0, 4],
+        },
+      });
+
       fetch("/api/municipalities")
         .then((r) => r.json())
         .then((data: GeoJSON.FeatureCollection) => {
@@ -539,6 +592,7 @@ export default function MapView({
       map.addLayer({
         id: "roads-line",
         type: "line",
+        minzoom: 12,
         source: "roads-source",
         layout: { visibility: vis.roads ? "visible" : "none" },
         paint: {
@@ -731,6 +785,12 @@ export default function MapView({
             ["Region", p.aoi_id as string],
           ],
         });
+        (
+          map.getSource(
+            "municipality-highlight-source",
+          ) as mapboxgl.GeoJSONSource
+        ).setData({ type: "FeatureCollection", features: [f] });
+        startHighlightAnimation(map, highlightAnimFrameRef, highlightAnimStepRef);
       });
 
       // Cursor handlers
@@ -748,20 +808,27 @@ export default function MapView({
         });
       }
 
-      // Fetch on moveend and immediately
+      // Fetch on moveend and immediately (roads/bridges only at zoom >= 12)
       map.on("moveend", () => {
-        fetchLayer(map, "roads-source", "/api/roads");
-        fetchLayer(map, "bridges-source", "/api/bridges");
+        if (map.getZoom() >= 12) {
+          fetchLayer(map, "roads-source", "/api/roads");
+          fetchLayer(map, "bridges-source", "/api/bridges");
+        }
         fetchLayer(map, "railways-source", "/api/railways");
       });
-      fetchLayer(map, "roads-source", "/api/roads");
-      fetchLayer(map, "bridges-source", "/api/bridges");
+      if (map.getZoom() >= 12) {
+        fetchLayer(map, "roads-source", "/api/roads");
+        fetchLayer(map, "bridges-source", "/api/bridges");
+      }
       fetchLayer(map, "railways-source", "/api/railways");
 
       styleLoadedRef.current = true;
     });
 
     return () => {
+      if (highlightAnimFrameRef.current !== null) {
+        cancelAnimationFrame(highlightAnimFrameRef.current);
+      }
       mapRef.current?.remove();
       mapRef.current = null;
       styleLoadedRef.current = false;
@@ -825,6 +892,22 @@ export default function MapView({
       duration: 1200,
     });
   }, [selectedAreaId]);
+
+  useEffect(() => {
+    if (infoPanelOpen) return;
+    if (highlightAnimFrameRef.current !== null) {
+      cancelAnimationFrame(highlightAnimFrameRef.current);
+      highlightAnimFrameRef.current = null;
+    }
+    const map = mapRef.current;
+    if (map && styleLoadedRef.current) {
+      (
+        map.getSource(
+          "municipality-highlight-source",
+        ) as mapboxgl.GeoJSONSource
+      )?.setData(EMPTY_COLLECTION);
+    }
+  }, [infoPanelOpen]);
 
   return <div ref={containerRef} className="w-full h-full" />;
 }

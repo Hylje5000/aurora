@@ -31,6 +31,7 @@ export default function MapWithNav() {
         selectedAreaId={selectedAreaId}
         layerVisibility={layerVisibility}
         onInfoPanel={setInfoPanelData}
+        infoPanelOpen={infoPanelData !== null}
       />
       <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
       <InfoPanel data={infoPanelData} onClose={() => setInfoPanelData(null)} />
