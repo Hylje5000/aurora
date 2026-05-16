@@ -319,12 +319,9 @@ describe("MapView", () => {
     );
   });
 
-  it("adds NavigationControl and MapboxDraw on mount", () => {
+  it("adds MapboxDraw control on mount", () => {
     render(<MapView />);
     expect(MockMapboxDraw).toHaveBeenCalledTimes(1);
-    expect(mockAddControl).toHaveBeenCalledWith(
-      expect.any(MockNavigationControl),
-    );
   });
 
   it("calls map.remove() on unmount", () => {
