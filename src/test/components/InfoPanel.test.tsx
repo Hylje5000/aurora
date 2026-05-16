@@ -65,4 +65,20 @@ describe("InfoPanel", () => {
       screen.getByRole("button", { name: /close info panel/i }),
     ).toBeInTheDocument();
   });
+
+  it("renders optional component below rows when provided", () => {
+    const Extra = () => <div data-testid="extra-component">chart here</div>;
+    render(
+      <InfoPanel
+        data={{ ...baseData, component: <Extra /> }}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("extra-component")).toBeInTheDocument();
+  });
+
+  it("renders without error when component is not provided", () => {
+    render(<InfoPanel data={baseData} onClose={vi.fn()} />);
+    expect(screen.getByText("Rusko / Rusko")).toBeInTheDocument();
+  });
 });

@@ -1,8 +1,11 @@
 "use client";
 
+import React from "react";
+
 export interface InfoPanelData {
   title: string;
   rows: [string, string | null | undefined][];
+  component?: React.ReactNode;
 }
 
 interface InfoPanelProps {
@@ -36,6 +39,7 @@ export default function InfoPanel({ data, onClose }: InfoPanelProps) {
           </div>
         ))}
       </div>
+      {data.component}
     </div>
   );
 }

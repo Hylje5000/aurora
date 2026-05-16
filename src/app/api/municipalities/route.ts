@@ -37,6 +37,7 @@ export async function GET() {
       age_15_64_pct: number | null;
       age_65plus: number | null;
       age_65plus_pct: number | null;
+      election_data: string | null;
     }>(
       `
       SELECT
@@ -48,9 +49,11 @@ export async function GET() {
         d.female,        d.female_pct,
         d.age_0_14,      d.age_0_14_pct,
         d.age_15_64,     d.age_15_64_pct,
-        d.age_65plus,    d.age_65plus_pct
+        d.age_65plus,    d.age_65plus_pct,
+        e.parties::text  AS election_data
       FROM municipalities m
       LEFT JOIN municipality_demographics d ON d.nat_code = m.nat_code
+      LEFT JOIN municipality_election_summary e ON e.nat_code = m.nat_code
       `,
     );
 
@@ -75,6 +78,7 @@ export async function GET() {
         age_15_64_pct: row.age_15_64_pct,
         age_65plus: row.age_65plus,
         age_65plus_pct: row.age_65plus_pct,
+        election_data: row.election_data ?? null,
       },
     }));
 

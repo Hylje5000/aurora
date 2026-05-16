@@ -21,6 +21,7 @@ import {
 import FeatureDialog from "@/components/FeatureDialog";
 import DrawingToolbar from "@/components/DrawingToolbar";
 import type { InfoPanelData } from "@/components/InfoPanel";
+import ElectionPieChart from "@/components/ElectionPieChart";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -1106,7 +1107,18 @@ export default function MapView({
           );
         }
 
-        onInfoPanel?.({ title: name, rows });
+        const rawElection = p.election_data as string | null;
+        const electionData = rawElection
+          ? (JSON.parse(rawElection) as Record<string, number>)
+          : null;
+
+        onInfoPanel?.({
+          title: name,
+          rows,
+          component: electionData ? (
+            <ElectionPieChart data={electionData} />
+          ) : null,
+        });
         (
           map.getSource(
             "municipality-highlight-source",

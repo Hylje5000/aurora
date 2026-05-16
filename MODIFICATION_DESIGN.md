@@ -1,194 +1,236 @@
-# Design: Municipality Demographic Data Integration
+# Design: Election Data Pie Chart in Municipality InfoPanel
 
 ## Overview
 
-Enrich the municipality info panel — shown when a user clicks a highlighted municipality on the map — with demographic statistics from Statistics Finland (Tilastokeskus) data. The source is `data/demographic_data.json`, a GeoJSON FeatureCollection covering all 308 Finnish municipalities with 2025 population figures. Data is ingested into PostgreSQL and served through the existing `/api/municipalities` route so no new API surface is needed.
+Display 2023 Finnish parliamentary election results per municipality in the existing InfoPanel.
+When a municipality is clicked on the map, show an inline SVG pie chart of vote shares by party,
+plus a ranked list of the top 4 parties.
 
 ---
 
 ## Detailed Analysis
 
-### Source Data
+### Data Source
 
-`data/demographic_data.json` — GeoJSON FeatureCollection, 308 features (all Finnish municipalities). Geometry is in **EPSG:3067** (Finnish national grid, meters). We do **not** need the geometry; only the `properties` object matters:
+`data/election_data.csv` — Statistics Finland, 2023 parliamentary election, vote shares (%) by party per municipality.
 
-| Property                 | Type      | Meaning                                              |
-| ------------------------ | --------- | ---------------------------------------------------- |
-| `kunta`                  | `string`  | 3-digit zero-padded municipality code — **join key** |
-| `nimi` / `namn` / `name` | `string`  | Finnish / Swedish / English names                    |
-| `til_vuosi`              | `integer` | Statistical year (2025)                              |
-| `vaesto`                 | `integer` | Total population                                     |
-| `vaesto_p`               | `float`   | Population as % of Finland total                     |
-| `miehet`                 | `integer` | Male count                                           |
-| `miehet_p`               | `float`   | Male %                                               |
-| `naiset`                 | `integer` | Female count                                         |
-| `naiset_p`               | `float`   | Female %                                             |
-| `ika_0_14`               | `integer` | Count aged 0–14                                      |
-| `ika_0_14p`              | `float`   | % aged 0–14                                          |
-| `ika_15_64`              | `integer` | Count aged 15–64                                     |
-| `ika_15_64p`             | `float`   | % aged 15–64                                         |
-| `ika_65_`                | `integer` | Count aged 65+                                       |
-| `ika_65_p`               | `float`   | % aged 65+                                           |
+**Format (wide):**
 
-No null values in any field. The `kunta` code (e.g. `"005"`) matches the `nat_code` column already stored in the `municipalities` PostgreSQL table.
+| Vuosi | Sukupuoli | Puolue | Osuus äänistä (%) Koko maa | … | Osuus äänistä (%) KU091 Helsinki | … |
+|-------|-----------|--------|---------------------------|---|----------------------------------|---|
+| 2023  | Yhteensä  | KOK    | 20.8                      | … | 26.4                             | … |
 
-### Goal
+- 43 rows (1 header + 42 party rows)
+- Encoding: Windows-1252 (`cp1252`)
+- Line endings: `\r\n` (Windows)
+- Missing value: `.` (dot) — municipality not in that electoral district or merged
+- **308 current municipality columns** matching `nat_code` in our DB (e.g., `KU091`)
+- **164 historical columns** (suffixed `-YY`, e.g., `KU424 Liljendal -10`) — exclude these
+- Also exclude: `Koko maa` (country total) and `VP##` electoral-district aggregate columns
 
-When a user clicks a municipality on the map, the info panel should show:
+**Parties to retain** (22 in 2023 — no year suffix in name):
+KOK, PS, SDP, KESK, VIHR, VAS, RKP, KD, LIIKE, SKP, LIBE, Piraattip., EOP, FP, KaL, KL,
+SKE, AP, KRIP, VKK, VL, SML + "Muu puolue" (other parties aggregate)
 
-```
-Alajärvi / Alajärvi
-  Code        005
-  Region      karjala
-  Population  8,982
-  Male        4 516 (50.3%)
-  Female      4 466 (49.7%)
-  Under 15    1 373 (15.3%)
-  Over 65     2 916 (32.5%)
-  Data year   2025
-```
-
-### Constraints
-
-- No new npm dependencies.
-- No new API routes — extend the existing `/api/municipalities` response.
-- Ingestion follows the existing Python pattern (`scripts/ingest_geodata.py`, `scripts/ingest_weather.py`).
-- Graceful degradation: if demographics are absent for a municipality (LEFT JOIN miss), the info panel shows only what it already shows today.
-- Tests must remain green.
+**Parties to exclude from ingestion:**
+- `Puolueiden äänet yhteensä` (100% total sentinel row)
+- `Muut` (total "others" — covered by `Muu puolue`)
+- Parties with `(YYYY)` in name — data from previous elections only
 
 ---
 
 ## Alternatives Considered
 
-| Approach                                       | Pros                                                                                              | Cons                                                                            | Decision   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------- |
-| **Ingest into DB, JOIN in API**                | Consistent with all other data; 308-row table adds negligible query overhead; easy to update data | Requires ingestion step                                                         | **Chosen** |
-| Static TS lookup module                        | Zero DB overhead; no ingestion                                                                    | Adds ~30 KB to server bundle; breaks the "data in DB" project invariant         | Rejected   |
-| New `/api/demographics?code=xxx` route         | Clean separation                                                                                  | Extra fetch per click (latency); more code surface                              | Rejected   |
-| Add columns directly to `municipalities` table | One table                                                                                         | Re-running `ingest_geodata.py` would silently drop demographics; tight coupling | Rejected   |
+### A. Store per-party rows; aggregate top-4 in SQL
+
+**Pro:** normalised, queryable.  
+**Con:** requires `json_object_agg` correlated subquery in every municipality fetch (adds latency, complexity).
+
+### B. Store per-party rows; aggregate top-4 at ingestion into a summary table ✓ (chosen)
+
+Store raw `municipality_elections(nat_code, party, vote_share)` for flexibility.
+At ingestion, also materialise a `municipality_election_summary(nat_code, parties JSONB)` table
+where `parties` is `{"KOK": 20.8, "PS": 18.2, ...}` — a `json_object_agg` snapshot.
+
+The municipality API LEFT JOINs this summary table (one extra join, no subquery per row).
+The client receives `election_data` as a JSON string and does `JSON.parse` once per click.
+
+### C. Store as JSONB directly (no normalised table)
+
+**Pro:** simpler schema.  
+**Con:** loses ability to query individual party results or run aggregations.
+
+We keep the normalised table as the source of truth and add the summary as a materialised view.
 
 ---
 
 ## Detailed Design
 
-### Architecture
-
-```mermaid
-flowchart LR
-    A["data/demographic_data.json"] -->|"ingest_demographics.py"| B["PostgreSQL\nmunicipality_demographics"]
-    C["GET /api/municipalities"] -->|"LEFT JOIN"| B
-    C -->|"GeoJSON + population props"| D["MapView.tsx\nmunicipalities-source"]
-    D -->|"click → f.properties"| E["InfoPanel\nwith demographics"]
-```
-
-### Phase 0 — DB Ingestion
-
-**File:** `scripts/ingest_demographics.py`
-
-Follows the same pattern as `ingest_geodata.py` and `ingest_weather.py`:
-
-- Reads `.env.local` for `DATABASE_URL`
-- `--no-drop` flag for idempotent re-runs
-- Creates `municipality_demographics` table
-- Reads `data/demographic_data.json`, extracts only `properties` (ignores geometry)
-- Uses `execute_values` + per-batch commits (500 rows/batch)
-- `tqdm` progress bar
-
-**Table schema:**
+### 1. Database Schema
 
 ```sql
-CREATE TABLE IF NOT EXISTS municipality_demographics (
-  nat_code       TEXT     PRIMARY KEY,
-  til_vuosi      SMALLINT NOT NULL,
-  population     INTEGER  NOT NULL,
-  male           INTEGER  NOT NULL,
-  male_pct       REAL     NOT NULL,
-  female         INTEGER  NOT NULL,
-  female_pct     REAL     NOT NULL,
-  age_0_14       INTEGER  NOT NULL,
-  age_0_14_pct   REAL     NOT NULL,
-  age_15_64      INTEGER  NOT NULL,
-  age_15_64_pct  REAL     NOT NULL,
-  age_65plus     INTEGER  NOT NULL,
-  age_65plus_pct REAL     NOT NULL
+CREATE TABLE municipality_elections (
+  nat_code   TEXT    NOT NULL,
+  party      TEXT    NOT NULL,
+  vote_share REAL    NOT NULL,
+  PRIMARY KEY (nat_code, party)
+);
+CREATE INDEX ON municipality_elections (nat_code);
+
+CREATE TABLE municipality_election_summary (
+  nat_code TEXT PRIMARY KEY,
+  parties  JSONB NOT NULL
 );
 ```
 
-No geometry is stored — municipality boundaries are already in the `municipalities` table.
+The `municipality_election_summary.parties` column is populated by:
+```sql
+INSERT INTO municipality_election_summary (nat_code, parties)
+SELECT nat_code, json_object_agg(party, vote_share)
+FROM municipality_elections
+GROUP BY nat_code;
+```
 
-### Phase 1 — API Route Update
+### 2. Ingestion Script (`scripts/ingest_elections.py`)
 
-**File:** `src/app/api/municipalities/route.ts`
+```
+read CSV (cp1252)  →  filter party rows (drop total + historical)
+                   →  for each party × each current KU-column
+                       if value != '.'  →  emit (nat_code, party, vote_share)
+→  upsert into municipality_elections
+→  rebuild municipality_election_summary
+```
 
-Extend the SQL query with a `LEFT JOIN`:
+`nat_code` extracted from column header: `re.search(r'KU(\d+)', col)` → zero-pad to 3 digits:
+`str(int(code)).zfill(3)`.  (Note: Statistics Finland uses plain integers without zero-padding
+in the header; our DB stores the 3-digit string, e.g. `091`.)
+
+### 3. API Route Update (`/api/municipalities/route.ts`)
+
+Extend the existing SQL with a LEFT JOIN on the summary table:
 
 ```sql
-SELECT
-  m.id, m.nat_code, m.name_fi, m.name_sv, m.aoi_id,
-  ST_AsGeoJSON(m.geom) AS geojson,
-  d.til_vuosi,
-  d.population,
-  d.male,          d.male_pct,
-  d.female,        d.female_pct,
-  d.age_0_14,      d.age_0_14_pct,
-  d.age_15_64,     d.age_15_64_pct,
-  d.age_65plus,    d.age_65plus_pct
 FROM municipalities m
 LEFT JOIN municipality_demographics d ON d.nat_code = m.nat_code
+LEFT JOIN municipality_election_summary e ON e.nat_code = m.nat_code
 ```
 
-All new columns are included in the GeoJSON `properties` object. `null` values (LEFT JOIN miss — municipality boundary exists but no demographics row) pass through naturally.
+Add to SELECT: `e.parties AS election_data`
 
-### Phase 2 — MapView Click Handler Update
+TypeScript query type gets `election_data: string | null`.  
+In the `properties` object: `election_data: row.election_data ?? null`.
 
-**File:** `src/components/MapView.tsx`
+### 4. ElectionPieChart Component (`src/components/ElectionPieChart.tsx`)
 
-The `municipalities-fill` click handler builds an `InfoPanelData`. Extend it to conditionally append demographic rows when `p.population != null`:
+Pure-SVG, no new npm dependencies.
+
+**Input:** `data: Record<string, number> | null`  (party abbreviation → vote share %)
+
+**Logic:**
+1. Sort parties by vote share descending.
+2. Classify each party: known party → assigned color; unknown → `#64748b` (slate).
+3. Group parties with share < 2% into an "Other" bucket (added to any existing `Muu puolue`).
+4. Build SVG path arcs for each slice.
+5. Below the chart, list the top 4 parties with colored dot, abbreviation, and percentage.
+
+**Party color map:**
+
+| Party   | Color   | Notes                        |
+|---------|---------|------------------------------|
+| KOK     | #1D5091 | National Coalition (navy)    |
+| PS      | #003580 | Finns Party (dark blue)      |
+| SDP     | #CC0000 | Social Democrats (red)       |
+| KESK    | #00873E | Centre Party (green)         |
+| VIHR    | #82B300 | Green League (lime)          |
+| VAS     | #D32F2F | Left Alliance (dark red)     |
+| RKP     | #FFD700 | Swedish People's Party (gold)|
+| KD      | #003F87 | Christian Democrats (blue)   |
+| LIIKE   | #F06400 | Movement Now (orange)        |
+| Other   | #64748B | Slate gray                   |
+
+**SVG construction:**
+
+```
+center = (80, 80), radius = 70  (160×160 viewBox)
+arc path: M cx cy  L x1 y1  A r r 0 largeArcFlag 1 x2 y2  Z
+```
+
+### 5. InfoPanel Extension
+
+Add optional `component` field:
 
 ```typescript
-const rows: [string, string | null | undefined][] = [
-  ["Code", p.nat_code as string],
-  ["Region", p.aoi_id as string],
-];
-
-if (p.population != null) {
-  rows.push(
-    ["Population", Number(p.population).toLocaleString("fi-FI")],
-    ["Male", `${Number(p.male).toLocaleString("fi-FI")} (${p.male_pct}%)`],
-    [
-      "Female",
-      `${Number(p.female).toLocaleString("fi-FI")} (${p.female_pct}%)`,
-    ],
-    [
-      "Under 15",
-      `${Number(p.age_0_14).toLocaleString("fi-FI")} (${p.age_0_14_pct}%)`,
-    ],
-    [
-      "Over 65",
-      `${Number(p.age_65plus).toLocaleString("fi-FI")} (${p.age_65plus_pct}%)`,
-    ],
-    ["Data year", String(p.til_vuosi)],
-  );
+export interface InfoPanelData {
+  title: string;
+  rows: [string, string | null | undefined][];
+  component?: React.ReactNode;   // rendered below rows
 }
-
-onInfoPanel?.({ title: name, rows });
 ```
 
-`toLocaleString("fi-FI")` formats integers with Finnish thousands separators (non-breaking space).
+InfoPanel renders `{data.component}` beneath the rows section.
+
+### 6. MapView Wiring
+
+In the `municipalities-fill` click handler, after building `rows`:
+
+```typescript
+import ElectionPieChart from "@/components/ElectionPieChart";
+
+const rawElection = p.election_data as string | null;
+const electionData = rawElection ? (JSON.parse(rawElection) as Record<string, number>) : null;
+
+onInfoPanel?.({
+  title: name,
+  rows,
+  component: electionData ? <ElectionPieChart data={electionData} /> : null,
+});
+```
+
+Note: Mapbox serialises GeoJSON `properties` as JSON when storing feature data; JSONB from
+PostgreSQL that arrives as an object in the API response will be re-serialised as a string by
+Mapbox GL JS. We parse it in the click handler.
+
+---
+
+## Component Diagram
+
+```mermaid
+graph LR
+    CSV["data/election_data.csv\n(cp1252, wide format)"]
+    Script["scripts/ingest_elections.py"]
+    ElectionsTable["municipality_elections\n(nat_code, party, vote_share)"]
+    SummaryTable["municipality_election_summary\n(nat_code, parties JSONB)"]
+    API["/api/municipalities\nGET route"]
+    MapView["MapView.tsx\nmunicipal click handler"]
+    InfoPanel["InfoPanel.tsx"]
+    PieChart["ElectionPieChart.tsx\n(inline SVG)"]
+
+    CSV --> Script
+    Script --> ElectionsTable
+    Script --> SummaryTable
+    SummaryTable --> API
+    API --> MapView
+    MapView --> InfoPanel
+    MapView --> PieChart
+    PieChart --> InfoPanel
+```
 
 ---
 
 ## Summary
 
-- **Phase 0:** `scripts/ingest_demographics.py` — reads `data/demographic_data.json` properties, writes 308 rows to `municipality_demographics` table; geometry ignored.
-- **Phase 1:** `/api/municipalities` LEFT JOINs `municipality_demographics`; 13 new nullable fields in GeoJSON properties.
-- **Phase 2:** `MapView.tsx` click handler conditionally renders 5 demographic rows (population, male/female split, under-15, over-65) plus data year in the existing `InfoPanel`.
+- **No new npm dependencies** — pure SVG pie chart.
+- **Backwards compatible** — `InfoPanelData.component` is optional; existing panels unaffected.
+- **Graceful degradation** — when `election_data` is null (DB absent or no data for municipality),
+  the click handler shows only Code/Region/demographic rows as before.
+- **Single extra join** — the summary table adds one cheap LEFT JOIN to the existing
+  municipalities query; no per-row subqueries.
+- **308 municipalities × 22 parties** ≈ 6 776 rows ingested.
 
 ---
 
 ## References
 
-- Statistics Finland open geodata: https://www.stat.fi/org/avoindata/paikkatietoaineistot_en.html
-- Existing ingestion pattern: `scripts/ingest_geodata.py`, `scripts/ingest_weather.py`
-- InfoPanel component: `src/components/InfoPanel.tsx`
-- Municipalities click handler: `src/components/MapView.tsx` ~line 1073
+- Statistics Finland open data license: CC BY 4.0
+- Finnish party official colors: https://en.wikipedia.org/wiki/List_of_political_parties_in_Finland
+- SVG arc path specification: https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorial/Paths

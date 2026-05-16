@@ -32,6 +32,8 @@ const DEMO_ROW = {
   age_65plus_pct: 27.6,
 };
 
+const ELECTION_DATA = '{"KOK":26.4,"PS":18.2,"SDP":15.1}';
+
 describe("GET /api/municipalities", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -129,6 +131,32 @@ describe("GET /api/municipalities", () => {
     expect(props.aoi_id).toBe("turku");
   });
 
+  it("includes election_data in properties when LEFT JOIN matches", async () => {
+    process.env.DATABASE_URL = "postgres://test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ ...BASE_ROW, ...DEMO_ROW, election_data: ELECTION_DATA }],
+      rowCount: 1,
+    } as never);
+
+    const res = await GET();
+    const body = await res.json();
+    const props = body.features[0].properties;
+
+    expect(props.election_data).toBe(ELECTION_DATA);
+  });
+
+  it("election_data is null when LEFT JOIN finds no match", async () => {
+    process.env.DATABASE_URL = "postgres://test";
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ ...BASE_ROW, ...DEMO_ROW, election_data: null }],
+      rowCount: 1,
+    } as never);
+
+    const res = await GET();
+    const body = await res.json();
+    expect(body.features[0].properties.election_data).toBeNull();
+  });
+
   it("SQL query uses LEFT JOIN with municipality_demographics", async () => {
     process.env.DATABASE_URL = "postgres://test";
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as never);
@@ -136,6 +164,16 @@ describe("GET /api/municipalities", () => {
     await GET();
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining("LEFT JOIN municipality_demographics"),
+    );
+  });
+
+  it("SQL query uses LEFT JOIN with municipality_election_summary", async () => {
+    process.env.DATABASE_URL = "postgres://test";
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 } as never);
+
+    await GET();
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("LEFT JOIN municipality_election_summary"),
     );
   });
 

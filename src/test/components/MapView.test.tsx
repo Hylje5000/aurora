@@ -163,6 +163,10 @@ vi.mock("@/lib/milsymbol", () => ({
   ensureMilsymbolImages: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("@/components/ElectionPieChart", () => ({
+  default: () => <div data-testid="election-pie-chart" />,
+}));
+
 import MapView from "@/components/MapView";
 import type { CustomLayer } from "@/lib/customLayers";
 
@@ -697,6 +701,62 @@ describe("MapView", () => {
     expect(rowLabels).not.toContain("Population");
     expect(rowLabels).not.toContain("Under 15");
     expect(rowLabels).not.toContain("Over 65");
+  });
+
+  it("passes ElectionPieChart as component when election_data is present", async () => {
+    const onInfoPanel = vi.fn();
+    render(<MapView onInfoPanel={onInfoPanel} />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "Helsinki",
+            name_sv: "Helsingfors",
+            nat_code: "091",
+            aoi_id: "turku",
+            election_data: '{"KOK":26.4,"PS":18.2,"SDP":15.1}',
+          },
+        },
+      ],
+      lngLat: { lng: 25.0, lat: 60.2 },
+    });
+
+    const call = onInfoPanel.mock.calls[0][0] as { component: unknown };
+    expect(call.component).not.toBeNull();
+  });
+
+  it("passes null component when election_data is absent", async () => {
+    const onInfoPanel = vi.fn();
+    render(<MapView onInfoPanel={onInfoPanel} />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "TestKunta",
+            name_sv: null,
+            nat_code: "999",
+            aoi_id: "lappi",
+            election_data: null,
+          },
+        },
+      ],
+      lngLat: { lng: 25.0, lat: 68.0 },
+    });
+
+    const call = onInfoPanel.mock.calls[0][0] as { component: unknown };
+    expect(call.component).toBeNull();
   });
 
   it("clicking municipalities-fill updates highlight source and starts animation", async () => {
