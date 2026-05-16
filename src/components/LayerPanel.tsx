@@ -49,7 +49,7 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="absolute left-4 bottom-10 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none">
+    <div className="absolute left-4 bottom-10 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none">
       {/* Header */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -71,6 +71,14 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
       {/* Layer rows */}
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-1.5">
+          <SectionHeading label="Basemap" />
+          <LayerRow
+            label="Satellite View"
+            dotColor="#1e293b"
+            checked={visibility.satellite}
+            onToggle={() => onToggle("satellite")}
+          />
+
           <SectionHeading label="Terrain" />
           <LayerRow
             label="3D Terrain"
@@ -104,25 +112,25 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
           <SectionHeading label="Comms" />
           <LayerRow
             label="GSM"
-            dotColor="#fde047"
+            dotColor="#3b82f6"
             checked={visibility.cellGSM}
             onToggle={() => onToggle("cellGSM")}
           />
           <LayerRow
             label="UMTS"
-            dotColor="#fb923c"
+            dotColor="#3b82f6"
             checked={visibility.cellUMTS}
             onToggle={() => onToggle("cellUMTS")}
           />
           <LayerRow
             label="LTE"
-            dotColor="#4ade80"
+            dotColor="#3b82f6"
             checked={visibility.cellLTE}
             onToggle={() => onToggle("cellLTE")}
           />
           <LayerRow
             label="CDMA"
-            dotColor="#c4b5fd"
+            dotColor="#3b82f6"
             checked={visibility.cellCDMA}
             onToggle={() => onToggle("cellCDMA")}
           />

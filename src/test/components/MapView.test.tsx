@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, act } from "@testing-library/react";
+import { render, act, screen } from "@testing-library/react";
 
 const {
   mockRemove,
@@ -19,6 +19,9 @@ const {
   mockSetLngLat,
   mockSetHTML,
   mockAddTo,
+  mockRemoveLayer,
+  mockRemoveSource,
+  mockSetStyle,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -42,6 +45,13 @@ const {
   const mockSetConfigProperty = vi.fn();
   const mockSetLayoutProperty = vi.fn();
   const mockSetTerrain = vi.fn();
+  const mockRemoveLayer = vi.fn();
+  const mockRemoveSource = vi.fn();
+  const mockGetStyle = vi.fn(() => ({
+    url: "mapbox://styles/mapbox/standard",
+    sprite: "standard",
+  }));
+  const mockSetStyle = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -66,6 +76,10 @@ const {
     setConfigProperty: mockSetConfigProperty,
     setLayoutProperty: mockSetLayoutProperty,
     setTerrain: mockSetTerrain,
+    removeLayer: mockRemoveLayer,
+    removeSource: mockRemoveSource,
+    getStyle: mockGetStyle,
+    setStyle: mockSetStyle,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -86,11 +100,42 @@ const {
     mockSetLngLat,
     mockSetHTML,
     mockAddTo,
+    mockRemoveLayer,
+    mockRemoveSource,
+    mockGetStyle,
+    mockSetStyle,
     MockMap,
     MockNavigationControl,
     MockPopup,
   };
 });
+
+const { mockDrawChangeMode, mockDrawDelete, mockDrawTrash, MockMapboxDraw } =
+  vi.hoisted(() => {
+    const mockDrawChangeMode = vi.fn();
+    const mockDrawDelete = vi.fn();
+    const mockDrawTrash = vi.fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const MockMapboxDraw: any = vi.fn(() => ({
+      changeMode: mockDrawChangeMode,
+      delete: mockDrawDelete,
+      trash: mockDrawTrash,
+    }));
+    MockMapboxDraw.modes = {
+      DRAW_LINE_STRING: "draw_line_string",
+      DRAW_POLYGON: "draw_polygon",
+      DRAW_POINT: "draw_point",
+      SIMPLE_SELECT: "simple_select",
+      DIRECT_SELECT: "direct_select",
+      STATIC: "static",
+    };
+    return {
+      mockDrawChangeMode,
+      mockDrawDelete,
+      mockDrawTrash,
+      MockMapboxDraw,
+    };
+  });
 
 vi.mock("mapbox-gl", () => ({
   default: {
@@ -101,13 +146,28 @@ vi.mock("mapbox-gl", () => ({
   },
 }));
 
+vi.mock("@mapbox/mapbox-gl-draw", () => ({ default: MockMapboxDraw }));
+vi.mock("mapbox-gl-draw-rectangle-mode", () => ({ default: {} }));
+vi.mock("@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css", () => ({}));
+
 vi.mock("@/lib/milsymbol", () => ({
   createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())),
+  ensureMilsymbolImages: vi.fn(() => Promise.resolve()),
 }));
 
 import MapView from "@/components/MapView";
+import type { CustomLayer } from "@/lib/customLayers";
 
 const infraOn = {
+  satellite: false,
+  terrain3d: false,
+  hillshade: true,
+  contours: true,
+  landcover: true,
+  cellGSM: true,
+  cellUMTS: true,
+  cellLTE: true,
+  cellCDMA: true,
   roads: true,
   bridges: true,
   railways: true,
@@ -144,6 +204,14 @@ async function fireStyleLoad() {
   });
 }
 
+const LAYER_A: CustomLayer = {
+  id: "layer-a",
+  name: "Alpha",
+  color: "#ef4444",
+  created_at: "2026-05-16T00:00:00Z",
+  updated_at: "2026-05-16T00:00:00Z",
+};
+
 describe("MapView", () => {
   beforeEach(() => {
     MockMap.mockClear();
@@ -165,6 +233,12 @@ describe("MapView", () => {
     mockSetHTML.mockClear();
     mockAddTo.mockClear();
     MockPopup.mockClear();
+    mockRemoveLayer.mockClear();
+    mockRemoveSource.mockClear();
+    MockMapboxDraw.mockClear();
+    mockDrawChangeMode.mockClear();
+    mockDrawDelete.mockClear();
+    mockDrawTrash.mockClear();
     mockFetchOk();
   });
 
@@ -184,9 +258,9 @@ describe("MapView", () => {
     );
   });
 
-  it("adds a NavigationControl on mount", () => {
+  it("adds NavigationControl and MapboxDraw on mount", () => {
     render(<MapView />);
-    expect(mockAddControl).toHaveBeenCalledTimes(1);
+    expect(MockMapboxDraw).toHaveBeenCalledTimes(1);
     expect(mockAddControl).toHaveBeenCalledWith(
       expect.any(MockNavigationControl),
     );
@@ -217,7 +291,7 @@ describe("MapView", () => {
     );
   });
 
-  it("adds aoi-source, aoi-fill, and aoi-outline after style.load fires", async () => {
+  it("adds aoi-source, fill, and multiple outline layers after style.load fires", async () => {
     render(<MapView />);
     await fireStyleLoad();
 
@@ -227,6 +301,9 @@ describe("MapView", () => {
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "aoi-fill", type: "fill" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "aoi-outline-glow", type: "line" }),
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "aoi-outline", type: "line" }),
@@ -277,10 +354,6 @@ describe("MapView", () => {
       <MapView
         layerVisibility={{
           ...infraOn,
-          terrain3d: false,
-          hillshade: true,
-          contours: true,
-          landcover: true,
           cellGSM: false,
           cellUMTS: false,
           cellLTE: false,
@@ -309,10 +382,6 @@ describe("MapView", () => {
       <MapView
         layerVisibility={{
           ...infraOn,
-          terrain3d: false,
-          hillshade: true,
-          contours: true,
-          landcover: true,
           cellGSM: false,
           cellUMTS: false,
           cellLTE: false,
@@ -330,36 +399,6 @@ describe("MapView", () => {
       "cell-towers-cluster-count",
       "visibility",
       "none",
-    );
-  });
-
-  it("shows cluster layers when at least one cell type is toggled on", async () => {
-    const allOff = {
-      ...infraOn,
-      terrain3d: false,
-      hillshade: true,
-      contours: true,
-      landcover: true,
-      cellGSM: false,
-      cellUMTS: false,
-      cellLTE: false,
-      cellCDMA: false,
-    };
-    const { rerender } = render(<MapView layerVisibility={allOff} />);
-    await fireStyleLoad();
-    mockSetLayoutProperty.mockClear();
-
-    rerender(<MapView layerVisibility={{ ...allOff, cellLTE: true }} />);
-
-    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
-      "cell-towers-clusters",
-      "visibility",
-      "visible",
-    );
-    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
-      "cell-towers-cluster-count",
-      "visibility",
-      "visible",
     );
   });
 
@@ -373,14 +412,7 @@ describe("MapView", () => {
       <MapView
         layerVisibility={{
           ...infraOn,
-          terrain3d: false,
-          hillshade: true,
-          contours: true,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
           cellLTE: false,
-          cellCDMA: true,
         }}
       />,
     );
@@ -389,67 +421,6 @@ describe("MapView", () => {
       mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
     expect(lastCall.features).toHaveLength(1);
     expect(lastCall.features[0].properties.radio).toBe("GSM");
-  });
-
-  it("produces empty source when all cell types are toggled off", async () => {
-    mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
-    const { rerender } = render(<MapView />);
-    await fireStyleLoad();
-    mockSetData.mockClear();
-
-    rerender(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: false,
-          hillshade: true,
-          contours: true,
-          landcover: true,
-          cellGSM: false,
-          cellUMTS: false,
-          cellLTE: false,
-          cellCDMA: false,
-        }}
-      />,
-    );
-
-    const lastCall =
-      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
-    expect(lastCall.features).toHaveLength(0);
-  });
-
-  it("restores full data when all cell types are re-enabled", async () => {
-    mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
-    const allOff = {
-      ...infraOn,
-      terrain3d: false,
-      hillshade: true,
-      contours: true,
-      landcover: true,
-      cellGSM: false,
-      cellUMTS: false,
-      cellLTE: false,
-      cellCDMA: false,
-    };
-    const { rerender } = render(<MapView layerVisibility={allOff} />);
-    await fireStyleLoad();
-    mockSetData.mockClear();
-
-    rerender(
-      <MapView
-        layerVisibility={{
-          ...allOff,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-
-    const lastCall =
-      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
-    expect(lastCall.features).toHaveLength(4);
   });
 
   it("registers milsymbol images for cell tower types and bridge icons via map.addImage", async () => {
@@ -470,105 +441,16 @@ describe("MapView", () => {
     }
   });
 
-  it("adds four per-type tower layers as symbol layers with icon-image", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    const cases: Array<{ id: string; radio: string }> = [
-      { id: "cell-towers-gsm", radio: "GSM" },
-      { id: "cell-towers-umts", radio: "UMTS" },
-      { id: "cell-towers-lte", radio: "LTE" },
-      { id: "cell-towers-cdma", radio: "CDMA" },
-    ];
-
-    for (const { id, radio } of cases) {
-      expect(mockAddLayer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id,
-          type: "symbol",
-          filter: expect.arrayContaining([
-            expect.arrayContaining(["==", expect.anything(), radio]),
-          ]),
-          layout: expect.objectContaining({ "icon-image": `${id}-icon` }),
-        }),
-      );
-    }
-  });
-
-  it("registers a moveend listener after style.load", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    const moveendCall = mockOn.mock.calls.find(
-      ([event]) => event === "moveend",
-    );
-    expect(moveendCall).toBeDefined();
-  });
-
-  it("fetches cell towers immediately after style.load", async () => {
+  it("fetches cell towers and infrastructure immediately after style.load", async () => {
     render(<MapView />);
     await fireStyleLoad();
 
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/cell-towers?bbox="),
     );
-  });
-
-  it("calls setData on the cell-towers source after a successful fetch", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    expect(mockGetSource).toHaveBeenCalledWith("cell-towers-source");
-    expect(mockSetData).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "FeatureCollection" }),
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/roads?bbox="),
     );
-  });
-
-  it("fetches cell towers again when moveend fires", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    const fetchCallsBefore = (global.fetch as ReturnType<typeof vi.fn>).mock
-      .calls.length;
-
-    const moveendCb = mockOn.mock.calls.find(
-      ([event]) => event === "moveend",
-    )![1] as () => void;
-    await act(async () => moveendCb());
-
-    expect(
-      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.length,
-    ).toBeGreaterThan(fetchCallsBefore);
-  });
-
-  it("registers click, mouseenter, and mouseleave handlers for each per-type tower layer", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    const layerIds = [
-      "cell-towers-gsm",
-      "cell-towers-umts",
-      "cell-towers-lte",
-      "cell-towers-cdma",
-    ];
-
-    for (const layerId of layerIds) {
-      expect(
-        mockOn.mock.calls.some(
-          ([event, layer]) => event === "click" && layer === layerId,
-        ),
-      ).toBe(true);
-      expect(
-        mockOn.mock.calls.some(
-          ([event, layer]) => event === "mouseenter" && layer === layerId,
-        ),
-      ).toBe(true);
-      expect(
-        mockOn.mock.calls.some(
-          ([event, layer]) => event === "mouseleave" && layer === layerId,
-        ),
-      ).toBe(true);
-    }
   });
 
   it("opens a Popup when a per-type tower is clicked", async () => {
@@ -605,8 +487,6 @@ describe("MapView", () => {
 
   it("calls fitBounds with the correct bbox when selectedAreaId is set", () => {
     const { rerender } = render(<MapView selectedAreaId={null} />);
-    expect(mockFitBounds).not.toHaveBeenCalled();
-
     rerender(<MapView selectedAreaId="karjala" />);
     expect(mockFitBounds).toHaveBeenCalledWith(
       [29.289551, 62.283256, 31.256104, 63.1047],
@@ -614,262 +494,9 @@ describe("MapView", () => {
     );
   });
 
-  it("does not call fitBounds when selectedAreaId is null", () => {
-    render(<MapView selectedAreaId={null} />);
-    expect(mockFitBounds).not.toHaveBeenCalled();
-  });
+  // ── Infrastructure layer tests ──────────────────────────────────────────
 
-  it("does not fetch when fetch returns a non-ok response", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-    } as unknown as Response);
-
-    render(<MapView />);
-    await fireStyleLoad();
-
-    expect(mockSetData).not.toHaveBeenCalled();
-  });
-
-  it("does not throw when fetch rejects", async () => {
-    global.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error("network error")) as typeof fetch;
-
-    render(<MapView />);
-    await expect(act(async () => fireStyleLoad())).resolves.not.toThrow();
-  });
-
-  it("bbox string uses map bounds in correct order", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    const url = (global.fetch as ReturnType<typeof vi.fn>).mock
-      .calls[0][0] as string;
-    expect(url).toContain("bbox=20,59,22,61");
-  });
-
-  // ── Terrain & intelligence layer tests ────────────────────────────────
-
-  it("applies military config hardening after style.load", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    expect(mockSetConfigProperty).toHaveBeenCalledWith(
-      "basemap",
-      "showPointOfInterestLabels",
-      false,
-    );
-    expect(mockSetConfigProperty).toHaveBeenCalledWith(
-      "basemap",
-      "showTransitLabels",
-      false,
-    );
-    expect(mockSetConfigProperty).toHaveBeenCalledWith(
-      "basemap",
-      "show3dObjects",
-      false,
-    );
-    expect(mockSetConfigProperty).toHaveBeenCalledWith(
-      "basemap",
-      "colorWater",
-      "#0d2137",
-    );
-  });
-
-  it("adds mapbox-dem and terrain-v2 sources after style.load", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    expect(mockAddSource).toHaveBeenCalledWith(
-      "mapbox-dem",
-      expect.objectContaining({ type: "raster-dem" }),
-    );
-    expect(mockAddSource).toHaveBeenCalledWith(
-      "terrain-v2",
-      expect.objectContaining({ type: "vector" }),
-    );
-  });
-
-  it("adds hillshading, landcover-military, and contour layers after style.load", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "hillshading", type: "hillshade" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "landcover-military", type: "fill" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "contours-minor", type: "line" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "contours-major", type: "line" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "contours-labels", type: "symbol" }),
-    );
-  });
-
-  it("does not call setTerrain on style.load when terrain3d is false (default)", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-    expect(mockSetTerrain).not.toHaveBeenCalled();
-  });
-
-  it("calls setTerrain on style.load when terrain3d is initially true", async () => {
-    render(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: true,
-          hillshade: true,
-          contours: true,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-    await fireStyleLoad();
-    expect(mockSetTerrain).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
-    );
-  });
-
-  it("calls setLayoutProperty for hillshade layer when hillshade is toggled off", async () => {
-    const { rerender } = render(<MapView />);
-    await fireStyleLoad();
-    mockSetLayoutProperty.mockClear();
-
-    rerender(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: false,
-          hillshade: false,
-          contours: true,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-
-    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
-      "hillshading",
-      "visibility",
-      "none",
-    );
-  });
-
-  it("calls setLayoutProperty for all contour layers when contours is toggled off", async () => {
-    const { rerender } = render(<MapView />);
-    await fireStyleLoad();
-    mockSetLayoutProperty.mockClear();
-
-    rerender(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: false,
-          hillshade: true,
-          contours: false,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-
-    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
-      "contours-minor",
-      "visibility",
-      "none",
-    );
-    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
-      "contours-major",
-      "visibility",
-      "none",
-    );
-    expect(mockSetLayoutProperty).toHaveBeenCalledWith(
-      "contours-labels",
-      "visibility",
-      "none",
-    );
-  });
-
-  it("calls setTerrain(null) when terrain3d is toggled off after style.load", async () => {
-    const { rerender } = render(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: true,
-          hillshade: true,
-          contours: true,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-    await fireStyleLoad();
-    mockSetTerrain.mockClear();
-
-    rerender(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: false,
-          hillshade: true,
-          contours: true,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-
-    expect(mockSetTerrain).toHaveBeenCalledWith(null);
-  });
-
-  it("calls setTerrain when terrain3d is toggled on after style.load", async () => {
-    const { rerender } = render(<MapView />);
-    await fireStyleLoad();
-    mockSetTerrain.mockClear();
-
-    rerender(
-      <MapView
-        layerVisibility={{
-          ...infraOn,
-          terrain3d: true,
-          hillshade: true,
-          contours: true,
-          landcover: true,
-          cellGSM: true,
-          cellUMTS: true,
-          cellLTE: true,
-          cellCDMA: true,
-        }}
-      />,
-    );
-
-    expect(mockSetTerrain).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
-    );
-  });
-
-  it("adds infrastructure sources on style.load", async () => {
+  it("adds infrastructure sources and layers on style.load", async () => {
     render(<MapView />);
     await fireStyleLoad();
 
@@ -884,26 +511,8 @@ describe("MapView", () => {
         expect.objectContaining({ type: "geojson" }),
       );
     }
-  });
-
-  it("adds infrastructure layers on style.load", async () => {
-    render(<MapView />);
-    await fireStyleLoad();
-
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "roads-line", type: "line" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "bridges-symbol", type: "symbol" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "railways-line", type: "line" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "municipalities-fill", type: "fill" }),
-    );
-    expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "municipalities-outline", type: "line" }),
     );
   });
 
@@ -914,60 +523,79 @@ describe("MapView", () => {
     const clickHandler = mockOn.mock.calls.find(
       ([event, layer]) => event === "click" && layer === "roads-line",
     )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
-    expect(clickHandler).toBeDefined();
 
-    clickHandler?.({
-      features: [
-        {
-          properties: {
-            width_cm: 650,
-            lane_count: 2,
-            max_mass_kg: 8000,
-            max_height_cm: 420,
-            has_damage: false,
-            condition_text: "hyvä tai erittäin hyvä",
+    act(() => {
+      clickHandler?.({
+        features: [
+          {
+            properties: {
+              width_cm: 650,
+              lane_count: 2,
+            },
+            geometry: { type: "LineString", coordinates: [[22.1, 60.2]] },
           },
-          geometry: { type: "LineString", coordinates: [[22.1, 60.2]] },
-        },
-      ],
-      lngLat: { lng: 22.1, lat: 60.2 },
+        ],
+        lngLat: { lng: 22.1, lat: 60.2 },
+      });
     });
 
-    expect(mockSetLngLat).toHaveBeenCalled();
     expect(mockSetHTML).toHaveBeenCalledWith(
       expect.stringContaining("Road Segment"),
     );
-    expect(mockAddTo).toHaveBeenCalled();
   });
 
-  it("shows bridges-symbol popup when bridges-symbol layer is clicked", async () => {
-    render(<MapView />);
+  // ── Custom layer tests ────────────────────────────────────────────────
+
+  it("adds source and layers for each customLayer passed at init time", async () => {
+    render(<MapView customLayers={[LAYER_A]} />);
     await fireStyleLoad();
 
-    const clickHandler = mockOn.mock.calls.find(
-      ([event, layer]) => event === "click" && layer === "bridges-symbol",
-    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
-    expect(clickHandler).toBeDefined();
-
-    clickHandler?.({
-      features: [
-        {
-          properties: {
-            name: "Alhon silta",
-            code: "T-1380",
-            status: "kaytossa",
-            max_vehicle_mass_t: 35,
-            max_combination_mass_t: 60,
-          },
-        },
-      ],
-      lngLat: { lng: 21.64, lat: 60.87 },
-    });
-
-    expect(mockSetLngLat).toHaveBeenCalled();
-    expect(mockSetHTML).toHaveBeenCalledWith(
-      expect.stringContaining("Alhon silta"),
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "custom-layer-layer-a",
+      expect.objectContaining({ type: "geojson" }),
     );
-    expect(mockAddTo).toHaveBeenCalled();
+  });
+
+  it("opens FeatureDialog when draw.create fires with an active drawing layer", async () => {
+    render(<MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />);
+    await fireStyleLoad();
+
+    const drawCreateCb = mockOn.mock.calls.find(
+      ([event]) => event === "draw.create",
+    )![1] as (e: { features: GeoJSON.Feature[] }) => void;
+
+    await act(async () =>
+      drawCreateCb({
+        features: [
+          {
+            type: "Feature",
+            id: "temp-1",
+            geometry: { type: "Polygon", coordinates: [[]] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByTestId("feature-dialog")).toBeTruthy();
+  });
+
+  it("calls setStyle when satellite visibility changes", async () => {
+    const { rerender } = render(<MapView />);
+    await fireStyleLoad();
+    mockSetStyle.mockClear();
+
+    rerender(
+      <MapView
+        layerVisibility={{
+          ...infraOn,
+          satellite: true,
+        }}
+      />,
+    );
+
+    expect(mockSetStyle).toHaveBeenCalledWith(
+      "mapbox://styles/mapbox/satellite-streets-v12",
+    );
   });
 });

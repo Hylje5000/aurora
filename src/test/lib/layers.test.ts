@@ -6,6 +6,7 @@ import {
 } from "@/lib/layers";
 
 const ALL_KEYS: LayerKey[] = [
+  "satellite",
   "terrain3d",
   "hillshade",
   "contours",
@@ -14,10 +15,6 @@ const ALL_KEYS: LayerKey[] = [
   "cellUMTS",
   "cellLTE",
   "cellCDMA",
-  "roads",
-  "bridges",
-  "railways",
-  "municipalities",
 ];
 
 describe("DEFAULT_LAYER_VISIBILITY", () => {
@@ -25,6 +22,10 @@ describe("DEFAULT_LAYER_VISIBILITY", () => {
     for (const key of ALL_KEYS) {
       expect(key in DEFAULT_LAYER_VISIBILITY).toBe(true);
     }
+  });
+
+  it("has satellite off by default", () => {
+    expect(DEFAULT_LAYER_VISIBILITY.satellite).toBe(false);
   });
 
   it("has terrain3d off by default", () => {
@@ -43,16 +44,6 @@ describe("DEFAULT_LAYER_VISIBILITY", () => {
     expect(DEFAULT_LAYER_VISIBILITY.cellLTE).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.cellCDMA).toBe(true);
   });
-
-  it("has roads, bridges, railways on by default", () => {
-    expect(DEFAULT_LAYER_VISIBILITY.roads).toBe(true);
-    expect(DEFAULT_LAYER_VISIBILITY.bridges).toBe(true);
-    expect(DEFAULT_LAYER_VISIBILITY.railways).toBe(true);
-  });
-
-  it("has municipalities off by default", () => {
-    expect(DEFAULT_LAYER_VISIBILITY.municipalities).toBe(false);
-  });
 });
 
 describe("LAYER_GROUPS", () => {
@@ -60,6 +51,10 @@ describe("LAYER_GROUPS", () => {
     for (const key of ALL_KEYS) {
       expect(key in LAYER_GROUPS).toBe(true);
     }
+  });
+
+  it("satellite maps to no layer IDs (uses setStyle instead)", () => {
+    expect(LAYER_GROUPS.satellite).toEqual([]);
   });
 
   it("terrain3d maps to no layer IDs (uses setTerrain instead)", () => {
@@ -96,24 +91,5 @@ describe("LAYER_GROUPS", () => {
 
   it("cellCDMA maps to cell-towers-cdma layer", () => {
     expect(LAYER_GROUPS.cellCDMA).toEqual(["cell-towers-cdma"]);
-  });
-
-  it("roads maps to roads-line layer", () => {
-    expect(LAYER_GROUPS.roads).toEqual(["roads-line"]);
-  });
-
-  it("bridges maps to bridges-symbol layer", () => {
-    expect(LAYER_GROUPS.bridges).toEqual(["bridges-symbol"]);
-  });
-
-  it("railways maps to railways-line layer", () => {
-    expect(LAYER_GROUPS.railways).toEqual(["railways-line"]);
-  });
-
-  it("municipalities maps to fill and outline layers", () => {
-    expect(LAYER_GROUPS.municipalities).toEqual([
-      "municipalities-fill",
-      "municipalities-outline",
-    ]);
   });
 });
