@@ -1,357 +1,246 @@
-# UI Layout & Accessibility Overhaul — Design Document
+# Design: Route-Intelligence Road Query — Overlap Filter
 
 ## Overview
 
-This document describes the design for a comprehensive UI layout and accessibility improvement pass
-on the Aurora IPB application. The five problem areas are:
-
-1. **Custom Layers panel** (bottom-right) is redundant as a standalone overlay — it belongs in the
-   existing Layers panel (bottom-left).
-2. **Weather + DatePicker** appear as two separate boxes at the top-left; they should be unified
-   into one coherent panel.
-3. **InfoPanel** (municipality / elevation) and **RoutePanel** clutter the map centre; both should
-   live on the right-side edge as collapsible panels.
-4. **"Route" button** is small, low-contrast, and poorly labelled — it should read "Plan a Route"
-   and be styled as a primary CTA.
-5. **Map lines** (roads, drawn features, route) are low-contrast against the dark Mapbox Standard
-   night basemap — they need higher contrast colours, thicker strokes, and halo effects.
+The `POST /api/route-intelligence` endpoint analyses a planned route for vehicle hazards
+by querying the `roads` and `bridges` PostGIS tables. The current roads query matches
+**any** road segment whose geometry comes within ~22 m of the route line. Because roads
+branch off the main road at junctions, their starting point has **zero distance** from
+the route, so every bad-condition side road gets flagged — even though the vehicle never
+travels on it. This document describes the cause in detail and proposes an
+overlap-length filter as the fix.
 
 ---
 
-## Analysis of Current Problems
+## Detailed Analysis of the Problem
 
-### 1 – Custom Layers Panel (bottom-right)
+### Current query
 
-`CustomLayerPanel` is positioned at `absolute right-4 bottom-10 z-10`. This places it in the
-bottom-right corner while the "Layers" panel is in the bottom-left. Users must look in two different
-corners to manage layers. The current panel has its own header/collapse toggle, making it
-structurally identical to the Layers panel — a strong signal they should be merged.
-
-### 2 – Weather / Date split box
-
-`MapWithNav` renders:
-```tsx
-<div className="absolute left-4 top-16 z-10 flex items-start gap-2">
-  <WeatherWidget ... />
-  <DatePicker ... />
-</div>
+```sql
+SELECT DISTINCT ON (link_id)
+  ...
+  ST_AsGeoJSON(ST_Centroid(geom)) AS closest_pt
+FROM roads, ST_GeomFromGeoJSON($1) AS route_geom
+WHERE ST_DWithin(geom, route_geom, 0.0004)
+ORDER BY link_id
+LIMIT 500
 ```
-Each child renders its own `rounded-lg border border-slate-700 bg-slate-900/90 ...` panel — two
-separate boxes side-by-side. This makes the relationship between the date selector and the weather
-data unclear. The expected UX is "choose a date, see weather for that date" — best expressed as a
-single stacked panel.
 
-### 3 – InfoPanel & RoutePanel position
+`0.0004` degrees ≈ 22 m at 60 °N latitude.
 
-`InfoPanel` is at `right-4 top-1/2 -translate-y-1/2` (vertically centred right). `RoutePanel` is
-at `bottom-10 left-1/2 -translate-x-1/2` (bottom-centre, 384 px wide). Both encroach on the map
-canvas — the route panel in particular blocks the centre of the screen where the user is most likely
-to be interacting with the map.
+### Why side roads are incorrectly included
 
-The right-side edge is the canonical location for detail/context panels in map applications
-(Google Maps, Mapbox Studio, Felt, etc.). Stacking InfoPanel and RoutePanel on the right keeps the
-map centre clear. Both panels are optional/dismissible so they don't permanently consume space.
+`ST_DWithin` returns `true` when **any** point on road geometry `A` is within the given
+distance of route geometry `B`. At a road junction the side road shares exactly the
+junction vertex with the main road. The junction vertex lies **on** the route line
+(distance = 0), so `ST_DWithin` is always satisfied for any road that branches from
+the route, regardless of angle or condition.
 
-### 4 – Route button
+```
+Main route (vehicle travels east): ──────────────────────────────→
+                                             │
+                Bad side road (north):       │  (junction vertex on route → distance = 0 → flagged)
+                                             │
+```
 
-Current: `"absolute top-4 right-20 z-10 ... bg-black/60 ... Route"`.
+### Why reducing the buffer threshold alone does not fix it
 
-Problems:
-- `bg-black/60` is nearly invisible against the dark basemap.
-- The label "Route" is ambiguous — is it a layer, a view, or an action?
-- It sits at `right-20` to avoid the Mapbox NavigationControl, but also collides with
-  `DrawingToolbar` at `right-4` when drawing mode is active.
+Even reducing the threshold to 1 m or 0 m, the junction vertex remains exactly 0 m
+from the route, so the side road is still returned. The root issue is geometric, not
+about the threshold value.
 
-### 5 – Map contrast
+### Roads vs bridges
 
-In Mapbox Standard night mode, the basemap background for land is approximately `#1a1a2e`. Against this:
-- `roads-line` default colour `#64748b` (slate-500) at opacity 0.8 is barely distinguishable.
-- Min line width at zoom 8 is 1 px — subpixel on retina displays.
-- `railways-line` at `#a78bfa` width 2 with `[2,2]` dasharray renders as dots at medium zoom.
-- Route line at `#3b82f6` (blue-500) width 5 is acceptable colour-wise but has no halo, so it
-  can merge visually into map tile roads below.
-- Custom layer lines at width 4 rely on bright palette colours (acceptable) but benefit from a
-  contrasting stroke for legibility on both light and dark map tiles.
+Bridges are stored as **POINTs** (`GEOMETRY(POINT, 4326)`), not line strings. A bridge
+point is placed AT the bridge structure; it does not share vertices with road junctions.
+The 50 m buffer for bridges is appropriate for catching bridges the vehicle actually
+crosses. **No change to the bridge query is needed.**
 
 ---
 
 ## Alternatives Considered
 
-| Option | Decision |
-|--------|----------|
-| Create a new `RightSidebar` wrapper component for InfoPanel + RoutePanel | Rejected — adds abstraction without benefit; Tailwind absolute positioning achieves the same layout directly. |
-| Use a drawer/slide-in animation for right panels | Deferred — outside scope; but collapsible via local `collapsed` state achieves 90% of the UX benefit without animation complexity. |
-| Delete `CustomLayerPanel.tsx` and inline its JSX in `LayerPanel.tsx` | Rejected — all existing `CustomLayerPanel` tests would break. Preferred: extract inner body as `CustomLayerSection`, keep legacy export. |
-| Strip outer wrapper from `WeatherWidget` / `DatePicker` via a `bare` prop | **Accepted** — cleanest approach; backwards-compatible with existing tests (bare=false by default). |
-| Move DrawingToolbar to left side | Rejected — inconsistent with its existing top-right placement; better to shift it down to `top-16` to avoid collision with the route button. |
+### Alt 1: Reduce `ST_DWithin` threshold (rejected)
+
+Reducing from 0.0004° to a smaller value does not help because the junction vertex is
+always at distance 0. Side roads are still matched. A very small threshold would also
+miss valid road segments whose Digiroad geometry is offset from the Mapbox route
+centre-line.
+
+### Alt 2: Angular (azimuth) filter (rejected as primary fix)
+
+Compute the angle between the road segment and the route at the closest point. Exclude
+roads whose angle to the route exceeds, say, 45°.
+
+Pros: conceptually correct; independent of segment length.  
+Cons: complex multi-step SQL (`ST_Azimuth`, `ST_LineLocatePoint`,
+`ST_LineInterpolatePoint`); sensitive to very short segments or curved roads; brittle
+near segment endpoints.
+
+### Alt 3: Overlap fraction (rejected — unstable for short segments)
+
+Require that at least X % of the road segment falls inside a corridor buffer.  
+Problem: a short access stub entirely within the buffer (e.g., 8 m total) would satisfy
+100 % overlap even though it is not the route being travelled. Fraction also has a
+divide-by-zero edge case for zero-length geometries.
+
+### Alt 4: Functional-class filter (supplementary, not primary)
+
+Digiroad stores a `functional_class` column (1 = national highway, 5 = private road).
+Filtering to higher classes would reduce noise but would hide bad conditions on
+low-class roads that the Mapbox-routed path might actually traverse in rural Finland.
+Not the right primary fix.
+
+### Alt 5: Overlap-length filter (selected)
+
+Buffer the route line by R metres to create a **corridor polygon**, then compute the
+intersection of each candidate road segment with that corridor. Keep only roads where
+the intersection length exceeds a minimum threshold T.
+
+**Why this works:**
+
+A perpendicular side road that branches at a junction enters the corridor at distance 0
+and exits after approximately R metres → intersection ≈ R m.  
+A road running alongside the route is inside the corridor for its full segment length
+(tens to hundreds of metres) → intersection >> T.
+
+**Geometry table (R = 10 m, T = 15 m):**
+
+| Road angle to route | Approx. intersection inside 10 m corridor | Passes T = 15 m? |
+|---------------------|------------------------------------------|-------------------|
+| 90° (perpendicular) | ≈ 10 m                                   | No ✓ filtered     |
+| 75°                 | ≈ 10.4 m                                 | No ✓ filtered     |
+| 60°                 | ≈ 11.5 m                                 | No ✓ filtered     |
+| 45°                 | ≈ 14.1 m                                 | No ✓ filtered     |
+| 30° (merge/fork)    | ≈ 20 m                                   | Yes — acceptable  |
+| 0° (parallel road)  | full segment length                      | Yes ✓ included    |
+
+Roads at ≤ 30° to the route are typically merge ramps or route forks — relevant hazards.
+
+**Secondary improvement: `ST_ClosestPoint` instead of `ST_Centroid`**
+
+The current query returns `ST_Centroid(geom)` for the hazard marker. For roads that
+run alongside but not centered on the route, the centroid can be far from where the
+hazard is relevant. `ST_ClosestPoint(r.geom, rt.geom)` returns the point on the road
+that is geometrically closest to the route — a more accurate location for the hazard
+dot shown on the map.
 
 ---
 
 ## Detailed Design
 
-### Component interaction map
+### Query change (roads only)
 
-```mermaid
-graph TD
-    MWN["MapWithNav"]
-    AP["AreaNav (top-centre)"]
-    WP["WeatherPanel (top-left unified box)"]
-    DP["DatePicker bare (inside WeatherPanel)"]
-    WW["WeatherWidget bare (inside WeatherPanel)"]
-    LP["LayerPanel (bottom-left, w-56)"]
-    CLS["CustomLayerSection (inside LayerPanel)"]
-    IP["InfoPanel (right-4 top-20, collapsible)"]
-    RP["RoutePanel (right-4 bottom-10, w-80)"]
-    MV["MapView"]
-    DT["DrawingToolbar (top-16 right-4)"]
+Replace the current roads query with a CTE-based query that:
 
-    MWN --> AP
-    MWN --> WP
-    WP --> DP
-    WP --> WW
-    MWN --> LP
-    LP --> CLS
-    MWN --> IP
-    MWN --> RP
-    MWN --> MV
-    MV --> DT
+1. Materialises `route` (the parsed GeoJSON LineString geometry) — evaluated once.
+2. Materialises `route_corridor` (a 10 m geography buffer cast back to geometry) —
+   evaluated once.
+3. Applies the existing `ST_DWithin` filter as a fast GiST-indexed first pass.
+4. Applies the overlap-length filter as a second-pass refinement:
+   `ST_Length(ST_Intersection(r.geom, rc.geom)::geography) > 15`
+5. Returns `ST_ClosestPoint(r.geom, rt.geom)` instead of `ST_Centroid(r.geom)`.
+
+```sql
+WITH route AS (
+  SELECT ST_GeomFromGeoJSON($1) AS geom
+),
+route_corridor AS (
+  SELECT ST_Buffer(geom::geography, 10)::geometry AS geom
+  FROM route
+)
+SELECT DISTINCT ON (r.link_id)
+  r.id, r.link_id, r.aoi_id,
+  r.max_mass_kg, r.max_height_cm, r.max_bogie_mass_kg, r.max_axle_mass_kg,
+  r.width_cm, r.pavement_type, r.has_damage, r.damage_recurring,
+  r.condition_class, r.condition_text, r.rut_depth_mm,
+  ST_AsGeoJSON(ST_ClosestPoint(r.geom, rt.geom)) AS closest_pt
+FROM roads r
+CROSS JOIN route rt
+CROSS JOIN route_corridor rc
+WHERE ST_DWithin(r.geom, rt.geom, 0.0004)
+  AND ST_Length(ST_Intersection(r.geom, rc.geom)::geography) > 15
+ORDER BY r.link_id
+LIMIT 500
 ```
 
-### 1 – Merge Custom Layers into Layer Panel
+### No TypeScript changes required
 
-**Strategy**: Give `LayerPanel` optional custom-layer props; render `CustomLayerPanel`'s inner
-content as a new section inside the same panel container.
+SQL column aliases (`closest_pt`, etc.) remain identical. `RoadRow` interface and all
+hazard-classification logic are unchanged. Only the SQL string inside `query<RoadRow>()`
+changes.
 
-```mermaid
-graph LR
-    subgraph "Before"
-        A["LayerPanel (bottom-left)"]
-        B["CustomLayerPanel (bottom-right)"]
-    end
-    subgraph "After"
-        C["LayerPanel (bottom-left)"]
-        C --> D["... existing sections ..."]
-        C --> E["CUSTOM LAYERS section"]
-    end
-```
+### No bridge query change
 
-Changes:
-- `CustomLayerPanel.tsx` is refactored to export a `CustomLayerSection` component containing the
-  inner body (list + create form) **without** the outer absolute-positioned panel wrapper.
-  The legacy default export `CustomLayerPanel` is kept as a thin wrapper for existing test
-  compatibility.
-- `LayerPanel` receives an optional `customLayerProps` object typed as the existing
-  `CustomLayerPanelProps`. When provided, a `CUSTOM LAYERS` section heading and
-  `<CustomLayerSection {...customLayerProps} />` appear at the bottom of the panel body.
-- `LayerPanel` width: `w-48` → `w-56` (224 px) to accommodate layer names.
-- `MapWithNav` no longer renders `<CustomLayerPanel .../>` as a standalone sibling; it passes
-  props to `<LayerPanel customLayerProps={...} />`.
+The bridge query already works correctly for point geometries and is unchanged.
 
-### 2 – Unified Weather Panel
+### Performance characteristics
 
-```mermaid
-graph LR
-    subgraph "Before (two separate boxes side-by-side)"
-        A["DatePicker box"]
-        B["WeatherWidget box"]
-    end
-    subgraph "After (one vertical panel)"
-        C["Panel wrapper"] --> D["Date header row (DatePicker bare)"]
-        C --> E["Weather content (WeatherWidget bare)"]
-    end
-```
+| Step | Cost | Notes |
+|------|------|-------|
+| `ST_DWithin(r.geom, rt.geom, 0.0004)` | Fast — uses GiST index | Same as before |
+| `ST_Buffer(geom::geography, 10)` | One-time, CTE | Computed once per request |
+| `ST_Intersection + ST_Length` | Per candidate road only | Runs only on GiST-filtered set (≤ 500 rows) |
 
-Changes:
-- `DatePicker`: add `bare?: boolean` prop. When `bare=true`, return just the inner `<select>`
-  elements (wrapped in a plain `<div className="flex items-center gap-1">`), with no outer
-  `rounded-lg border ... backdrop-blur-sm` div.
-- `WeatherWidget`: add `bare?: boolean` prop. When `bare=true`, all three render branches (loading,
-  no-data, data) return their content without the outer panel div. Padding is removed; the parent
-  provides it.
-- `MapWithNav` wrapper:
+The `CROSS JOIN route` and `CROSS JOIN route_corridor` each join exactly one row, so
+they add no Cartesian product overhead. The planner treats them as constant expressions.
 
-```tsx
-{selectedAreaId && (
-  <div className="absolute left-4 top-16 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl">
-    {/* Date row */}
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40">
-      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex-1">
-        Date
-      </span>
-      <DatePicker
-        bare
-        month={selectedDay.month}
-        day={selectedDay.day}
-        onChange={(month, day) => setSelectedDay({ month, day })}
-      />
-    </div>
-    {/* Weather data */}
-    <WeatherWidget
-      bare
-      region={selectedAreaId}
-      month={selectedDay.month}
-      day={selectedDay.day}
-    />
-  </div>
-)}
-```
+### Constants
 
-### 3 – InfoPanel and RoutePanel on the Right Edge
-
-#### Position changes
-
-| Panel | Before | After |
-|-------|--------|-------|
-| `InfoPanel` | `absolute right-4 top-1/2 -translate-y-1/2` | Rendered as `absolute right-4 top-20 z-20 max-h-[60vh] overflow-y-auto` |
-| `RoutePanel` | `absolute bottom-10 left-1/2 -translate-x-1/2 w-96` | `absolute right-4 bottom-10 z-20 w-80` |
-
-InfoPanel positioning is changed by updating the class directly inside `InfoPanel.tsx`. RoutePanel
-positioning is changed inside `RoutePanel.tsx`.
-
-#### Collapsibility
-
-**InfoPanel**: add `collapsed / setCollapsed` local state (default `false`). A `▾/▸` chevron in
-the header row beside the `×` close button toggles collapsed state. When collapsed, only the
-title bar renders (content area gets `hidden`). The `×` still dismisses entirely (calls `onClose`).
-
-**RoutePanel**: existing `onClose` handler already removes the panel from the DOM. Add a collapse
-chevron (`▾/▸`) in the header. Collapsed state hides the body; header stays visible. Default
-expanded. Collapsing does NOT call `onClose`; it just hides the body.
-
-#### RoutePanel width adjustment
-
-`w-96` (384 px) → `w-80` (320 px): better on 1280 px wide displays while still readable.
-
-### 4 – "Plan a Route" Button
-
-| Property | Before | After |
-|----------|--------|-------|
-| Text | `"Route"` | `"Plan a Route"` |
-| Background | `bg-black/60 backdrop-blur-sm` | `bg-blue-600 hover:bg-blue-700` |
-| Border (inactive) | `border-white/30` | `border-blue-500` |
-| Border (active) | `border-blue-400 shadow-[0_0_0_2px_#60a5fa]` | unchanged |
-| Padding | `px-3 py-1.5` | `px-4 py-2` |
-| Position | `top-4 right-20` | `top-4 right-4` |
-| `data-testid` | `route-toggle-btn` | `route-toggle-btn` (unchanged) |
-
-The `DrawingToolbar` currently uses `top-4 right-4` which would overlap with the repositioned
-button. Fix: change `DrawingToolbar` outer div to `top-16 right-4` (64 px below the nav bar).
-
-### 5 – Map Contrast Improvements
-
-#### Roads
-
-Add a dark halo layer **below** `roads-line`:
-
-```js
-map.addLayer({
-  id: "roads-line-casing",
-  type: "line",
-  minzoom: 12,
-  source: "roads-source",
-  layout: { visibility: vis.roads ? "visible" : "none" },
-  paint: {
-    "line-color": "#0f172a",
-    "line-width": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 7],
-    "line-opacity": 0.65,
-  },
-});
-```
-
-Update `roads-line`:
-- Default colour: `#64748b` → `#94a3b8`
-- Opacity: 0.8 → 1.0
-- Width: `[zoom 8→1, zoom 14→3]` → `[zoom 8→1.5, zoom 14→4]`
-
-Layer insertion order: `roads-line-casing` added before `roads-line` (Mapbox `addLayer` without
-`before` param appends; use `before: "roads-line"` for the casing).
-
-#### Route line
-
-Add a white glow layer **below** `route-line`:
-
-```js
-map.addLayer({
-  id: "route-line-outline",
-  type: "line",
-  source: "route-source",
-  slot: "top",
-  layout: { "line-join": "round", "line-cap": "round" },
-  paint: {
-    "line-color": "#ffffff",
-    "line-width": 9,
-    "line-opacity": 0.25,
-  },
-});
-```
-
-The `route-line` colour and width remain unchanged (`#3b82f6`, width 5).
-
-#### Railways
-
-- Width: 2 → 3
-- Dasharray: `[2, 2]` → `[4, 2]`
-
-#### Custom layer lines
-
-- `line-width`: 4 → 5 for the `-line` paint layer.
-- `circle-radius`: 10 → 11 for better point visibility.
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| Corridor radius R | 10 m | Wider than a single lane (≈ 3.5 m); tolerates Digiroad/Mapbox geometry offset |
+| Minimum overlap T | 15 m | Filters perpendicular (≈ 10 m) and steep diagonal (≈ 14 m) side roads |
+| `ST_DWithin` threshold | 0.0004° (≈ 22 m) | Unchanged; provides GiST-indexed candidate set |
 
 ---
 
-## Screen Layout Diagram
+## Architecture Diagram
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│  AreaNav (top-centre: Lappi | Karjala | Turku)       [Plan a Route] (top-4 right-4) │
-├───────────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────┐                                          ┌─────────────────┐  │
-│  │  Date:   │                                          │ Municipality /  │  │
-│  │  [May▼][16▼]                                       │ Elevation info  │  │
-│  │  Hist avg · N yr                                   │ (InfoPanel,     │  │
-│  │  12.3°C ± 2.1°                                    │  right-4 top-20)│  │
-│  │  18% rain                                          └─────────────────┘  │
-│  └──────────┘                                                               │
-│                                                                              │
-│                     M  A  P     C  A  N  V  A  S                            │
-│                                                                              │
-│                                                          ┌─────────────────┐│
-│  ┌─────────────────────┐                                │ Route Planning  ││
-│  │ Layers              │                                │ (RoutePanel,    ││
-│  │ ─ Basemap           │                                │  right-4 bot-10)││
-│  │ ─ Terrain           │                                │ w-80            ││
-│  │ ─ Elevation         │                                └─────────────────┘│
-│  │ ─ Vegetation        │                                                    │
-│  │ ─ Comms             │                                                    │
-│  │ ─ Infrastructure    │                                                    │
-│  │ ─ Custom Layers     │                                                    │
-│  │   + New Layer       │                                                    │
-│  └─────────────────────┘                                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["POST /api/route-intelligence\n(routeGeometry: LineString)"]
+    B["route CTE\nST_GeomFromGeoJSON"]
+    C["route_corridor CTE\nST_Buffer(geom::geography, 10m)"]
+    D["ST_DWithin filter\n(GiST index, 22m candidate set)"]
+    E["Overlap filter\nST_Intersection + ST_Length > 15m"]
+    F["classifyRoadHazards(row, vehicle)"]
+    G["Bridge query\n(unchanged, ST_DWithin 50m)"]
+    H["classifyBridgeHazards(row, vehicle)"]
+    I["Sort CRITICAL → WARNING → INFO\n→ RouteIntelligence JSON"]
+
+    A --> B --> C
+    B --> D
+    C --> E
+    D --> E
+    E --> F --> I
+    A --> G --> H --> I
 ```
 
 ---
 
-## Summary of File Changes
+## Summary
 
-| File | Change summary |
-|------|---------------|
-| `src/components/CustomLayerPanel.tsx` | Extract `CustomLayerSection` (inner body, no outer div); keep `CustomLayerPanel` legacy wrapper. |
-| `src/components/LayerPanel.tsx` | Accept `customLayerProps?`; render `CustomLayerSection`; widen to `w-56`. |
-| `src/components/WeatherWidget.tsx` | Add `bare?: boolean` prop. |
-| `src/components/DatePicker.tsx` | Add `bare?: boolean` prop. |
-| `src/components/InfoPanel.tsx` | Add `collapsed/setCollapsed` state + chevron toggle; update position class to `right-4 top-20 z-20 max-h-[60vh] overflow-y-auto`. |
-| `src/components/RoutePanel.tsx` | Change position from bottom-centre to `right-4 bottom-10`; width `w-80`; add collapse chevron. |
-| `src/components/DrawingToolbar.tsx` | `top-4 right-4` → `top-16 right-4` to avoid route button overlap. |
-| `src/components/MapView.tsx` | Add `roads-line-casing` + `route-line-outline` layers; update road/railway/custom-layer paint values. |
-| `src/components/MapWithNav.tsx` | Remove `<CustomLayerPanel/>`; pass props to `LayerPanel`; unify weather wrapper; update route button label/style/position. |
-| Tests | Update affected tests for new prop signatures, positions, and section merges. |
+The fix is a **single SQL query change** in `src/app/api/route-intelligence/route.ts`.
+No TypeScript types, no test fixtures, no bridge query, no UI components change.
+
+- Add `WITH route / route_corridor` CTEs to materialise the 10 m corridor once.
+- Add `AND ST_Length(ST_Intersection(r.geom, rc.geom)::geography) > 15` to reject
+  roads that only touch the route at a junction.
+- Change `ST_Centroid(geom)` → `ST_ClosestPoint(r.geom, rt.geom)` for accurate
+  hazard marker placement.
+
+The unit tests mock `query` at the DB layer and verify hazard-classification logic, not
+the SQL text — so **no test changes are required** for the query fix. We will add a
+brief inline comment documenting the overlap constant.
 
 ---
 
 ## References
 
-- Mapbox GL JS line layer paint spec: https://docs.mapbox.com/mapbox-gl-js/style-spec/layers/#line
-- Mapbox Standard night-mode: https://docs.mapbox.com/mapbox-gl-js/guides/styles/
-- WCAG 1.4.11 non-text contrast (3:1 minimum for UI components against adjacent colours)
-- Map panel UX patterns: Felt.com, Google Maps sidebar, Mapbox Studio sidebar
+- PostGIS `ST_Intersection`: https://postgis.net/docs/ST_Intersection.html
+- PostGIS `ST_Buffer` (geography): https://postgis.net/docs/ST_Buffer.html
+- PostGIS `ST_Length` (geography): https://postgis.net/docs/ST_Length.html
+- PostGIS `ST_ClosestPoint`: https://postgis.net/docs/ST_ClosestPoint.html
+- PostGIS `ST_DWithin` (index use): https://postgis.net/docs/ST_DWithin.html
+- Digiroad data model: https://vayla.fi/en/transport-network/data/digiroad
