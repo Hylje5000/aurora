@@ -91,13 +91,17 @@ Add on-demand terrain elevation lookup: user clicks anywhere on the map → ambe
 ## Journal
 
 ### Phase 0
+
 _Not started._
 
 ### Phase 1
+
 _Not started._
 
 ### Phase 2
+
 _Not started._
 
 ### Phase 3
+
 _Not started._
