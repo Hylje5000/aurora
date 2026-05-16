@@ -31,23 +31,23 @@ _Updated after each phase._
 
 ## Phase 2 — Add `src/lib/milsymbol.ts` utility
 
-- [ ] Create `src/lib/milsymbol.ts` with `createMilsymbolImage(opts)` as designed:
+- [x] Create `src/lib/milsymbol.ts` with `createMilsymbolImage(opts)` as designed:
   - Accepts `{ sidc, size?, fillColor?, uniqueDesignation? }`
   - Instantiates `new ms.Symbol(sidc, options)`
   - Calls `.asSVG()` to get the SVG string
   - Returns a `Promise<HTMLImageElement>` via data URL → `<img onload>`
-- [ ] Create `src/test/lib/milsymbol.test.ts`:
+- [x] Create `src/test/lib/milsymbol.test.ts`:
   - `vi.mock("milsymbol")` — mock `Symbol` class with `.asSVG()` returning a minimal SVG string
   - Mock the global `Image` class so `onload` fires synchronously
   - Assert `img.src` contains `data:image/svg+xml`
   - Assert the returned value is the `HTMLImageElement`
   - Assert that error path (`onerror`) rejects the promise
-- [ ] Run `tsc --noEmit` — fix any type errors.
-- [ ] Run `npm test` — all tests must pass (including the new milsymbol tests).
-- [ ] Run `next lint --fix`.
-- [ ] Run `prettier --write .`.
-- [ ] Update MODIFICATION_IMPLEMENTATION.md Journal.
-- [ ] Present commit for user approval:
+- [x] Run `tsc --noEmit` — fix any type errors.
+- [x] Run `npm test` — all tests must pass (including the new milsymbol tests).
+- [x] Run `next lint --fix`.
+- [x] Run `prettier --write .`.
+- [x] Update MODIFICATION_IMPLEMENTATION.md Journal.
+- [x] Present commit for user approval:
   ```
   feat(lib): add createMilsymbolImage utility for NATO symbol generation
   ```
@@ -114,7 +114,7 @@ _Updated after each phase._
 
 ### Phase 2
 
-_To be filled in._
+`src/lib/milsymbol.ts` created — thin wrapper: `ms.Symbol(sidc, opts).asSVG()` → data URL → `HTMLImageElement` promise. 4 unit tests added covering: data URL format, option passthrough, default size, and `onerror` rejection path. 118 tests pass. `tsc` clean. Lint clean.
 
 ### Phase 3
 
