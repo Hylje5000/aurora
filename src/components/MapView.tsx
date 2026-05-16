@@ -125,6 +125,8 @@ export default function MapView({
       });
 
       const vis = layerVisibility;
+      const clustersVisible =
+        vis.cellGSM || vis.cellUMTS || vis.cellLTE || vis.cellCDMA;
 
       // Cell tower clustered source
       map.addSource("cell-towers-source", {
@@ -141,6 +143,7 @@ export default function MapView({
         type: "circle",
         source: "cell-towers-source",
         filter: ["has", "point_count"],
+        layout: { visibility: clustersVisible ? "visible" : "none" },
         paint: {
           "circle-color": "#94a3b8",
           "circle-radius": [
@@ -163,6 +166,7 @@ export default function MapView({
         source: "cell-towers-source",
         filter: ["has", "point_count"],
         layout: {
+          visibility: clustersVisible ? "visible" : "none",
           "text-field": "{point_count_abbreviated}",
           "text-size": 11,
         },
@@ -425,6 +429,19 @@ export default function MapView({
       map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
     } else {
       map.setTerrain(null);
+    }
+
+    const clustersVisible =
+      layerVisibility.cellGSM ||
+      layerVisibility.cellUMTS ||
+      layerVisibility.cellLTE ||
+      layerVisibility.cellCDMA;
+    for (const id of ["cell-towers-clusters", "cell-towers-cluster-count"]) {
+      map.setLayoutProperty(
+        id,
+        "visibility",
+        clustersVisible ? "visible" : "none",
+      );
     }
   }, [layerVisibility]);
 
