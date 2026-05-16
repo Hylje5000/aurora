@@ -22,6 +22,8 @@ const {
   mockRemoveLayer,
   mockRemoveSource,
   mockSetStyle,
+  mockSetPaintProperty,
+  mockGetZoom,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -52,6 +54,8 @@ const {
     sprite: "standard",
   }));
   const mockSetStyle = vi.fn();
+  const mockSetPaintProperty = vi.fn();
+  const mockGetZoom = vi.fn(() => 15);
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -80,6 +84,8 @@ const {
     removeSource: mockRemoveSource,
     getStyle: mockGetStyle,
     setStyle: mockSetStyle,
+    setPaintProperty: mockSetPaintProperty,
+    getZoom: mockGetZoom,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -104,6 +110,8 @@ const {
     mockRemoveSource,
     mockGetStyle,
     mockSetStyle,
+    mockSetPaintProperty,
+    mockGetZoom,
     MockMap,
     MockNavigationControl,
     MockPopup,
@@ -232,6 +240,8 @@ describe("MapView", () => {
     mockSetLngLat.mockClear();
     mockSetHTML.mockClear();
     mockAddTo.mockClear();
+    mockSetPaintProperty.mockClear();
+    mockGetZoom.mockClear();
     MockPopup.mockClear();
     mockRemoveLayer.mockClear();
     mockRemoveSource.mockClear();
@@ -505,6 +515,7 @@ describe("MapView", () => {
       "bridges-source",
       "railways-source",
       "municipalities-source",
+      "municipality-highlight-source",
     ]) {
       expect(mockAddSource).toHaveBeenCalledWith(
         id,
@@ -512,7 +523,29 @@ describe("MapView", () => {
       );
     }
     expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "roads-line", type: "line" }),
+      expect.objectContaining({ id: "roads-line", type: "line", minzoom: 12 }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "bridges-symbol",
+        type: "symbol",
+        minzoom: 12,
+      }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "railways-line", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "municipalities-fill", type: "fill" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "municipalities-outline", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "municipality-highlight-line",
+        type: "line",
+      }),
     );
   });
 
@@ -541,6 +574,134 @@ describe("MapView", () => {
 
     expect(mockSetHTML).toHaveBeenCalledWith(
       expect.stringContaining("Road Segment"),
+    );
+  });
+
+  it("calls onInfoPanel (not Popup) when municipalities-fill is clicked", async () => {
+    const onInfoPanel = vi.fn();
+    render(<MapView onInfoPanel={onInfoPanel} />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+    expect(clickHandler).toBeDefined();
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "Rusko",
+            name_sv: "Rusko",
+            nat_code: "704",
+            aoi_id: "turku",
+          },
+        },
+      ],
+      lngLat: { lng: 22.1, lat: 60.5 },
+    });
+
+    expect(onInfoPanel).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Rusko / Rusko" }),
+    );
+    expect(MockPopup).not.toHaveBeenCalled();
+  });
+
+  it("clicking municipalities-fill updates highlight source and starts animation", async () => {
+    render(<MapView onInfoPanel={vi.fn()} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+    expect(clickHandler).toBeDefined();
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "Rusko",
+            name_sv: null,
+            nat_code: "704",
+            aoi_id: "turku",
+          },
+          geometry: { type: "Polygon", coordinates: [] },
+        },
+      ],
+      lngLat: { lng: 22.1, lat: 60.5 },
+    });
+
+    expect(mockGetSource).toHaveBeenCalledWith("municipality-highlight-source");
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "FeatureCollection" }),
+    );
+  });
+
+  it("clears highlight source when infoPanelOpen transitions to false", async () => {
+    const { rerender } = render(<MapView infoPanelOpen={true} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView infoPanelOpen={false} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("municipality-highlight-source");
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "FeatureCollection", features: [] }),
+    );
+  });
+
+  it("does not fetch roads or bridges on style.load when zoom < 12", async () => {
+    mockGetZoom.mockReturnValue(7);
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([url]) => url as string,
+    );
+    expect(calls.some((u) => u.includes("/api/roads"))).toBe(false);
+    expect(calls.some((u) => u.includes("/api/bridges"))).toBe(false);
+    expect(calls.some((u) => u.includes("/api/railways"))).toBe(true);
+  });
+
+  it("fetches roads and bridges on style.load when zoom >= 12", async () => {
+    mockGetZoom.mockReturnValue(14);
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([url]) => url as string,
+    );
+    expect(calls.some((u) => u.includes("/api/roads"))).toBe(true);
+    expect(calls.some((u) => u.includes("/api/bridges"))).toBe(true);
+  });
+
+  it("shows bridges-symbol popup when bridges-symbol layer is clicked", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "bridges-symbol",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+
+    act(() => {
+      clickHandler?.({
+        features: [
+          {
+            properties: {
+              name: "Test Bridge",
+              code: "B123",
+              status: "kaytossa",
+            },
+            geometry: { type: "Point", coordinates: [22.1, 60.2] },
+          },
+        ],
+        lngLat: { lng: 22.1, lat: 60.2 },
+      });
+    });
+
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Test Bridge"),
     );
   });
 

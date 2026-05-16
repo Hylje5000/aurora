@@ -20,6 +20,7 @@ import {
 } from "@/lib/customLayers";
 import FeatureDialog from "@/components/FeatureDialog";
 import DrawingToolbar from "@/components/DrawingToolbar";
+import type { InfoPanelData } from "@/components/InfoPanel";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -39,6 +40,8 @@ interface MapViewProps {
   enabledCustomLayerIds?: Set<string>;
   activeDrawingLayerId?: string | null;
   onCancelDrawing?: () => void;
+  onInfoPanel?: (data: InfoPanelData | null) => void;
+  infoPanelOpen?: boolean;
 }
 
 function buildAoiCollection() {
@@ -336,6 +339,40 @@ function removeCustomLayerFromMap(
   }
 }
 
+const DASH_SEQ: number[][] = [
+  [0, 4],
+  [0.5, 3.5],
+  [1, 3],
+  [1.5, 2.5],
+  [2, 2],
+  [2.5, 1.5],
+  [3, 1],
+  [3.5, 0.5],
+];
+
+function startHighlightAnimation(
+  map: mapboxgl.Map,
+  frameRef: { current: number | null },
+  stepRef: { current: number },
+) {
+  if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  stepRef.current = 0;
+  let prevTs = 0;
+  function tick(ts: number) {
+    if (ts - prevTs >= 60) {
+      prevTs = ts;
+      map.setPaintProperty(
+        "municipality-highlight-line",
+        "line-dasharray",
+        DASH_SEQ[stepRef.current % DASH_SEQ.length],
+      );
+      stepRef.current++;
+    }
+    frameRef.current = requestAnimationFrame(tick);
+  }
+  frameRef.current = requestAnimationFrame(tick);
+}
+
 export default function MapView({
   center = [21.5, 60.2],
   zoom = 7,
@@ -345,6 +382,8 @@ export default function MapView({
   enabledCustomLayerIds = new Set(),
   activeDrawingLayerId = null,
   onCancelDrawing,
+  onInfoPanel,
+  infoPanelOpen = false,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -358,6 +397,8 @@ export default function MapView({
     features: [],
   });
   const layerVisibilityRef = useRef(layerVisibility);
+  const highlightAnimFrameRef = useRef<number | null>(null);
+  const highlightAnimStepRef = useRef(0);
 
   // Drawing state
   const activeDrawingLayerIdRef = useRef<string | null>(activeDrawingLayerId);
@@ -825,6 +866,21 @@ export default function MapView({
           "line-width": 1,
         },
       });
+      map.addSource("municipality-highlight-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "municipality-highlight-line",
+        type: "line",
+        source: "municipality-highlight-source",
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 3,
+          "line-dasharray": [0, 4],
+        },
+      });
+
       fetch("/api/municipalities")
         .then((r) => r.json())
         .then((data: GeoJSON.FeatureCollection) => {
@@ -842,6 +898,7 @@ export default function MapView({
       map.addLayer({
         id: "roads-line",
         type: "line",
+        minzoom: 12,
         source: "roads-source",
         layout: { visibility: vis.roads ? "visible" : "none" },
         paint: {
@@ -872,6 +929,7 @@ export default function MapView({
       map.addLayer({
         id: "bridges-symbol",
         type: "symbol",
+        minzoom: 12,
         source: "bridges-source",
         layout: {
           visibility: vis.bridges ? "visible" : "none",
@@ -1026,15 +1084,19 @@ export default function MapView({
         const name = p.name_sv
           ? `${p.name_fi} / ${p.name_sv}`
           : ((p.name_fi as string) ?? "Municipality");
-        new mapboxgl.Popup({ className: "aurora-popup" })
-          .setLngLat(e.lngLat)
-          .setHTML(
-            popupStyle(name, [
-              ["Code", p.nat_code],
-              ["Region", p.aoi_id],
-            ]),
-          )
-          .addTo(map);
+        onInfoPanel?.({
+          title: name,
+          rows: [
+            ["Code", p.nat_code as string],
+            ["Region", p.aoi_id as string],
+          ],
+        });
+        (
+          map.getSource(
+            "municipality-highlight-source",
+          ) as mapboxgl.GeoJSONSource
+        ).setData({ type: "FeatureCollection", features: [f] });
+        startHighlightAnimation(map, highlightAnimFrameRef, highlightAnimStepRef);
       });
 
       // Cursor handlers for infrastructure
@@ -1056,8 +1118,10 @@ export default function MapView({
       if (!eventsAttachedRef.current) {
         map.on("moveend", () => {
           fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
-          fetchLayer(map, "roads-source", "/api/roads");
-          fetchLayer(map, "bridges-source", "/api/bridges");
+          if (map.getZoom() >= 12) {
+            fetchLayer(map, "roads-source", "/api/roads");
+            fetchLayer(map, "bridges-source", "/api/bridges");
+          }
           fetchLayer(map, "railways-source", "/api/railways");
           for (const layerId of enabledCustomLayerIdsRef.current) {
             if (registeredCustomLayerIdsRef.current.has(layerId)) {
@@ -1066,8 +1130,10 @@ export default function MapView({
           }
         });
         fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
-        fetchLayer(map, "roads-source", "/api/roads");
-        fetchLayer(map, "bridges-source", "/api/bridges");
+        if (map.getZoom() >= 12) {
+          fetchLayer(map, "roads-source", "/api/roads");
+          fetchLayer(map, "bridges-source", "/api/bridges");
+        }
         fetchLayer(map, "railways-source", "/api/railways");
         eventsAttachedRef.current = true;
       }
@@ -1077,6 +1143,9 @@ export default function MapView({
 
     const registeredIds = registeredCustomLayerIdsRef.current;
     return () => {
+      if (highlightAnimFrameRef.current !== null) {
+        cancelAnimationFrame(highlightAnimFrameRef.current);
+      }
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;
@@ -1248,6 +1317,23 @@ export default function MapView({
   useEffect(() => {
     activeDrawingColourRef.current = activeDrawingColour;
   }, [activeDrawingColour]);
+
+  // ── Sync InfoPanel highlight ───────────────────────────────────────────
+  useEffect(() => {
+    if (infoPanelOpen) return;
+    if (highlightAnimFrameRef.current !== null) {
+      cancelAnimationFrame(highlightAnimFrameRef.current);
+      highlightAnimFrameRef.current = null;
+    }
+    const map = mapRef.current;
+    if (map && styleLoadedRef.current) {
+      (
+        map.getSource(
+          "municipality-highlight-source",
+        ) as mapboxgl.GeoJSONSource
+      )?.setData(EMPTY_COLLECTION);
+    }
+  }, [infoPanelOpen]);
 
   // ── Feature dialog handlers ────────────────────────────────────────────
   async function handleFeatureSave(

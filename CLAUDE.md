@@ -36,13 +36,14 @@ src/
 │           │           └── route.ts    # PUT update + DELETE single feature
 ├── components/
 │   ├── MapWithNav.tsx          # 'use client' state wrapper — owns selectedAreaId, layerVisibility,
-│   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId
+│   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId, infoPanelData
 │   ├── AreaNav.tsx             # 'use client' — top-centered AOI navigation button strip
 │   ├── LayerPanel.tsx          # 'use client' — floating bottom-left toggle panel for terrain/contour/landcover layers
 │   ├── CustomLayerPanel.tsx    # 'use client' — floating bottom-right panel: create/toggle/delete custom drawing layers
+│   ├── InfoPanel.tsx           # 'use client' — generic right-side info panel; accepts InfoPanelData {title, rows} | null
 │   ├── DrawingToolbar.tsx      # 'use client' — floating top-right tool palette (Point/Line/Polygon/Rectangle) + 8-colour palette
 │   ├── FeatureDialog.tsx       # 'use client' — modal: name + description for a newly drawn feature
-│   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control
+│   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control, visibility sync effect
 │   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
 ├── lib/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
@@ -68,10 +69,11 @@ src/
     │   ├── milsymbol.test.ts   # createMilsymbolImage — data URL format, option passthrough, onerror rejection
     │   └── customLayers.test.ts # COLOUR_PALETTE completeness/uniqueness, type shapes, milsymbol extensibility
     └── components/
-        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), full coverage of layers, draw flow, custom layers
-        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel)
+        ├── MapView.test.tsx    # mapbox-gl + MapboxDraw mocks (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain
+        ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel + CustomLayerPanel + InfoPanel)
         ├── LayerPanel.test.tsx # checkbox render, onToggle calls, collapse/expand
         ├── AreaNav.test.tsx    # button render + onSelect callback tests
+        ├── InfoPanel.test.tsx  # null data, title/row render, — fallback, onClose callback
         ├── MapLoader.test.tsx  # next/dynamic stub
         ├── CustomLayerPanel.test.tsx  # layer list, toggle, create form, delete confirm
         ├── DrawingToolbar.test.tsx    # tool buttons, colour swatches, cancel, delete selected
@@ -83,19 +85,19 @@ src/
 - **Framework**: Vitest 3 + `@testing-library/react` + jsdom. Config: `vitest.config.ts` (excluded from `tsconfig.json` to avoid Vite version conflicts).
 - **Scripts**: `npm test` (run once), `npm run test:watch`, `npm run test:coverage` (v8 provider).
 - **Mock strategy**:
-  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `addImage`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`, `setConfigProperty`, `setLayoutProperty`, `setTerrain`, `removeLayer`, `removeSource`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
+  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `addImage`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`, `setConfigProperty`, `setLayoutProperty`, `setTerrain`, `removeLayer`, `removeSource`, `setPaintProperty`, `getZoom`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
   - `@mapbox/mapbox-gl-draw` — `vi.hoisted()` mock with `changeMode`, `delete`, `trash` fns; `.modes` static property. Uses `eslint-disable @typescript-eslint/no-explicit-any` because the library uses `export =` syntax incompatible with `typeof` mock casting.
   - `mapbox-gl-draw-rectangle-mode` — `vi.mock(…, () => ({ default: {} }))`.
   - `@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css` — `vi.mock(…, () => ({}))`.
-  - `@/lib/milsymbol` — `vi.mock("@/lib/milsymbol", () => ({ createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())) }))` in MapView tests.
+  - `@/lib/milsymbol` — `vi.mock("@/lib/milsymbol", () => ({ createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())), ensureMilsymbolImages: vi.fn(() => Promise.resolve()) }))` in MapView tests.
   - `milsymbol` — `vi.mock("milsymbol", () => ({ default: { Symbol: MockSymbol } }))` in milsymbol.ts unit tests.
   - `global.fetch` — mocked with `vi.fn()` in MapView and MapWithNav tests.
   - `@/lib/db` — `vi.mock("@/lib/db", () => ({ query: vi.fn() }))` in API route tests.
   - `pg` — `vi.mock("pg")` + `vi.resetModules()` / `delete globalThis._pgPool` in db tests.
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
-  - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
+  - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`, `InfoPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 225 tests)**: All API routes ≥96%, all lib modules 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `CustomLayerPanel.tsx` ~98%, `MapWithNav.tsx` ~95%, `MapView.tsx` ~95% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 225 tests)**: All API routes ≥96%, all lib modules 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `CustomLayerPanel.tsx` ~98%, `MapWithNav.tsx` ~95%, `MapView.tsx` ~95% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -109,12 +111,13 @@ src/
 - **Cell tower API**: `GET /api/cell-towers?bbox=minLng,minLat,maxLng,maxLat` — queries `cell_towers` table (PostGIS GIST index on `geom`), returns up to 2000 features with properties `id, radio, aoi_id, range_m, avg_signal, samples`. Same bbox validation and graceful degradation as the features route. `parseBbox` is imported from `@/app/api/features/route`.
 - **Cell tower overlay**: On `style.load` (async callback), `MapView` adds `cell-towers-source` (GeoJSON, `cluster:true`, `clusterMaxZoom:14`, `clusterRadius:50`) and six layers: `cell-towers-clusters` (circle, color `#94a3b8`), `cell-towers-cluster-count` (symbol), plus four per-radio-type **symbol** layers — `cell-towers-gsm`, `cell-towers-umts`, `cell-towers-lte`, `cell-towers-cdma` — each using a NATO milsymbol icon registered via `map.addImage()`. Icons are generated by `createMilsymbolImage` (SIDC `SFGPUUSR-------`, Friendly Ground Signal Radio Unit) with friendly blue `fillColor` (`#3b82f6`) and `uniqueDesignation` text (GSM/UMTS/LTE/CDMA). The four images are loaded in parallel via `Promise.all` before the layers are added. The two cluster layers start hidden if all four cell-type toggles are off. `fetchCellTowers(map, rawDataRef, visRef)` is called immediately after `style.load` and on every `moveend`; it fetches `/api/cell-towers?bbox=...`, stores the raw `FeatureCollection` in `rawTowerDataRef`, then pushes a filtered copy (via `filterByEnabled`) to the source so cluster counts only reflect enabled radio types.
 - **Cell tower popup**: Clicking any of the four per-type layers opens a `mapboxgl.Popup` showing radio type, AOI, estimated range (m), and average signal (dBm). Cursor changes to `pointer` on hover.
-- **Layer toggle system**: `src/lib/layers.ts` exports `LayerKey` (8 values: `terrain3d`, `hillshade`, `contours`, `landcover`, `cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`), `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY` (cell types all default `true`, terrain3d `false`), and `LAYER_GROUPS` (maps each key to the Mapbox layer IDs it controls). `MapWithNav` owns `layerVisibility` state and a `handleToggle` callback, passing them to both `LayerPanel` and `MapView`.
+- **InfoPanel**: Generic right-side panel (`absolute right-4 top-1/2 -translate-y-1/2`) driven by `InfoPanelData { title: string; rows: [string, string|null|undefined][] }`. `MapWithNav` owns `infoPanelData` state and passes `onInfoPanel={setInfoPanelData}` to `MapView`. Currently used for municipality clicks; any future layer can open it by calling `onInfoPanel?.({title, rows})`. Dismissed via the `×` button (`aria-label="close info panel"`).
+- **Layer toggle system**: `src/lib/layers.ts` exports `LayerKey` (13 values: `satellite`, `terrain3d`, `hillshade`, `contours`, `landcover`, `cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`, `roads`, `bridges`, `railways`, `municipalities`), `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY` (cell types all default `true`, terrain3d `false`, satellite `false`), and `LAYER_GROUPS` (maps each key to the Mapbox layer IDs it controls). `MapWithNav` owns `layerVisibility` state and a `handleToggle` callback, passing them to both `LayerPanel` and `MapView`.
 - **Dark theme**: On `style.load`, `map.setConfigProperty("basemap", "lightPreset", "night")` switches the Mapbox Standard basemap to night mode. Military basemap hardening also disables POI/transit labels, 3D objects, and sets water to dark blue (`#0d2137`). `globals.css` overrides `.mapboxgl-ctrl-group` styles to match the slate dark palette (`#1e293b` bg, `#334155` borders, inverted SVG icons). AreaNav inactive buttons use `border-white/30`.
 - **Default map view**: Centre `[21.5, 60.2]` (Archipelago Sea, Finland), zoom 7. Mapbox Standard style (night preset).
-- **LayerPanel**: Floating dark-slate panel (`absolute left-4 bottom-10`) with collapsible sections — TERRAIN (3D Terrain, Hillshade), ELEVATION (Contour Lines), VEGETATION (Land Cover), COMMS (GSM, UMTS, LTE, CDMA). Each row is a checkbox with a colored dot calling `onToggle(key)`. COMMS dot colors match the map marker colors exactly.
+- **LayerPanel**: Floating dark-slate panel (`absolute left-4 bottom-10`) with collapsible sections — BASEMAP (Satellite View), TERRAIN (3D Terrain, Hillshade), ELEVATION (Contour Lines), VEGETATION (Land Cover), INFRA (Roads, Bridges, Railways, Municipalities), COMMS (GSM, UMTS, LTE, CDMA). Each row is a checkbox with a colored dot calling `onToggle(key)`. COMMS dot colors match the map marker colors exactly.
 - **Terrain & intelligence layers**: On `style.load`, `MapView` adds two Mapbox-hosted sources — `mapbox-dem` (raster-dem, `mapbox://mapbox.mapbox-terrain-dem-v1`) and `terrain-v2` (vector, `mapbox://mapbox.mapbox-terrain-v2`) — and five layers in Standard style slots: `hillshading` (hillshade, slot `bottom`), `landcover-military` (fill from `landcover` source-layer, GO/SLOW-GO/NO-GO colours, slot `bottom`), `contours-minor` + `contours-major` (lines from `contour` source-layer, slot `bottom`), `contours-labels` (symbol, slot `middle`).
-- **Layer visibility sync**: A `useEffect([layerVisibility])` in `MapView` guarded by `styleLoadedRef` (1) updates `layerVisibilityRef.current`, (2) calls `source.setData(filterByEnabled(rawTowerDataRef.current, layerVisibility))` so cluster counts immediately reflect the current toggles, (3) iterates `LAYER_GROUPS` calling `map.setLayoutProperty(layerId, 'visibility', ...)`, (4) calls `map.setTerrain({...})` / `map.setTerrain(null)` for `terrain3d`, and (5) applies `clustersVisible` (OR of the four cell-type flags) to the two cluster layers so they hide when all COMMS types are off.
+- **Layer visibility sync**: A `useEffect([layerVisibility])` in `MapView` guarded by `styleLoadedRef` (1) updates `layerVisibilityRef.current`, (2) calls `source.setData(filterByEnabled(rawTowerDataRef.current, layerVisibility))` so cluster counts immediately reflect the current toggles, (3) iterates `LAYER_GROUPS` calling `map.setLayoutProperty(layerId, 'visibility', ...)`, (4) calls `map.setTerrain({...})` / `map.setTerrain(null)` for `terrain3d`, (5) applies `clustersVisible` (OR of the four cell-type flags) to the two cluster layers so they hide when all COMMS types are off, and (6) handles `satellite` style switch.
 - **Cell tower source filtering**: `filterByEnabled(data, vis)` returns a new `FeatureCollection` containing only features whose `radio` property matches an enabled type (fast-path returns `data` unchanged when all four types are on). Raw fetched data is kept in `rawTowerDataRef`; `layerVisibilityRef` gives async `moveend` handlers access to the current toggle state without closing over a stale value.
 - **3D terrain**: When `layerVisibility.terrain3d` is true, `map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })` enables terrain extrusion. When false, `map.setTerrain(null)` flattens the map. Hillshade and contours remain readable in 2D mode.
 
@@ -153,7 +156,7 @@ All routes degrade gracefully (empty response / 503) when `DATABASE_URL` is abse
 
 ### State Ownership
 
-- **`MapWithNav`** owns: `customLayers[]`, `enabledCustomLayerIds: Set<string>`, `activeDrawingLayerId: string|null`. Fetches layer list on mount. Handles `onCreateLayer`/`onDeleteLayer`/`onToggleLayer`/`onSetActiveDrawingLayer`/`onCancelDrawing`.
+- **`MapWithNav`** owns: `customLayers[]`, `enabledCustomLayerIds: Set<string>`, `activeDrawingLayerId: string|null`, `infoPanelData`. Fetches layer list on mount. Handles `onCreateLayer`/`onDeleteLayer`/`onToggleLayer`/`onSetActiveDrawingLayer`/`onCancelDrawing`.
 - **`MapView`** owns internally: `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`, `dialogOpen`. Renders `DrawingToolbar` and `FeatureDialog` inside its own container (positioned absolutely within `relative w-full h-full` wrapper).
 - **`CustomLayerPanel`** (bottom-right): collapsible list with toggle checkbox, colour dot, active-drawing selector (click layer name), inline delete confirm, inline create form.
 - **`DrawingToolbar`** (top-right, only when a drawing layer is active): tool buttons, colour swatches, cancel button, "Delete Selected" (when Draw control has a selection).

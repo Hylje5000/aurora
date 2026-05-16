@@ -29,6 +29,7 @@ vi.mock("@/components/MapView", () => ({
     enabledCustomLayerIds,
     activeDrawingLayerId,
     onCancelDrawing,
+    onInfoPanel,
   }: {
     selectedAreaId: string | null;
     layerVisibility: LayerVisibility;
@@ -36,6 +37,7 @@ vi.mock("@/components/MapView", () => ({
     enabledCustomLayerIds: Set<string>;
     activeDrawingLayerId: string | null;
     onCancelDrawing: () => void;
+    onInfoPanel?: (data: unknown) => void;
   }) => (
     <div
       data-testid="map-view"
@@ -47,8 +49,19 @@ vi.mock("@/components/MapView", () => ({
       data-drawing-layer={activeDrawingLayerId ?? ""}
     >
       <button onClick={onCancelDrawing}>CancelDrawing</button>
+      <button
+        onClick={() => onInfoPanel?.({ title: "Test Municipality", rows: [] })}
+      >
+        Trigger InfoPanel
+      </button>
     </div>
   ),
+}));
+
+// Stub InfoPanel
+vi.mock("@/components/InfoPanel", () => ({
+  default: ({ data }: { data: { title: string } | null }) =>
+    data ? <div data-testid="info-panel">{data.title}</div> : null,
 }));
 
 // Stub LayerPanel — renders buttons that call onToggle
@@ -135,13 +148,14 @@ describe("MapWithNav", () => {
     expect(container.firstChild).not.toBeNull();
   });
 
-  it("renders AreaNav, MapView, LayerPanel, and CustomLayerPanel", async () => {
+  it("renders AreaNav, MapView, LayerPanel, CustomLayerPanel, and InfoPanel (hidden)", async () => {
     render(<MapWithNav />);
     await act(async () => {});
     expect(screen.getByTestId("area-nav")).toBeInTheDocument();
     expect(screen.getByTestId("map-view")).toBeInTheDocument();
     expect(screen.getByTestId("layer-panel")).toBeInTheDocument();
     expect(screen.getByTestId("custom-layer-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
   });
 
   it("starts with no area selected", async () => {
@@ -196,6 +210,18 @@ describe("MapWithNav", () => {
     expect(screen.getByTestId("map-view")).toHaveAttribute(
       "data-hillshade",
       "false",
+    );
+  });
+
+  it("shows InfoPanel when onInfoPanel is called from MapView", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(
+      screen.getByRole("button", { name: "Trigger InfoPanel" }),
+    );
+    expect(screen.getByTestId("info-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("info-panel")).toHaveTextContent(
+      "Test Municipality",
     );
   });
 

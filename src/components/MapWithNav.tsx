@@ -5,6 +5,7 @@ import AreaNav from "./AreaNav";
 import MapView from "./MapView";
 import LayerPanel from "./LayerPanel";
 import CustomLayerPanel from "./CustomLayerPanel";
+import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import {
   DEFAULT_LAYER_VISIBILITY,
   type LayerKey,
@@ -24,6 +25,9 @@ export default function MapWithNav() {
   const [activeDrawingLayerId, setActiveDrawingLayerId] = useState<
     string | null
   >(null);
+  const [infoPanelData, setInfoPanelData] = useState<InfoPanelData | null>(
+    null,
+  );
 
   // Fetch all custom layers on mount
   useEffect(() => {
@@ -96,6 +100,8 @@ export default function MapWithNav() {
         enabledCustomLayerIds={enabledCustomLayerIds}
         activeDrawingLayerId={activeDrawingLayerId}
         onCancelDrawing={() => setActiveDrawingLayerId(null)}
+        onInfoPanel={setInfoPanelData}
+        infoPanelOpen={infoPanelData !== null}
       />
       <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
       <CustomLayerPanel
@@ -107,6 +113,7 @@ export default function MapWithNav() {
         onToggleLayer={handleToggleLayer}
         onSetActiveDrawingLayer={setActiveDrawingLayerId}
       />
+      <InfoPanel data={infoPanelData} onClose={() => setInfoPanelData(null)} />
     </div>
   );
 }

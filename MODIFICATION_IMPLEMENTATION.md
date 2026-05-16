@@ -1,62 +1,41 @@
-# Implementation Plan: Satellite Style Toggle
+# Implementation Plan: Aurora IPB Enhancements
 
-This plan outlines the steps to implement a global satellite style toggle in the Aurora IPB application.
+This plan outlines the steps taken to implement the Satellite Style Toggle, Generic Info Panel, and Bridge Zoom Fix.
 
 ## Journal
 
 | Date       | Phase   | Notes                                                                                                                                                                                                                                    |
 | ---------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-05-16 | Initial | Plan created.                                                                                                                                                                                                                            |
-| 2026-05-16 | Phase 1 | Updated `src/lib/layers.ts` and `src/test/lib/layers.test.ts`. Fixed broken tests in `MapView.test.tsx`. All tests passing.                                                                                                              |
-| 2026-05-16 | Phase 2 | Added "Basemap" section and "Satellite View" toggle to `LayerPanel.tsx`. Updated `LayerPanel.test.tsx`. All tests passing.                                                                                                               |
-| 2026-05-16 | Phase 3 | Refactored `MapView.tsx` to handle style transitions cleanly using `layerVisibilityRef` inside `style.load` and correctly managing event listeners. Added `getStyle` mocking and specific test to `MapView.test.tsx`. All tests passing. |
-| 2026-05-16 | Phase 4 | Ran `npm run test:coverage`. Coverage report generated successfully (93.59% Stmts, 88.64% Branch). Implementation complete!                                                                                                              |
+| 2026-05-16 | Phase 1 | Updated `src/lib/layers.ts` and `src/test/lib/layers.test.ts`. Added `minzoom: 12` to bridges. All tests passing.                                                                                                                        |
+| 2026-05-16 | Phase 2 | Added "Basemap" section and "Satellite View" toggle to `LayerPanel.tsx`. Created `InfoPanel` component and tests. All tests passing.                                                                                                     |
+| 2026-05-16 | Phase 3 | Refactored `MapView.tsx` to handle style transitions and municipality `onInfoPanel` callback. Wired state in `MapWithNav`. All tests passing.                                                                                            |
+| 2026-05-16 | Phase 4 | Ran `npm run test:coverage`. Coverage report generated successfully. Implementation complete!                                                                                                                                            |
 
-## Phase 1: Preparation & Initial State
+## Phase 1: Preparation & Bridge Fix
 
-- [x] Run all tests to ensure the project is in a good state before starting modifications.
+- [x] Run all tests to ensure the project is in a good state.
 - [x] Modify `src/lib/layers.ts` to add `satellite` to `LayerKey` and `LayerVisibility`.
-- [x] Update `DEFAULT_LAYER_VISIBILITY` in `src/lib/layers.ts` to include `satellite: false`.
-- [x] Update `LAYER_GROUPS` in `src/lib/layers.ts` to include `satellite: []`.
-- [x] Create/modify unit tests for testing the code added or modified in this phase.
-- [x] Run `next lint --fix` (or `eslint --fix`) to auto-fix lint issues.
-- [x] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
-- [x] Run `npm test` and make sure **all tests pass**.
-- [x] Run `prettier --write .` to make sure formatting is correct.
-- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
-- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
-- [ ] Wait for approval before committing.
+- [x] Update `DEFAULT_LAYER_VISIBILITY` and `LAYER_GROUPS` in `src/lib/layers.ts`.
+- [x] Add `minzoom: 12` to `bridges-symbol` in `src/components/MapView.tsx`.
+- [x] Run `npm test` and ensure all tests pass.
 
-## Phase 2: LayerPanel UI
+## Phase 2: UI Components (Satellite Toggle & InfoPanel)
 
 - [x] Modify `src/components/LayerPanel.tsx` to add the "Basemap" section and "Satellite View" toggle.
-- [x] Create/modify unit tests for `LayerPanel.tsx`.
-- [x] Run `next lint --fix`.
-- [x] Run `tsc --noEmit`.
+- [x] Create `src/components/InfoPanel.tsx` and `src/test/components/InfoPanel.test.tsx`.
 - [x] Run `npm test`.
-- [x] Run `prettier --write .`.
-- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
-- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
-- [ ] Wait for approval before committing.
 
-## Phase 3: MapView Refactoring & Style Logic
+## Phase 3: MapView Refactoring & State Wiring
 
-- [x] Refactor `src/components/MapView.tsx` to handle style transitions.
-  - [x] Move initialization logic into reusable functions that can be called on `style.load`.
-  - [x] Add `useEffect` to trigger `map.setStyle()` when `layerVisibility.satellite` changes.
-  - [x] Ensure all custom sources, layers, icons, and event listeners are re-registered after style change.
-- [x] Create/modify unit tests for `MapView.tsx` (mocking `setStyle` and style load events).
-- [x] Run `next lint --fix`.
-- [x] Run `tsc --noEmit`.
+- [x] Refactor `src/components/MapView.tsx` to handle style transitions (Satellite Toggle).
+- [x] Move initialization logic into reusable functions that can be called on `style.load`.
+- [x] Replace municipality popups with `onInfoPanel` callback in `MapView.tsx`.
+- [x] Update `MapWithNav.tsx` to own `infoPanelData` state and render `InfoPanel`.
 - [x] Run `npm test`.
-- [x] Run `prettier --write .`.
-- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
-- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
-- [ ] Wait for approval before committing.
 
 ## Phase 4: Final Validation
 
-- [x] Run `npm run test:coverage` and record the coverage summary in the Journal.
-- [x] Update `README.md` if necessary.
-- [x] Ask the user to inspect the package and running app.
-- [x] Final project cleanup and documentation update.
+- [x] Run `npm run test:coverage`.
+- [x] Update `CLAUDE.md` and `MODIFICATION_DESIGN.md`.
+- [x] Run `prettier --write .`.
