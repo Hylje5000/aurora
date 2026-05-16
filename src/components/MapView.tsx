@@ -26,6 +26,7 @@ import {
   PROFILE_COLORS,
   type PlannedRoute,
   type RouteProfile,
+  type RouteHazard,
   type Waypoint,
 } from "@/lib/routing";
 
@@ -66,6 +67,8 @@ interface MapViewProps {
   routeWaypoints?: Waypoint[];
   addingWaypoint?: boolean;
   onWaypointClick?: (coords: [number, number]) => void;
+  routeHazards?: RouteHazard[];
+  focusedHazard?: RouteHazard | null;
 }
 
 function buildAoiCollection() {
@@ -404,6 +407,8 @@ export default function MapView({
   routeWaypoints = [],
   addingWaypoint = false,
   onWaypointClick,
+  routeHazards = [],
+  focusedHazard = null,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -434,6 +439,7 @@ export default function MapView({
   const addingWaypointRef = useRef(addingWaypoint);
   const onWaypointClickRef = useRef(onWaypointClick);
   const waypointMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const hazardFocusMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
@@ -1297,6 +1303,51 @@ export default function MapView({
         },
       });
 
+      // ── Route hazard layers ────────────────────────────────────────────
+      map.addSource("route-hazards-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "route-hazards-info",
+        type: "circle",
+        source: "route-hazards-source",
+        slot: "top",
+        filter: ["==", ["get", "severity"], "info"],
+        paint: {
+          "circle-color": "#94a3b8",
+          "circle-radius": 5,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": 1,
+        },
+      });
+      map.addLayer({
+        id: "route-hazards-warning",
+        type: "circle",
+        source: "route-hazards-source",
+        slot: "top",
+        filter: ["==", ["get", "severity"], "warning"],
+        paint: {
+          "circle-color": "#eab308",
+          "circle-radius": 6,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": 1,
+        },
+      });
+      map.addLayer({
+        id: "route-hazards-critical",
+        type: "circle",
+        source: "route-hazards-source",
+        slot: "top",
+        filter: ["==", ["get", "severity"], "critical"],
+        paint: {
+          "circle-color": "#ef4444",
+          "circle-radius": 8,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": 2,
+        },
+      });
+
       styleLoadedRef.current = true;
     });
 
@@ -1311,6 +1362,8 @@ export default function MapView({
       elevationPopupRef.current = null;
       for (const m of waypointMarkersRef.current) m.remove();
       waypointMarkersRef.current = [];
+      hazardFocusMarkerRef.current?.remove();
+      hazardFocusMarkerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;
@@ -1583,6 +1636,53 @@ export default function MapView({
 
     waypointMarkersRef.current = markers;
   }, [routeWaypoints, routeProfile]);
+
+  // ── Sync route hazard circles ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    const source = map.getSource("route-hazards-source") as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    source.setData({
+      type: "FeatureCollection",
+      features: routeHazards.map((h) => ({
+        type: "Feature" as const,
+        properties: {
+          severity: h.severity,
+          id: h.id,
+          message: h.message,
+          type: h.type,
+        },
+        geometry: { type: "Point" as const, coordinates: h.coordinates },
+      })),
+    });
+  }, [routeHazards]);
+
+  // ── Focused hazard: fly-to + temporary marker ─────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    hazardFocusMarkerRef.current?.remove();
+    hazardFocusMarkerRef.current = null;
+
+    if (!map || !focusedHazard) return;
+
+    map.flyTo({ center: focusedHazard.coordinates, zoom: 15, duration: 800 });
+
+    const color =
+      focusedHazard.severity === "critical"
+        ? "#ef4444"
+        : focusedHazard.severity === "warning"
+          ? "#eab308"
+          : "#94a3b8";
+
+    hazardFocusMarkerRef.current = new mapboxgl.Marker({ color })
+      .setLngLat(focusedHazard.coordinates)
+      .addTo(map);
+  }, [focusedHazard]);
 
   // ── Feature dialog handlers ────────────────────────────────────────────
   async function handleFeatureSave(

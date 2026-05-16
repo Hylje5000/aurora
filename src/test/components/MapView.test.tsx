@@ -27,6 +27,7 @@ const {
   mockGetZoom,
   mockDragPanDisable,
   mockDragPanEnable,
+  mockFlyTo,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -67,6 +68,7 @@ const {
   const mockGetZoom = vi.fn(() => 15);
   const mockDragPanDisable = vi.fn();
   const mockDragPanEnable = vi.fn();
+  const mockFlyTo = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -110,6 +112,7 @@ const {
     setPaintProperty: mockSetPaintProperty,
     getZoom: mockGetZoom,
     dragPan: { disable: mockDragPanDisable, enable: mockDragPanEnable },
+    flyTo: mockFlyTo,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -139,6 +142,7 @@ const {
     mockGetZoom,
     mockDragPanDisable,
     mockDragPanEnable,
+    mockFlyTo,
     MockMap,
     MockNavigationControl,
     MockPopup,
@@ -202,7 +206,7 @@ vi.mock("@/components/ElectionPieChart", () => ({
 
 import MapView from "@/components/MapView";
 import type { CustomLayer } from "@/lib/customLayers";
-import type { PlannedRoute, Waypoint } from "@/lib/routing";
+import type { PlannedRoute, RouteHazard, Waypoint } from "@/lib/routing";
 
 const infraOn = {
   satellite: false,
@@ -295,6 +299,7 @@ describe("MapView", () => {
     mockMarkerAddTo.mockClear();
     mockDragPanDisable.mockClear();
     mockDragPanEnable.mockClear();
+    mockFlyTo.mockClear();
     mockFetchOk();
   });
 
@@ -463,6 +468,7 @@ describe("MapView", () => {
     const { rerender } = render(<MapView />);
     await fireStyleLoad();
     mockSetData.mockClear();
+    mockGetSource.mockClear();
 
     rerender(
       <MapView
@@ -473,10 +479,14 @@ describe("MapView", () => {
       />,
     );
 
-    const lastCall =
-      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
-    expect(lastCall.features).toHaveLength(1);
-    expect(lastCall.features[0].properties.radio).toBe("GSM");
+    // Find the setData call that was made for the cell-towers-source
+    const towerSourceCallIndex = mockGetSource.mock.calls.findIndex(
+      (c) => c[0] === "cell-towers-source",
+    );
+    expect(towerSourceCallIndex).toBeGreaterThanOrEqual(0);
+    const towerSetDataCall = mockSetData.mock.calls[towerSourceCallIndex];
+    expect(towerSetDataCall[0].features).toHaveLength(1);
+    expect(towerSetDataCall[0].features[0].properties.radio).toBe("GSM");
   });
 
   it("registers milsymbol images for cell tower types and bridge icons via map.addImage", async () => {
@@ -1249,6 +1259,126 @@ describe("MapView", () => {
     mockMarkerRemove.mockClear();
 
     rerender(<MapView routeWaypoints={[]} />);
+
+    expect(mockMarkerRemove).toHaveBeenCalled();
+  });
+
+  // ── Route hazard tests ────────────────────────────────────────────────
+
+  it("adds route-hazards-source and three circle layers after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "route-hazards-source",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-hazards-critical", type: "circle" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-hazards-warning", type: "circle" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-hazards-info", type: "circle" }),
+    );
+  });
+
+  it("calls setData on route-hazards-source when routeHazards prop changes", async () => {
+    const hazards: RouteHazard[] = [
+      {
+        id: "bridge-1-0",
+        type: "bridge",
+        severity: "critical",
+        message: "Bridge vehicle limit exceeded",
+        coordinates: [24.95, 60.18],
+        properties: {},
+      },
+    ];
+
+    const { rerender } = render(<MapView routeHazards={[]} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView routeHazards={hazards} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("route-hazards-source");
+    const lastCall =
+      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
+    expect(lastCall.type).toBe("FeatureCollection");
+    expect(lastCall.features).toHaveLength(1);
+    expect(lastCall.features[0].properties.severity).toBe("critical");
+  });
+
+  it("calls flyTo when focusedHazard is set", async () => {
+    const hazard: RouteHazard = {
+      id: "road-1-0",
+      type: "road",
+      severity: "warning",
+      message: "Recurring road damage",
+      coordinates: [24.94, 60.17],
+      properties: {},
+    };
+
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+
+    rerender(<MapView focusedHazard={hazard} />);
+
+    expect(mockFlyTo).toHaveBeenCalledWith(
+      expect.objectContaining({ center: [24.94, 60.17], zoom: 15 }),
+    );
+  });
+
+  it("places a Marker at the focused hazard coordinates", async () => {
+    const hazard: RouteHazard = {
+      id: "bridge-2-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit exceeded",
+      coordinates: [25.0, 60.2],
+      properties: {},
+    };
+
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+    MockMarker.mockClear();
+
+    rerender(<MapView focusedHazard={hazard} />);
+
+    expect(MockMarker).toHaveBeenCalledWith(
+      expect.objectContaining({ color: "#ef4444" }),
+    );
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([25.0, 60.2]);
+  });
+
+  it("removes previous hazard focus marker when focusedHazard changes", async () => {
+    const hazard1: RouteHazard = {
+      id: "road-1-0",
+      type: "road",
+      severity: "warning",
+      message: "Damage",
+      coordinates: [24.94, 60.17],
+      properties: {},
+    };
+    const hazard2: RouteHazard = {
+      id: "bridge-1-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit",
+      coordinates: [25.0, 60.2],
+      properties: {},
+    };
+
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+
+    rerender(<MapView focusedHazard={hazard1} />);
+    mockMarkerRemove.mockClear();
+
+    rerender(<MapView focusedHazard={hazard2} />);
 
     expect(mockMarkerRemove).toHaveBeenCalled();
   });
