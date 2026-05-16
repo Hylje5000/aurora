@@ -126,6 +126,32 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
             checked={visibility.cellCDMA}
             onToggle={() => onToggle("cellCDMA")}
           />
+
+          <SectionHeading label="Infrastructure" />
+          <LayerRow
+            label="Roads"
+            dotColor="#f59e0b"
+            checked={visibility.roads}
+            onToggle={() => onToggle("roads")}
+          />
+          <LayerRow
+            label="Bridges"
+            dotColor="#facc15"
+            checked={visibility.bridges}
+            onToggle={() => onToggle("bridges")}
+          />
+          <LayerRow
+            label="Railways"
+            dotColor="#a78bfa"
+            checked={visibility.railways}
+            onToggle={() => onToggle("railways")}
+          />
+          <LayerRow
+            label="Municipalities"
+            dotColor="#cbd5e1"
+            checked={visibility.municipalities}
+            onToggle={() => onToggle("municipalities")}
+          />
         </div>
       )}
     </div>
