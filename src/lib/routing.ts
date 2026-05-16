@@ -10,11 +10,46 @@ export interface VehicleProfile {
 }
 
 export const VEHICLE_PRESETS: VehicleProfile[] = [
-  { label: "Infantry",       mass_t: 0,  axle_mass_t: 0,  bogie_mass_t: 0,  height_m: 2.0, width_m: 0.8 },
-  { label: "Wheeled APC",    mass_t: 18, axle_mass_t: 9,  bogie_mass_t: 0,  height_m: 2.7, width_m: 2.7 },
-  { label: "IFV (BMP-type)", mass_t: 22, axle_mass_t: 0,  bogie_mass_t: 6,  height_m: 2.4, width_m: 3.2 },
-  { label: "MBT (tank)",     mass_t: 60, axle_mass_t: 0,  bogie_mass_t: 15, height_m: 2.9, width_m: 3.6 },
-  { label: "Custom",         mass_t: 0,  axle_mass_t: 0,  bogie_mass_t: 0,  height_m: 2.0, width_m: 1.0 },
+  {
+    label: "Infantry",
+    mass_t: 0,
+    axle_mass_t: 0,
+    bogie_mass_t: 0,
+    height_m: 2.0,
+    width_m: 0.8,
+  },
+  {
+    label: "Wheeled APC",
+    mass_t: 18,
+    axle_mass_t: 9,
+    bogie_mass_t: 0,
+    height_m: 2.7,
+    width_m: 2.7,
+  },
+  {
+    label: "IFV (BMP-type)",
+    mass_t: 22,
+    axle_mass_t: 0,
+    bogie_mass_t: 6,
+    height_m: 2.4,
+    width_m: 3.2,
+  },
+  {
+    label: "MBT (tank)",
+    mass_t: 60,
+    axle_mass_t: 0,
+    bogie_mass_t: 15,
+    height_m: 2.9,
+    width_m: 3.6,
+  },
+  {
+    label: "Custom",
+    mass_t: 0,
+    axle_mass_t: 0,
+    bogie_mass_t: 0,
+    height_m: 2.0,
+    width_m: 1.0,
+  },
 ];
 
 export type HazardSeverity = "critical" | "warning" | "info";
@@ -28,9 +63,23 @@ export interface RouteHazard {
   properties: Record<string, unknown>;
 }
 
+export interface CoverageAnalysis {
+  route_length_m: number;
+  covered_pct: number;
+  gap_count: number;
+  longest_gap_m: number;
+  gap_geometry: GeoJSON.Geometry | null;
+}
+
 export interface RouteIntelligence {
   hazards: RouteHazard[];
-  summary: { critical: number; warning: number; info: number; passable: boolean };
+  summary: {
+    critical: number;
+    warning: number;
+    info: number;
+    passable: boolean;
+  };
+  coverage?: CoverageAnalysis | null;
 }
 
 export interface Waypoint {
