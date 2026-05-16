@@ -21,9 +21,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Aurora IPB",
+  title: "Aurora Operational Planning",
   description:
-    "Automated Intelligence Preparation of the Battlespace — open-source situational awareness for operational planning.",
+    "Aurora Operational Planning.",
 };
 
 export default function RootLayout({
