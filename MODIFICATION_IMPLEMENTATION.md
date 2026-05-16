@@ -92,12 +92,12 @@ _Updated after each phase._
 
 ## Phase 4 — Final checks, docs, coverage
 
-- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal below.
-- [ ] Update `CLAUDE.md` to reflect:
+- [x] Run `npm run test:coverage` and record the coverage summary in the Journal below.
+- [x] Update `CLAUDE.md` to reflect:
   - `milsymbol` is now a dependency
   - `src/lib/milsymbol.ts` exists and what it does
   - Cell tower individual markers are now `symbol` layers using NATO APP-6 icons (SIDC `SFGPUUSR-------`)
-- [ ] Check if `README.md` exists and needs updating (unlikely; update only if relevant).
+- [x] Check if `README.md` exists and needs updating (unlikely; update only if relevant).
 - [ ] Ask the user to inspect the running app and confirm they are satisfied, or note any modifications needed.
 
 ---
@@ -122,4 +122,4 @@ _Updated after each phase._
 
 ### Phase 4 — Coverage summary
 
-_To be filled in._
+119 tests, all pass. `milsymbol.ts` 100% across all metrics. `MapView.tsx` 99.52% stmts/lines (branch gaps at async null guards — expected, same as before). Overall 94.47% stmts. CLAUDE.md updated: tech stack, file structure, mock strategy, coverage count, cell tower overlay pattern, Key Features status.

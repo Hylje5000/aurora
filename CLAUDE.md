@@ -6,7 +6,7 @@ We are building a web application for the Junction Defence Hackathon (Challenge 
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 (React), Tailwind CSS v4, Mapbox GL JS.
+- **Frontend**: Next.js 16 (React), Tailwind CSS v4, Mapbox GL JS, milsymbol (NATO APP-6 military symbols).
 - **Router**: App Router (`src/app/`), TypeScript, Turbopack in dev.
 - **Backend**: Next.js API Routes (`src/app/api/`) for GeoJSON overlay queries and dashboard aggregations.
 - **Map Layer**: Mapbox standard vector tiles for terrain, roads, and basemap. Custom overlay layers rendered as GeoJSON via API routes.
@@ -35,6 +35,7 @@ src/
 ├── lib/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
 │   ├── layers.ts               # LayerKey, LayerVisibility, DEFAULT_LAYER_VISIBILITY, LAYER_GROUPS
+│   ├── milsymbol.ts            # createMilsymbolImage(opts) — NATO SIDC → SVG → HTMLImageElement (async)
 │   └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
 └── test/
     ├── setup.ts                # @testing-library/jest-dom global matchers
@@ -44,7 +45,8 @@ src/
     ├── lib/
     │   ├── db.test.ts          # pool singleton guard + query passthrough
     │   ├── areas.test.ts       # AOI bbox validity, center-within-bbox, description presence
-    │   └── layers.test.ts      # LayerKey completeness, DEFAULT_LAYER_VISIBILITY defaults, LAYER_GROUPS mappings
+    │   ├── layers.test.ts      # LayerKey completeness, DEFAULT_LAYER_VISIBILITY defaults, LAYER_GROUPS mappings
+│   └── milsymbol.test.ts   # createMilsymbolImage — data URL format, option passthrough, onerror rejection
     └── components/
         ├── MapView.test.tsx    # mapbox-gl mock (vi.hoisted), AOI + cell tower + terrain layers, fetch, popup, fitBounds, setTerrain
         ├── MapWithNav.test.tsx # state wiring tests (stubbed AreaNav + MapView + LayerPanel)
@@ -58,14 +60,16 @@ src/
 - **Framework**: Vitest 3 + `@testing-library/react` + jsdom. Config: `vitest.config.ts` (excluded from `tsconfig.json` to avoid Vite version conflicts).
 - **Scripts**: `npm test` (run once), `npm run test:watch`, `npm run test:coverage` (v8 provider).
 - **Mock strategy**:
-  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`, `setConfigProperty`, `setLayoutProperty`, `setTerrain`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
+  - `mapbox-gl` — use `vi.hoisted()` + `vi.mock()` to avoid the hoisting-before-init error. Mock Map instance includes `on`, `addSource`, `addLayer`, `addImage`, `fitBounds`, `getBounds`, `getSource`, `getCanvas`, `setConfigProperty`, `setLayoutProperty`, `setTerrain`; mock `Popup` with `setLngLat`, `setHTML`, `addTo`.
+  - `@/lib/milsymbol` — `vi.mock("@/lib/milsymbol", () => ({ createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())) }))` in MapView tests so the async image-loading step resolves immediately.
+  - `milsymbol` — `vi.mock("milsymbol", () => ({ default: { Symbol: MockSymbol } }))` in milsymbol.ts unit tests.
   - `global.fetch` — mocked with `vi.fn()` in MapView tests to simulate cell tower API responses.
   - `@/lib/db` — `vi.mock("@/lib/db", () => ({ query: vi.fn() }))` in API route tests.
   - `pg` — `vi.mock("pg")` + `vi.resetModules()` / `delete globalThis._pgPool` in db tests.
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
   - Child components (`AreaNav`, `MapView`, `LayerPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 114 tests)**: `areas.ts` 100%, `db.ts` 100%, `layers.ts` 100%, `features/route.ts` 100%, `cell-towers/route.ts` 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` ~99% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **Coverage summary (last run — 119 tests)**: `areas.ts` 100%, `db.ts` 100%, `layers.ts` 100%, `milsymbol.ts` 100%, `features/route.ts` 100%, `cell-towers/route.ts` 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `MapWithNav.tsx` 100%, `MapView.tsx` ~99% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -77,7 +81,7 @@ src/
 - **DB singleton**: `global._pgPool` prevents creating a new pool on every hot reload in dev. API routes import `query` from `@/lib/db`.
 - **GeoJSON API**: `GET /api/features?bbox=minLng,minLat,maxLng,maxLat` — validates bbox, queries PostGIS with `ST_MakeEnvelope` / `ST_Intersects` / `ST_AsGeoJSON`, returns `FeatureCollection`. Degrades gracefully (empty collection) when `DATABASE_URL` is absent.
 - **Cell tower API**: `GET /api/cell-towers?bbox=minLng,minLat,maxLng,maxLat` — queries `cell_towers` table (PostGIS GIST index on `geom`), returns up to 2000 features with properties `id, radio, aoi_id, range_m, avg_signal, samples`. Same bbox validation and graceful degradation as the features route. `parseBbox` is imported from `@/app/api/features/route`.
-- **Cell tower overlay**: On `style.load`, `MapView` adds `cell-towers-source` (GeoJSON, `cluster:true`, `clusterMaxZoom:14`, `clusterRadius:50`) and six layers: `cell-towers-clusters` (circle, color `#94a3b8`), `cell-towers-cluster-count` (symbol), plus four per-radio-type circle layers — `cell-towers-gsm` (`#fde047`), `cell-towers-umts` (`#fb923c`), `cell-towers-lte` (`#4ade80`), `cell-towers-cdma` (`#c4b5fd`) — each with a static `["==", ["get", "radio"], TYPE]` filter. The two cluster layers start hidden if all four cell-type toggles are off. `fetchCellTowers(map, rawDataRef, visRef)` is called immediately after `style.load` and on every `moveend`; it fetches `/api/cell-towers?bbox=...`, stores the raw `FeatureCollection` in `rawTowerDataRef`, then pushes a filtered copy (via `filterByEnabled`) to the source so cluster counts only reflect enabled radio types.
+- **Cell tower overlay**: On `style.load` (async callback), `MapView` adds `cell-towers-source` (GeoJSON, `cluster:true`, `clusterMaxZoom:14`, `clusterRadius:50`) and six layers: `cell-towers-clusters` (circle, color `#94a3b8`), `cell-towers-cluster-count` (symbol), plus four per-radio-type **symbol** layers — `cell-towers-gsm`, `cell-towers-umts`, `cell-towers-lte`, `cell-towers-cdma` — each using a NATO milsymbol icon registered via `map.addImage()`. Icons are generated by `createMilsymbolImage` (SIDC `SFGPUUSR-------`, Friendly Ground Signal Radio Unit) with per-type `fillColor` (yellow/orange/green/purple) and `uniqueDesignation` text (GSM/UMTS/LTE/CDMA). The four images are loaded in parallel via `Promise.all` before the layers are added. The two cluster layers start hidden if all four cell-type toggles are off. `fetchCellTowers(map, rawDataRef, visRef)` is called immediately after `style.load` and on every `moveend`; it fetches `/api/cell-towers?bbox=...`, stores the raw `FeatureCollection` in `rawTowerDataRef`, then pushes a filtered copy (via `filterByEnabled`) to the source so cluster counts only reflect enabled radio types.
 - **Cell tower popup**: Clicking any of the four per-type layers opens a `mapboxgl.Popup` showing radio type, AOI, estimated range (m), and average signal (dBm). Cursor changes to `pointer` on hover.
 - **Layer toggle system**: `src/lib/layers.ts` exports `LayerKey` (8 values: `terrain3d`, `hillshade`, `contours`, `landcover`, `cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`), `LayerVisibility`, `DEFAULT_LAYER_VISIBILITY` (cell types all default `true`, terrain3d `false`), and `LAYER_GROUPS` (maps each key to the Mapbox layer IDs it controls). `MapWithNav` owns `layerVisibility` state and a `handleToggle` callback, passing them to both `LayerPanel` and `MapView`.
 - **Dark theme**: On `style.load`, `map.setConfigProperty("basemap", "lightPreset", "night")` switches the Mapbox Standard basemap to night mode. Military basemap hardening also disables POI/transit labels, 3D objects, and sets water to dark blue (`#0d2137`). `globals.css` overrides `.mapboxgl-ctrl-group` styles to match the slate dark palette (`#1e293b` bg, `#334155` borders, inverted SVG icons). AreaNav inactive buttons use `border-white/30`.
@@ -107,7 +111,7 @@ Set both in `.env.local` (git-ignored).
 
 1. **Interactive Map Layer**: Critical infrastructure, terrain features (GO / SLOW GO / NO GO), weather impacts.
 2. **Dynamic Viewport Clustering**: Mapbox native `cluster: true` for dense point layers (cell towers implemented; demographics pending).
-3. **Military Symbology**: `milsymbol` library for NATO APP-6 / US MIL-STD-2525 icons on the client side.
+3. **Military Symbology**: `milsymbol` library for NATO APP-6 / US MIL-STD-2525 icons — **implemented for cell towers** (SIDC `SFGPUUSR-------`, colour-coded per radio type). Pending: unit markers, infrastructure icons.
 4. **Chokepoint & Logistics Analysis**: Road segments with bridge weight/height limits for heavy armour / convoy routing.
 5. **Explainability Panel**: UI showing active data sources and timestamps for analyst trust.
 
