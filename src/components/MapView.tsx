@@ -69,6 +69,7 @@ interface MapViewProps {
   onWaypointClick?: (coords: [number, number]) => void;
   routeHazards?: RouteHazard[];
   focusedHazard?: RouteHazard | null;
+  routeCoverageGaps?: GeoJSON.Geometry | null;
 }
 
 function buildAoiCollection() {
@@ -119,6 +120,21 @@ const EMPTY_COLLECTION: GeoJSON.FeatureCollection = {
   features: [],
 };
 
+function towerToCirclePolygon(
+  lng: number,
+  lat: number,
+  radiusM: number,
+): GeoJSON.Polygon {
+  const latRad = (lat * Math.PI) / 180;
+  const dLat = radiusM / 111320;
+  const dLng = radiusM / (111320 * Math.cos(latRad));
+  const coords: [number, number][] = Array.from({ length: 65 }, (_, i) => {
+    const a = (i / 64) * 2 * Math.PI;
+    return [lng + dLng * Math.sin(a), lat + dLat * Math.cos(a)];
+  });
+  return { type: "Polygon", coordinates: [coords] };
+}
+
 function getBbox(map: mapboxgl.Map): string {
   const bounds = map.getBounds();
   if (!bounds) return "";
@@ -128,6 +144,30 @@ function getBbox(map: mapboxgl.Map): string {
     bounds.getEast(),
     bounds.getNorth(),
   ].join(",");
+}
+
+function buildCoverageCircles(
+  data: GeoJSON.FeatureCollection,
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: data.features
+      .filter(
+        (f) =>
+          f.geometry.type === "Point" &&
+          f.properties != null &&
+          (f.properties.range_m ?? 0) > 0,
+      )
+      .map((f) => {
+        const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+        const r = (f.properties?.range_m as number) ?? 500;
+        return {
+          type: "Feature" as const,
+          properties: f.properties,
+          geometry: towerToCirclePolygon(lng, lat, r),
+        };
+      }),
+  };
 }
 
 async function fetchCellTowers(
@@ -146,6 +186,9 @@ async function fetchCellTowers(
     (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
       filterByEnabled(data, visRef.current),
     );
+    (
+      map.getSource("coverage-circles-source") as mapboxgl.GeoJSONSource
+    )?.setData(buildCoverageCircles(data));
   } catch (err) {
     console.error("[cell-towers] fetch failed", err);
   }
@@ -409,6 +452,7 @@ export default function MapView({
   onWaypointClick,
   routeHazards = [],
   focusedHazard = null,
+  routeCoverageGaps = null,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -1349,6 +1393,59 @@ export default function MapView({
         },
       });
 
+      // ── Coverage gap overlay ───────────────────────────────────────────
+      map.addSource("route-coverage-gaps-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "route-coverage-gaps-line",
+        type: "line",
+        source: "route-coverage-gaps-source",
+        slot: "top",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#ef4444",
+          "line-width": 6,
+          "line-dasharray": [6, 4],
+          "line-opacity": 0.85,
+        },
+      });
+
+      // ── Cell tower coverage circles ────────────────────────────────────
+      map.addSource("coverage-circles-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "coverage-circles-fill",
+        type: "fill",
+        source: "coverage-circles-source",
+        slot: "bottom",
+        layout: {
+          visibility: DEFAULT_LAYER_VISIBILITY.cellCoverageCircles
+            ? "visible"
+            : "none",
+        },
+        paint: { "fill-color": "#3b82f6", "fill-opacity": 0.07 },
+      });
+      map.addLayer({
+        id: "coverage-circles-line",
+        type: "line",
+        source: "coverage-circles-source",
+        slot: "bottom",
+        layout: {
+          visibility: DEFAULT_LAYER_VISIBILITY.cellCoverageCircles
+            ? "visible"
+            : "none",
+        },
+        paint: {
+          "line-color": "#3b82f6",
+          "line-width": 1,
+          "line-opacity": 0.3,
+        },
+      });
+
       styleLoadedRef.current = true;
     });
 
@@ -1664,6 +1761,27 @@ export default function MapView({
       })),
     });
   }, [routeHazards]);
+
+  // ── Sync coverage gap overlay ─────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    const source = map.getSource("route-coverage-gaps-source") as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    if (routeCoverageGaps) {
+      source.setData({
+        type: "Feature",
+        properties: {},
+        geometry: routeCoverageGaps,
+      });
+    } else {
+      source.setData(EMPTY_COLLECTION);
+    }
+  }, [routeCoverageGaps]);
 
   // ── Focused hazard: fly-to + marker + popup ───────────────────────────
   useEffect(() => {
