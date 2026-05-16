@@ -18,6 +18,7 @@ describe("db singleton", () => {
     expect(MockPool).toHaveBeenCalledWith({
       connectionString: "postgres://test-host/testdb",
       ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 5000,
     });
     delete process.env.DATABASE_URL;
   });
