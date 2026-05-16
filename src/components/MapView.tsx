@@ -22,6 +22,12 @@ import FeatureDialog from "@/components/FeatureDialog";
 import DrawingToolbar from "@/components/DrawingToolbar";
 import type { InfoPanelData } from "@/components/InfoPanel";
 import ElectionPieChart from "@/components/ElectionPieChart";
+import {
+  PROFILE_COLORS,
+  type PlannedRoute,
+  type RouteProfile,
+  type Waypoint,
+} from "@/lib/routing";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
@@ -55,6 +61,11 @@ interface MapViewProps {
   onCancelDrawing?: () => void;
   onInfoPanel?: (data: InfoPanelData | null) => void;
   infoPanelOpen?: boolean;
+  plannedRoute?: PlannedRoute | null;
+  routeProfile?: RouteProfile;
+  routeWaypoints?: Waypoint[];
+  addingWaypoint?: boolean;
+  onWaypointClick?: (coords: [number, number]) => void;
 }
 
 function buildAoiCollection() {
@@ -388,6 +399,11 @@ export default function MapView({
   onCancelDrawing,
   onInfoPanel,
   infoPanelOpen = false,
+  plannedRoute = null,
+  routeProfile = "driving",
+  routeWaypoints = [],
+  addingWaypoint = false,
+  onWaypointClick,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -413,6 +429,11 @@ export default function MapView({
   // Elevation marker + popup (both replaced on each click, cleared on teardown)
   const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const elevationPopupRef = useRef<mapboxgl.Popup | null>(null);
+
+  // Route layer refs
+  const addingWaypointRef = useRef(addingWaypoint);
+  const onWaypointClickRef = useRef(onWaypointClick);
+  const waypointMarkersRef = useRef<mapboxgl.Marker[]>([]);
 
   // Custom layer registration
   const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
@@ -1188,6 +1209,12 @@ export default function MapView({
         map.on("click", async (e) => {
           const { lng, lat } = e.lngLat;
 
+          // If adding a waypoint, hand off the coordinate and skip elevation
+          if (addingWaypointRef.current) {
+            onWaypointClickRef.current?.([lng, lat]);
+            return;
+          }
+
           // Always clear the previous elevation context on any click
           elevationMarkerRef.current?.remove();
           elevationMarkerRef.current = null;
@@ -1252,6 +1279,24 @@ export default function MapView({
         eventsAttachedRef.current = true;
       }
 
+      // ── Route planning layer ───────────────────────────────────────────
+      map.addSource("route-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route-source",
+        slot: "top",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": PROFILE_COLORS["driving"],
+          "line-width": 5,
+          "line-opacity": 0.9,
+        },
+      });
+
       styleLoadedRef.current = true;
     });
 
@@ -1264,6 +1309,8 @@ export default function MapView({
       elevationMarkerRef.current = null;
       elevationPopupRef.current?.remove();
       elevationPopupRef.current = null;
+      for (const m of waypointMarkersRef.current) m.remove();
+      waypointMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
       drawRef.current = null;
@@ -1450,6 +1497,74 @@ export default function MapView({
       )?.setData(EMPTY_COLLECTION);
     }
   }, [infoPanelOpen]);
+
+  // ── Sync addingWaypoint ref and cursor ───────────────────────────────
+  useEffect(() => {
+    addingWaypointRef.current = addingWaypoint;
+    onWaypointClickRef.current = onWaypointClick;
+
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = addingWaypoint ? "crosshair" : "";
+  }, [addingWaypoint, onWaypointClick]);
+
+  // ── Sync planned route geometry and line color ────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    const source = map.getSource("route-source") as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+
+    if (plannedRoute) {
+      source.setData({
+        type: "Feature",
+        properties: {},
+        geometry: plannedRoute.geometry,
+      });
+    } else {
+      source.setData(EMPTY_COLLECTION);
+    }
+
+    map.setPaintProperty(
+      "route-line",
+      "line-color",
+      PROFILE_COLORS[routeProfile],
+    );
+  }, [plannedRoute, routeProfile]);
+
+  // ── Sync waypoint markers ─────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+
+    // Remove old markers
+    for (const m of waypointMarkersRef.current) m.remove();
+    waypointMarkersRef.current = [];
+
+    if (!map) return;
+
+    const markers = routeWaypoints.map((wp, i) => {
+      const el = document.createElement("div");
+      el.style.cssText = [
+        "width:22px;height:22px;border-radius:50%;",
+        `background:${PROFILE_COLORS[routeProfile]};`,
+        "border:2px solid #fff;",
+        "display:flex;align-items:center;justify-content:center;",
+        "font-size:10px;font-weight:700;color:#fff;",
+        "box-shadow:0 2px 6px rgba(0,0,0,0.5);",
+        "cursor:default;",
+      ].join("");
+      el.textContent = String(i + 1);
+
+      return new mapboxgl.Marker({ element: el })
+        .setLngLat(wp.coordinates)
+        .addTo(map);
+    });
+
+    waypointMarkersRef.current = markers;
+  }, [routeWaypoints, routeProfile]);
 
   // ── Feature dialog handlers ────────────────────────────────────────────
   async function handleFeatureSave(

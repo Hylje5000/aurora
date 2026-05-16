@@ -195,6 +195,7 @@ vi.mock("@/components/ElectionPieChart", () => ({
 
 import MapView from "@/components/MapView";
 import type { CustomLayer } from "@/lib/customLayers";
+import type { PlannedRoute, Waypoint } from "@/lib/routing";
 
 const infraOn = {
   satellite: false,
@@ -1083,5 +1084,148 @@ describe("MapView", () => {
     expect(global.fetch).not.toHaveBeenCalledWith(
       expect.stringContaining("/api/elevation"),
     );
+  });
+
+  // ── Route planning tests ──────────────────────────────────────────────
+
+  it("adds route-source and route-line layer after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "route-source",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-line", type: "line", slot: "top" }),
+    );
+  });
+
+  it("sets cursor to crosshair when addingWaypoint=true", async () => {
+    const canvas = { style: { cursor: "" } };
+    mockGetCanvas.mockReturnValue(canvas);
+
+    render(<MapView addingWaypoint={true} />);
+    await fireStyleLoad();
+
+    expect(canvas.style.cursor).toBe("crosshair");
+  });
+
+  it("resets cursor to empty string when addingWaypoint=false", async () => {
+    const canvas = { style: { cursor: "crosshair" } };
+    mockGetCanvas.mockReturnValue(canvas);
+
+    const { rerender } = render(<MapView addingWaypoint={true} />);
+    await fireStyleLoad();
+
+    rerender(<MapView addingWaypoint={false} />);
+    expect(canvas.style.cursor).toBe("");
+  });
+
+  it("calls onWaypointClick with coords and skips elevation when addingWaypoint=true", async () => {
+    const onWaypointClick = vi.fn();
+    render(<MapView addingWaypoint={true} onWaypointClick={onWaypointClick} />);
+    await fireStyleLoad();
+    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({ lngLat: { lng: 22.5, lat: 60.3 } });
+    });
+
+    expect(onWaypointClick).toHaveBeenCalledWith([22.5, 60.3]);
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation"),
+    );
+  });
+
+  it("updates route-source data when plannedRoute prop changes", async () => {
+    const mockRoute: PlannedRoute = {
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [24.94, 60.17],
+          [25.01, 60.23],
+        ],
+      },
+      total_distance_m: 5000,
+      total_duration_s: 300,
+      legs: [],
+    };
+
+    const { rerender } = render(<MapView plannedRoute={null} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView plannedRoute={mockRoute} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("route-source");
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ geometry: mockRoute.geometry }),
+    );
+  });
+
+  it("clears route-source when plannedRoute becomes null", async () => {
+    const mockRoute: PlannedRoute = {
+      geometry: { type: "LineString", coordinates: [[24.94, 60.17]] },
+      total_distance_m: 1000,
+      total_duration_s: 60,
+      legs: [],
+    };
+
+    const { rerender } = render(<MapView plannedRoute={mockRoute} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView plannedRoute={null} />);
+
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "FeatureCollection", features: [] }),
+    );
+  });
+
+  it("updates route-line color when routeProfile changes", async () => {
+    const { rerender } = render(<MapView routeProfile="driving" />);
+    await fireStyleLoad();
+    mockSetPaintProperty.mockClear();
+
+    rerender(<MapView routeProfile="walking" />);
+
+    expect(mockSetPaintProperty).toHaveBeenCalledWith(
+      "route-line",
+      "line-color",
+      "#22c55e",
+    );
+  });
+
+  it("creates a Marker for each waypoint in routeWaypoints", async () => {
+    const waypoints: Waypoint[] = [
+      { id: "w1", label: "Start", coordinates: [24.94, 60.17] },
+      { id: "w2", label: "Destination", coordinates: [25.01, 60.23] },
+    ];
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView routeWaypoints={[]} />);
+    await fireStyleLoad();
+    MockMarker.mockClear();
+
+    rerender(<MapView routeWaypoints={waypoints} />);
+
+    expect(MockMarker).toHaveBeenCalledTimes(2);
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([24.94, 60.17]);
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([25.01, 60.23]);
+  });
+
+  it("removes old waypoint markers when routeWaypoints changes", async () => {
+    const waypoints: Waypoint[] = [
+      { id: "w1", label: "Start", coordinates: [24.94, 60.17] },
+    ];
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView routeWaypoints={waypoints} />);
+    await fireStyleLoad();
+    mockMarkerRemove.mockClear();
+
+    rerender(<MapView routeWaypoints={[]} />);
+
+    expect(mockMarkerRemove).toHaveBeenCalled();
   });
 });
