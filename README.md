@@ -109,7 +109,7 @@ All routes degrade gracefully — returning empty collections or 503 — when `D
 | Election results | Statistics Finland | 2023 parliamentary, 22 parties |
 | Weather observations | Finnish Meteorological Institute (FMI) | 2016–2026, 3 regions |
 | Roads & railways | Finnish Transport Infrastructure Agency (Väylävirasto) | All infrastructure on the 3 focus regions |
-|Topographic data|National Land Survey of Finland (Maanmittauslaitos)|10mx10m dataset on the 3 focus regions|
+|Topographic data|National Land Survey of Finland (Maanmittauslaitos)|10m x 10m dataset on the 3 focus regions|
 
 ---
 
