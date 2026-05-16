@@ -35,6 +35,9 @@ interface RoutePanelProps {
   onHazardsChange?: (intel: RouteIntelligence | null) => void;
   onHazardFocus?: (hazard: RouteHazard) => void;
   onClose: () => void;
+  /** When provided, expanded state is controlled externally. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 const PROFILES: RouteProfile[] = ["driving", "walking", "cycling"];
@@ -106,6 +109,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       onHazardsChange,
       onHazardFocus,
       onClose,
+      expanded: expandedProp,
+      onExpandedChange,
     },
     ref,
   ) {
@@ -115,7 +120,20 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
-    const [panelExpanded, setPanelExpanded] = useState(true);
+    const [panelExpandedLocal, setPanelExpandedLocal] = useState(true);
+
+    const controlledExpanded = expandedProp !== undefined;
+    const panelExpanded = controlledExpanded
+      ? expandedProp
+      : panelExpandedLocal;
+
+    function setPanelExpanded(next: boolean) {
+      if (controlledExpanded) {
+        onExpandedChange?.(next);
+      } else {
+        setPanelExpandedLocal(next);
+      }
+    }
 
     // Vehicle state — index into VEHICLE_PRESETS + editable fields
     const [presetIndex, setPresetIndex] = useState(0);

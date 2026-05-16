@@ -45,6 +45,10 @@ export default function MapWithNav() {
     null,
   );
 
+  // Panel collapse coordination
+  const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
+  const [routePanelExpanded, setRoutePanelExpanded] = useState(true);
+
   // Route planning state
   const [routePanelOpen, setRoutePanelOpen] = useState(false);
   const [plannedRoute, setPlannedRoute] = useState<PlannedRoute | null>(null);
@@ -102,6 +106,31 @@ export default function MapWithNav() {
     }
   }
 
+  function handleInfoPanel(data: InfoPanelData | null) {
+    setInfoPanelData(data);
+    if (data) {
+      // Opening info panel → collapse route panel
+      setInfoPanelCollapsed(false);
+      setRoutePanelExpanded(false);
+    }
+  }
+
+  function handleInfoPanelCollapsedChange(collapsed: boolean) {
+    setInfoPanelCollapsed(collapsed);
+    if (!collapsed) {
+      // Expanding info panel → collapse route panel
+      setRoutePanelExpanded(false);
+    }
+  }
+
+  function handleRoutePanelExpandedChange(expanded: boolean) {
+    setRoutePanelExpanded(expanded);
+    if (expanded) {
+      // Expanding route panel → collapse info panel
+      setInfoPanelCollapsed(true);
+    }
+  }
+
   function handleWaypointClick(coords: [number, number]) {
     routePanelRef.current?.addWaypoint(coords);
     setAddingWaypoint(false);
@@ -150,7 +179,14 @@ export default function MapWithNav() {
 
       {/* Route toggle button */}
       <button
-        onClick={() => setRoutePanelOpen((o) => !o)}
+        onClick={() => {
+          const opening = !routePanelOpen;
+          setRoutePanelOpen(opening);
+          if (opening) {
+            setRoutePanelExpanded(true);
+            setInfoPanelCollapsed(true);
+          }
+        }}
         className={[
           "absolute top-4 right-4 z-10 rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-white transition-all backdrop-blur-sm",
           routePanelOpen
@@ -170,7 +206,7 @@ export default function MapWithNav() {
         enabledCustomLayerIds={enabledCustomLayerIds}
         activeDrawingLayerId={activeDrawingLayerId}
         onCancelDrawing={() => setActiveDrawingLayerId(null)}
-        onInfoPanel={setInfoPanelData}
+        onInfoPanel={handleInfoPanel}
         infoPanelOpen={infoPanelData !== null}
         plannedRoute={plannedRoute}
         routeProfile={routeProfile}
@@ -200,6 +236,8 @@ export default function MapWithNav() {
           onRouteChange={handleRouteChange}
           onHazardsChange={handleHazardsChange}
           onHazardFocus={handleHazardFocus}
+          expanded={routePanelExpanded}
+          onExpandedChange={handleRoutePanelExpandedChange}
           onClose={() => {
             setRoutePanelOpen(false);
             setAddingWaypoint(false);
@@ -208,6 +246,8 @@ export default function MapWithNav() {
       )}
       <InfoPanel
         data={infoPanelData}
+        collapsed={infoPanelCollapsed}
+        onCollapsedChange={handleInfoPanelCollapsedChange}
         onClose={() => {
           setInfoPanelData(null);
           setFocusedHazard(null);

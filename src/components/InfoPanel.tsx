@@ -11,10 +11,30 @@ export interface InfoPanelData {
 interface InfoPanelProps {
   data: InfoPanelData | null;
   onClose: () => void;
+  /** When provided, collapse state is controlled externally. */
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export default function InfoPanel({ data, onClose }: InfoPanelProps) {
-  const [collapsed, setCollapsed] = useState(false);
+export default function InfoPanel({
+  data,
+  onClose,
+  collapsed: collapsedProp,
+  onCollapsedChange,
+}: InfoPanelProps) {
+  const [collapsedLocal, setCollapsedLocal] = useState(false);
+
+  const controlled = collapsedProp !== undefined;
+  const collapsed = controlled ? collapsedProp : collapsedLocal;
+
+  function toggleCollapsed() {
+    const next = !collapsed;
+    if (controlled) {
+      onCollapsedChange?.(next);
+    } else {
+      setCollapsedLocal(next);
+    }
+  }
 
   if (!data) return null;
 
@@ -26,7 +46,7 @@ export default function InfoPanel({ data, onClose }: InfoPanelProps) {
           {data.title}
         </span>
         <button
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={toggleCollapsed}
           aria-label={collapsed ? "expand info panel" : "collapse info panel"}
           className="shrink-0 text-slate-400 hover:text-white text-[10px]"
         >
