@@ -1,101 +1,99 @@
-# Modification Design: Route Analysis PDF Export
+# Modification Design: Sequential Route Planning Flow
 
 ## Overview
 
-This modification adds an "Export to PDF" feature to the Aurora application. This allows users to download a professional, tactical report of a planned route, including a map overview, AI-generated tactical summary, and a detailed list of identified hazards (route intelligence). The output is optimized for physical printing and battlefield use (Light Mode).
+This modification refactors the route planning workflow in the Aurora IPB application to follow a strictly sequential, multi-step process. A vertical status list will be added to the `RoutePanel` to provide clear feedback on the progress of Navigation, Intelligence analysis, and AI Summary generation. Export functionality will be restricted until all steps are complete.
 
-## Detailed Analysis
+## Detailed Analysis of the Goal
 
-Currently, users can plan routes and see intelligence/summaries in the UI, but there is no way to export this data for offline use or for inclusion in formal mission briefings.
+Currently, the route planner initiates several asynchronous processes (Navigation, Intelligence, and AI Summary) that trigger based on dependency changes in `useEffect` hooks. While functional, the loading states are disjointed, and there is no unified visual representation of the overall progress.
 
-### Goal
+### Goals:
 
-- Provide a downloadable PDF report.
-- Include a high-quality map screenshot of the entire route.
-- Include the AI-generated tactical summary.
-- Include all hazards (critical, warning, info) with their details.
-- Optimize for high-contrast printing (light background).
-
-### Problem/Challenges
-
-1. **Map Capture**: Mapbox GL JS renders to a WebGL canvas. By default, this canvas is cleared after each frame, making `toDataURL()` return a blank image unless `preserveDrawingBuffer: true` is set during map initialization.
-2. **PDF Layout**: Converting the rich UI (markdown, charts, icons) into a structured PDF requires a robust library like `@react-pdf/renderer`.
-3. **Data Availability**: The PDF needs access to `plannedRoute`, `routeIntelligence`, `routeSummary`, and the `Map` instance.
+1.  **Strict Sequential Execution**:
+    - Step 1: Navigation API (Route calculation)
+    - Step 2: Route Intelligence (Hazard and infrastructure analysis)
+    - Step 3: AI Tactical Summary (Executive summary generation)
+    - Step 4: Completion and Export availability
+2.  **Unified Progress UI**: A vertical list showing each step with its current status (Pending, Running, Complete, or Error).
+3.  **Controlled Export**: The "Export" button will only be active once all analysis steps have finished successfully (or gracefully handled failures).
+4.  **Graceful Error Handling**: Allow the flow to continue or adjust if certain non-critical steps fail (e.g., Intelligence failing might still allow a basic summary, or AI Summary failing shouldn't block viewing the route).
 
 ## Alternatives Considered
 
-1. **jsPDF + html2canvas**:
-   - _Pros_: Captures exactly what is on the screen.
-   - _Cons_: Poor quality for text (rendered as images), difficult to handle multi-page layouts, and often buggy with WebGL canvases.
-2. **Server-side Generation (Puppeteer)**:
-   - _Pros_: Highest fidelity.
-   - _Cons_: Heavy infrastructure requirements, difficult to pass complex client-side state (route data, AI summary) to a server-side browser instance.
-3. **@react-pdf/renderer (Chosen)**:
-   - _Pros_: Declarative React-like syntax, excellent for multi-page documents, generates high-quality vector-based text (searchable and crisp for printing).
-   - _Cons_: Requires manually defining the PDF layout using their primitives (View, Text, Image).
+- **Parallel Execution (Current)**: Fastest performance but confusing UI when multiple loading indicators appear and disappear independently.
+- **Full-Screen Stepper**: Too intrusive for a map-centric application where the user might want to see the map updates as they happen.
+- **Integrated Progress Bar**: Less descriptive than a vertical status list; doesn't communicate what is actually happening at each stage.
 
 ## Detailed Design
 
-### 1. Map Screenshot Capability
+### State Management
 
-- Modify `src/components/MapView.tsx`:
-  - Set `preserveDrawingBuffer: true` in `mapboxgl.Map` options.
-  - Expose a `getMapScreenshot()` method via `useImperativeHandle`. This method will:
-    - Return a base64 Data URL of the current canvas.
-    - Optionally allow capturing specific bounds or at a specific resolution.
+A new state object will be introduced in `RoutePanel` to track the status of the planning flow.
 
-### 2. PDF Document Structure (`src/components/RoutePDF.tsx`)
+```typescript
+type StepStatus = "pending" | "running" | "complete" | "error";
 
-Create a new component using `@react-pdf/renderer`:
+interface PlanningFlow {
+  navigation: StepStatus;
+  intelligence: StepStatus;
+  summary: StepStatus;
+}
+```
 
-- **Header**: Title ("AURORA - ROUTE ANALYSIS REPORT"), Date/Time, AOI.
-- **Section 1: Mission Overview**:
-  - Distance, Estimated Duration, Profile (Driving/Walking), Vehicle Type & Weight.
-  - **Map Image**: The captured route overview.
-- **Section 2: Tactical Summary**:
-  - The AI-generated markdown content, parsed and rendered as PDF text blocks.
-- **Section 3: Intelligence & Hazards**:
-  - A categorized list of hazards.
-  - Ordered by Criticality (Critical -> Warning -> Info).
-  - Hazard Type, Location (Coordinates), and Detailed Message.
+### Component Structure Changes (`RoutePanel.tsx`)
 
-### 3. UI Integration (`src/components/RoutePanel.tsx`)
+1.  **Flow Coordinator**: A central logic block (likely replacing or wrapping the existing `useEffect` hooks) that manages transitions between `PlanningFlow` states.
+2.  **Status List UI**: A new sub-component or section within `RoutePanel` that renders the vertical progress list.
+3.  **Conditional Rendering**: Update existing sections (Route Summary, Hazards, AI Summary) to respect the current flow state.
+4.  **Export Guard**: Modify the Export button logic to check if `flow.summary` is 'complete' or 'error' (if graceful).
 
-- Add an "Export PDF" button in the "Route Assessment" section.
-- Handle the export flow:
-  1. Trigger screenshot from `MapView`.
-  2. Generate PDF blob using `PDFDownloadLink` or `pdf()` function from `@react-pdf/renderer`.
-  3. Trigger download.
+### Sequence Logic
 
-### 4. Aesthetics (Print-Friendly)
+1.  **Trigger**: User adds/changes waypoints or profile.
+2.  **Step 1**: Reset flow to `{ navigation: 'running', intelligence: 'pending', summary: 'pending' }`. Call `/api/route-plan`.
+3.  **Transition 1**: If Navigation succeeds, set `navigation: 'complete'` and `intelligence: 'running'`.
+4.  **Step 2**: Call `/api/route-intelligence`.
+5.  **Transition 2**: If Intelligence succeeds (or gracefully fails), set `intelligence: 'complete'` and `summary: 'running'`.
+6.  **Step 3**: Call `/api/ai`.
+7.  **Transition 3**: Set `summary: 'complete'`. Enable Export.
 
-- Use a white background for the entire document.
-- Use dark navy/black for text.
-- Map hazard severities to legible colors:
-  - Critical: Bold Red (#B91C1C)
-  - Warning: Amber (#B45309)
-  - Info: Slate Blue (#475569)
-- Use a clean, professional sans-serif font (standard PDF fonts like Helvetica).
-
-## Diagram (Mermaid)
+### Diagrams (Mermaid)
 
 ```mermaid
 graph TD
-    User((User)) -->|Click Export| RoutePanel
-    RoutePanel -->|Call| MapView[MapView: getMapScreenshot]
-    MapView -->|toDataURL| Canvas((WebGL Canvas))
-    Canvas -->|Image Data| RoutePanel
-    RoutePanel -->|Pass Data| RoutePDF[RoutePDF Component]
-    RoutePDF -->|Render| PDFEngine[@react-pdf/renderer]
-    PDFEngine -->|Download| User
+    A[Waypoints Changed] --> B{Step 1: Navigation}
+    B -- Success --> C{Step 2: Intelligence}
+    B -- Failure --> B_Error[Show Error / Stop]
+    C -- Success/Graceful --> D{Step 3: AI Summary}
+    C -- Hard Failure --> C_Error[Show Error / Stop]
+    D -- Success/Graceful --> E[Step 4: Ready / Export]
+    D -- Failure --> E
 ```
 
-## Summary of Design
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant P as RoutePanel
+    P->>P: Status: Navigation Running
+    P->>API: POST /api/route-plan
+    API-->>P: Route Data
+    P->>P: Status: Navigation Done, Intel Running
+    P->>API: POST /api/route-intelligence
+    API-->>P: Intel Data
+    P->>P: Status: Intel Done, AI Running
+    P->>API: POST /api/ai
+    API-->>P: Summary Content
+    P->>P: Status: All Done
+    P-->>U: Show Export Button
+```
 
-The solution utilizes `@react-pdf/renderer` for high-quality, print-optimized document generation. It modifies the `MapView` to enable canvas capturing and wires the data from `MapWithNav` / `RoutePanel` into a structured report.
+## Summary of the Design
+
+The `RoutePanel` will be refactored to treat the analysis process as a state machine. This ensures that data dependencies are handled correctly and provides the user with a predictable, transparent experience. The UI will prominently feature the status of each tactical analysis step, making the "Intelligence Preparation of the Battlespace" process feel like a cohesive operation.
 
 ## References
 
-- [Mapbox GL JS: preserveDrawingBuffer](https://docs.mapbox.com/mapbox-gl-js/api/map/#map-parameters)
-- [@react-pdf/renderer Documentation](https://react-pdf.org/)
-- [Capturing Mapbox screenshots](https://github.com/mapbox/mapbox-gl-js/issues/2873)
+- [Next.js App Router Documentation](https://nextjs.org/docs/app)
+- [React useEffect Best Practices](https://react.dev/reference/react/useEffect)
+- [Tailwind CSS v4 Documentation](https://tailwindcss.com/docs)

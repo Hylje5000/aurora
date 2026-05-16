@@ -70,7 +70,6 @@ export default function MapWithNav() {
 
   // AI Summary state
   const [routeSummary, setRouteSummary] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
   // Panel collapse coordination
@@ -223,6 +222,15 @@ export default function MapWithNav() {
     }
   }
 
+  const handleCloseRoutePanel = useCallback(() => {
+    setRoutePanelOpen(false);
+    setAddingWaypoint(false);
+  }, []);
+
+  const handleSummaryModalOpen = useCallback(() => {
+    setSummaryModalOpen(true);
+  }, []);
+
   return (
     <div className="relative w-full h-full">
       <AreaNav selectedAreaId={selectedAreaId} onSelect={setSelectedAreaId} />
@@ -285,15 +293,11 @@ export default function MapWithNav() {
           onExportPDF={handleExportPDF}
           expanded={routePanelExpanded}
           onExpandedChange={handleRoutePanelExpandedChange}
-          onClose={() => {
-            setRoutePanelOpen(false);
-            setAddingWaypoint(false);
-          }}
-          summaryLoading={summaryLoading}
-          onSummaryLoadingChange={setSummaryLoading}
+          onClose={handleCloseRoutePanel}
+          onSummaryLoadingChange={() => {}}
           routeSummary={routeSummary}
           onSummaryChange={setRouteSummary}
-          onSummaryModalOpen={() => setSummaryModalOpen(true)}
+          onSummaryModalOpen={handleSummaryModalOpen}
         />
       )}
       <InfoPanel
