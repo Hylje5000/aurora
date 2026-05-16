@@ -1313,7 +1313,7 @@ export default function MapView({
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": "#ffffff",
-          "line-width": 36,
+          "line-width": 28,
           "line-opacity": 0.4,
         },
       });
@@ -1324,7 +1324,7 @@ export default function MapView({
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": PROFILE_COLORS["driving"],
-          "line-width": 22,
+          "line-width": 16,
           "line-opacity": 1.0,
         },
       });
