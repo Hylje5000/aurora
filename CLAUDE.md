@@ -28,6 +28,8 @@ src/
 │       │   └── route.ts        # GET /api/cell-towers?bbox=... → GeoJSON FeatureCollection (cell_towers table)
 │       ├── weather/
 │       │   └── route.ts        # GET /api/weather?region&month&day → WeatherStats JSON (weather_observations table)
+│       ├── ai/
+│       │   └── route.ts        # POST /api/ai → chat completion via ConfidentialMind Gemma-4 (OpenAI-compatible)
 │       └── custom-layers/
 │           ├── route.ts        # GET list + POST create custom layers
 │           ├── [id]/
@@ -55,6 +57,7 @@ src/
 │   ├── layers.ts               # LayerKey, LayerVisibility, DEFAULT_LAYER_VISIBILITY, LAYER_GROUPS
 │   ├── customLayers.ts         # CustomLayer, CustomFeature, DrawingTool types; COLOUR_PALETTE (8 colours); DEFAULT_LAYER_COLOUR
 │   ├── milsymbol.ts            # createMilsymbolImage(opts) — NATO SIDC → SVG → HTMLImageElement (async)
+│   ├── ai.ts                   # createAIClient() factory + CM_MODEL constant — ConfidentialMind OpenAI-compatible client
 │   └── db.ts                   # pg.Pool singleton (global._pgPool dev-reload guard) + query<T>
 ├── types/
 │   └── mapbox-gl-draw-rectangle-mode.d.ts   # minimal type declaration for untyped rectangle mode plugin
@@ -64,6 +67,7 @@ src/
     │   ├── features.test.ts    # parseBbox unit tests + GET handler (mocked DB)
     │   ├── cell-towers.test.ts # GET /api/cell-towers handler tests (mocked DB)
     │   ├── weather.test.ts     # GET /api/weather — params validation, aggregate stats, NULL precip, DB degradation
+    │   ├── ai.test.ts          # POST /api/ai — 503 no config, 400 bad messages, 200 happy path, 502 APIError, 500 unexpected
     │   ├── municipalities.test.ts           # GET /api/municipalities — base shape, demographic fields, LEFT JOIN null, election_data, 500
     │   ├── custom-layers.test.ts            # GET list + POST create (mocked DB)
     │   ├── custom-layers-id.test.ts         # DELETE layer (mocked DB)
@@ -71,6 +75,7 @@ src/
     │   └── custom-layers-features-fid.test.ts  # PUT + DELETE feature (mocked DB)
     ├── lib/
     │   ├── db.test.ts          # pool singleton guard + query passthrough
+    │   ├── ai.test.ts          # createAIClient — missing env vars, baseURL construction, trailing-slash strip, CM_MODEL fallback
     │   ├── areas.test.ts       # AOI bbox validity, center-within-bbox, description presence
     │   ├── layers.test.ts      # LayerKey completeness, DEFAULT_LAYER_VISIBILITY defaults, LAYER_GROUPS mappings
     │   ├── milsymbol.test.ts   # createMilsymbolImage — data URL format, option passthrough, onerror rejection
@@ -107,7 +112,8 @@ src/
   - `next/dynamic` — mock to return a plain stub component in MapLoader tests.
   - Child components (`AreaNav`, `MapView`, `LayerPanel`, `CustomLayerPanel`, `InfoPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
-- **Coverage summary (last run — 299 tests)**: All API routes ≥96%, all lib modules 100%, `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `ElectionPieChart.tsx` 100% stmts/lines, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~97%, `MapView.tsx` ~84% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
+- **AI route**: `POST /api/ai` accepts `{ messages: ChatCompletionMessageParam[], maxTokens?: number, temperature?: number }` and returns `{ content: string, model: string, usage: {promptTokens, completionTokens, totalTokens} | null }`. Uses the `openai` npm SDK with a custom `baseURL` (`CM_BASE_URL + "/v1"`) to call ConfidentialMind's Gemma-4 endpoint. Returns 503 when `CM_BASE_URL`/`CM_API_KEY` are absent, 502 on `OpenAI.APIError`, 400 on bad input. `src/lib/ai.ts` exports `createAIClient()` (factory, not singleton) and `CM_MODEL` constant. No `NEXT_PUBLIC_` prefix — credentials never reach the browser.
+- **Coverage summary (last run — 314 tests)**: All API routes ≥96%, all lib modules 100% (`ai.ts` 100%), `AreaNav.tsx` 100%, `LayerPanel.tsx` 100%, `DrawingToolbar.tsx` 100%, `FeatureDialog.tsx` 100%, `InfoPanel.tsx` 100%, `ElectionPieChart.tsx` 100% stmts/lines, `CustomLayerPanel.tsx` ~98%, `WeatherWidget.tsx` 100%, `DatePicker.tsx` 100%, `MapWithNav.tsx` ~97%, `MapView.tsx` ~84% stmts/lines (branch gaps at async null guards inside callbacks — expected), `MapLoader.tsx` 100% stmts/lines.
 
 ## Key Patterns
 
@@ -183,6 +189,9 @@ All routes degrade gracefully (empty response / 503) when `DATABASE_URL` is abse
 | -------------------------- | -------------------------------------------- |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | `MapView.tsx` — `mapboxgl.accessToken`       |
 | `DATABASE_URL`             | `src/lib/db.ts` — `pg.Pool` connectionString |
+| `CM_BASE_URL`              | `src/lib/ai.ts` — ConfidentialMind project endpoint (server-side only) |
+| `CM_API_KEY`               | `src/lib/ai.ts` — ConfidentialMind JWT bearer token (server-side only) |
+| `CM_MODEL_NAME`            | `src/lib/ai.ts` — model ID, defaults to `google/gemma-4-31B-it`        |
 
 Set both in `.env.local` (git-ignored).
 
