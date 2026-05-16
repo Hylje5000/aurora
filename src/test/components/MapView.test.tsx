@@ -218,6 +218,7 @@ const infraOn = {
   cellUMTS: true,
   cellLTE: true,
   cellCDMA: true,
+  cellCoverageCircles: false,
   roads: true,
   bridges: true,
   railways: true,
