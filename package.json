@@ -12,7 +12,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@mapbox/mapbox-gl-draw": "^1.5.1",
     "mapbox-gl": "^3.23.1",
+    "mapbox-gl-draw-rectangle-mode": "^1.0.4",
     "milsymbol": "^3.0.4",
     "next": "16.2.6",
     "pg": "^8.20.0",
@@ -25,6 +27,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/mapbox__mapbox-gl-draw": "^1.4.9",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
