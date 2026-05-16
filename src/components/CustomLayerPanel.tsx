@@ -72,7 +72,7 @@ export function CustomLayerSection({
                   activeDrawingLayerId === layer.id ? null : layer.id,
                 )
               }
-              className={`flex-1 flex items-center gap-1 text-left text-xs font-mono truncate transition-colors ${
+              className={`flex-1 flex items-center gap-1.5 min-w-0 text-left text-xs font-mono transition-colors ${
                 activeDrawingLayerId === layer.id
                   ? "text-white"
                   : "text-slate-300 hover:text-white"
@@ -85,8 +85,12 @@ export function CustomLayerSection({
               data-testid={`layer-name-${layer.id}`}
             >
               <span className="truncate">{layer.name}</span>
-              <span
-                className={`text-sm flex-shrink-0 transition-colors ${
+              {/* SVG pencil — scales cleanly unlike Unicode ✏ */}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${
                   activeDrawingLayerId === layer.id
                     ? "text-blue-400"
                     : "text-slate-500"
@@ -97,8 +101,8 @@ export function CustomLayerSection({
                     : "Click to draw"
                 }
               >
-                ✏
-              </span>
+                <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L2.046 11.48a.75.75 0 0 0-.197.417l-.458 3.44a.75.75 0 0 0 .83.83l3.44-.458a.75.75 0 0 0 .418-.197l8.966-8.966a1.75 1.75 0 0 0 0-2.475ZM11.72 3.574l.707.707L5.03 11.677l-1.773.236.236-1.772 7.396-7.396.832-.17Zm-1.415-.707.707.707-.025.025-.707-.707.025-.025Z" />
+              </svg>
             </button>
 
             {/* Delete */}
