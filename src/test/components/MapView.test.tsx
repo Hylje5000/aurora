@@ -1232,7 +1232,7 @@ describe("MapView", () => {
     expect(mockSetPaintProperty).toHaveBeenCalledWith(
       "route-line",
       "line-color",
-      "#22c55e",
+      "#4ade80",
     );
   });
 

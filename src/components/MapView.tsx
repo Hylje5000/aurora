@@ -521,9 +521,9 @@ export default function MapView({
         source: "aoi-source",
         paint: {
           "line-color": ["get", "color"],
-          "line-width": 12,
-          "line-blur": 5,
-          "line-opacity": 0.6,
+          "line-width": 16,
+          "line-blur": 6,
+          "line-opacity": 0.7,
         },
       });
       map.addLayer({
@@ -773,11 +773,11 @@ export default function MapView({
         slot: "bottom",
         layout: { visibility: vis.hillshade ? "visible" : "none" },
         paint: {
-          "hillshade-exaggeration": 0.3,
+          "hillshade-exaggeration": 0.15,
           "hillshade-illumination-direction": 335,
-          "hillshade-shadow-color": "#253545",
-          "hillshade-highlight-color": "#7aaabf",
-          "hillshade-accent-color": "#1a2a38",
+          "hillshade-shadow-color": "#1e3040",
+          "hillshade-highlight-color": "#8ab8cc",
+          "hillshade-accent-color": "#1e3040",
         },
       });
 
@@ -793,15 +793,15 @@ export default function MapView({
             "match",
             ["get", "class"],
             "wood",
-            "rgba(50,180,90,0.38)",
+            "rgba(80,200,110,0.18)",
             "scrub",
-            "rgba(110,170,50,0.28)",
+            "rgba(140,195,80,0.13)",
             "grass",
-            "rgba(130,200,70,0.20)",
+            "rgba(160,220,100,0.10)",
             "crop",
-            "rgba(160,210,80,0.20)",
+            "rgba(180,230,110,0.10)",
             "snow",
-            "rgba(210,235,255,0.30)",
+            "rgba(210,235,255,0.12)",
             "rgba(0,0,0,0)",
           ],
         },
@@ -1313,8 +1313,8 @@ export default function MapView({
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": "#ffffff",
-          "line-width": 9,
-          "line-opacity": 0.25,
+          "line-width": 14,
+          "line-opacity": 0.35,
         },
       });
       map.addLayer({
@@ -1325,8 +1325,8 @@ export default function MapView({
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": PROFILE_COLORS["driving"],
-          "line-width": 5,
-          "line-opacity": 0.9,
+          "line-width": 8,
+          "line-opacity": 1.0,
         },
       });
 
