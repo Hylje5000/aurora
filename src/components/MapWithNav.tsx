@@ -15,7 +15,13 @@ import {
   type LayerVisibility,
 } from "@/lib/layers";
 import type { CustomLayer } from "@/lib/customLayers";
-import type { PlannedRoute, RouteProfile, Waypoint } from "@/lib/routing";
+import type {
+  PlannedRoute,
+  RouteHazard,
+  RouteIntelligence,
+  RouteProfile,
+  Waypoint,
+} from "@/lib/routing";
 
 export default function MapWithNav() {
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -47,6 +53,11 @@ export default function MapWithNav() {
   const [routeWaypoints, setRouteWaypoints] = useState<Waypoint[]>([]);
   const [addingWaypoint, setAddingWaypoint] = useState(false);
   const routePanelRef = useRef<RoutePanelHandle | null>(null);
+
+  // Route intelligence state
+  const [routeIntelligence, setRouteIntelligence] =
+    useState<RouteIntelligence | null>(null);
+  const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
 
   // Fetch all custom layers on mount
   useEffect(() => {
@@ -107,6 +118,58 @@ export default function MapWithNav() {
     setRouteWaypoints(waypoints);
   }
 
+  function handleHazardsChange(intel: RouteIntelligence | null) {
+    setRouteIntelligence(intel);
+    if (!intel) setFocusedHazard(null);
+  }
+
+  function handleHazardFocus(hazard: RouteHazard) {
+    setFocusedHazard(hazard);
+    setInfoPanelData({
+      title: hazard.type === "bridge" ? "Bridge" : "Road Segment",
+      rows: [
+        ["Severity", hazard.severity.toUpperCase()],
+        ["Issue", hazard.message],
+        [
+          "Location",
+          `${hazard.coordinates[1].toFixed(4)}, ${hazard.coordinates[0].toFixed(4)}`,
+        ],
+        ...((hazard.type === "bridge"
+          ? [
+              ["Name", (hazard.properties.name as string) ?? null],
+              [
+                "Mass limit",
+                hazard.properties.max_vehicle_mass_t != null
+                  ? `${hazard.properties.max_vehicle_mass_t} t`
+                  : null,
+              ],
+              [
+                "Height limit",
+                hazard.properties.height_restriction_m != null
+                  ? `${hazard.properties.height_restriction_m} m`
+                  : null,
+              ],
+              ["Status", (hazard.properties.status as string) ?? null],
+            ]
+          : [
+              [
+                "Mass limit",
+                hazard.properties.max_mass_kg != null
+                  ? `${hazard.properties.max_mass_kg} kg`
+                  : null,
+              ],
+              [
+                "Width",
+                hazard.properties.width_cm != null
+                  ? `${hazard.properties.width_cm} cm`
+                  : null,
+              ],
+              ["Condition class", hazard.properties.condition_class ?? null],
+            ]) as [string, string | null][]),
+      ],
+    });
+  }
+
   async function handleDeleteLayer(id: string) {
     try {
       await fetch(`/api/custom-layers/${id}`, { method: "DELETE" });
@@ -158,6 +221,8 @@ export default function MapWithNav() {
         routeWaypoints={routeWaypoints}
         addingWaypoint={addingWaypoint}
         onWaypointClick={handleWaypointClick}
+        routeHazards={routeIntelligence?.hazards ?? []}
+        focusedHazard={focusedHazard}
       />
       <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
       <CustomLayerPanel
@@ -174,13 +239,21 @@ export default function MapWithNav() {
           ref={routePanelRef}
           onAddingWaypointChange={setAddingWaypoint}
           onRouteChange={handleRouteChange}
+          onHazardsChange={handleHazardsChange}
+          onHazardFocus={handleHazardFocus}
           onClose={() => {
             setRoutePanelOpen(false);
             setAddingWaypoint(false);
           }}
         />
       )}
-      <InfoPanel data={infoPanelData} onClose={() => setInfoPanelData(null)} />
+      <InfoPanel
+        data={infoPanelData}
+        onClose={() => {
+          setInfoPanelData(null);
+          setFocusedHazard(null);
+        }}
+      />
       {selectedAreaId && (
         <div className="absolute left-4 top-16 z-10 flex items-start gap-2">
           <WeatherWidget

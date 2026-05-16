@@ -480,11 +480,15 @@ describe("MapView", () => {
     );
 
     // Find the setData call that was made for the cell-towers-source
-    const towerSourceCallIndex = mockGetSource.mock.calls.findIndex(
+    const sourceCalls = mockGetSource.mock.calls as unknown as string[][];
+    const towerSourceCallIndex = sourceCalls.findIndex(
       (c) => c[0] === "cell-towers-source",
     );
     expect(towerSourceCallIndex).toBeGreaterThanOrEqual(0);
-    const towerSetDataCall = mockSetData.mock.calls[towerSourceCallIndex];
+    const setDataCalls = mockSetData.mock.calls as unknown as {
+      features: { properties: { radio: string } }[];
+    }[][];
+    const towerSetDataCall = setDataCalls[towerSourceCallIndex];
     expect(towerSetDataCall[0].features).toHaveLength(1);
     expect(towerSetDataCall[0].features[0].properties.radio).toBe("GSM");
   });
