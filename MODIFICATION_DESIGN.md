@@ -1,85 +1,52 @@
-# Design Document: Military Symbol Support for Custom Layers
+# Modification Design: Update Cell Tower Colors to Friendly (Blue)
 
 ## Overview
-This modification enables users to add NATO APP-6 / US MIL-STD-2525 military symbols to point features in custom drawing layers. These symbols will be persisted in the database and rendered dynamically on the map using the `milsymbol` library.
 
-## Goal
-- Allow users to select a military symbol (SIDC) when saving a drawn point feature.
-- Persist the SIDC in the `properties` JSONB column of the `custom_features` table.
-- Render these symbols on the map with standard NATO affiliation colors (Blue/Red/Green/Yellow).
-- Ensure symbols are synced across users and persist on page reload.
+The goal of this modification is to update the NATO military symbology color used for cell towers in the Next.js application. Currently, the cell towers are color-coded based on their radio type (GSM, UMTS, LTE, CDMA) using various colors (yellow, orange, green, purple). According to military symbol conventions, these ground signal radio units should be rendered as "friendly" entities, which are conventionally represented with a blue color (`#3b82f6`).
 
-## Detailed Analysis
+## Analysis of the Problem
 
-### Current State
-- `custom_features` table has `properties` JSONB, currently empty.
-- `FeatureDialog` only allows entering Name and Description.
-- `MapView` renders points as simple circles using `circle-color` from the `color` column.
-- `milsymbol.ts` already has `createMilsymbolImage` utility.
+The application renders cell towers on a Mapbox GL JS map inside `src/components/MapView.tsx`.
+When the map style loads, it initializes the cell tower layers for each radio type and generates the corresponding NATO symbols using `createMilsymbolImage`.
 
-### Requirements
-1. **SIDC Storage**: Store `{ sidc: "..." }` in `properties`.
-2. **Symbol Selection**: A searchable UI component to pick from common military symbols.
-3. **Dynamic Rendering**: Mapbox needs images registered via `map.addImage`. Since SIDCs are dynamic, we must register them on-the-fly as features are loaded.
-4. **Affiliation Colors**: Use standard colors determined by the SIDC's affiliation character (2nd position).
+Currently, the `towerLayers` configuration defines colors for each radio type:
 
-## Proposed Design
+- GSM: `#fde047` (Yellow)
+- UMTS: `#fb923c` (Orange)
+- LTE: `#4ade80` (Green)
+- CDMA: `#c4b5fd` (Purple)
 
-### 1. Symbol Data (`src/lib/milsymbolData.ts`)
-Create a curated list of common military symbols with their SIDC and a human-readable name. This will power the searchable dropdown.
-
-### 2. UI - Symbol Picker (`src/components/SymbolPicker.tsx`)
-A new component that:
-- Takes a `selectedSidc` and `onChange`.
-- Displays a searchable list of symbols.
-- Shows a preview of the symbol using `milsymbol` (via a simplified version of the rendering logic).
-
-### 3. Feature Dialog Integration
-Modify `FeatureDialog` to include the `SymbolPicker` when the feature type is a `Point`.
-Update the `onSave` callback to include the selected SIDC.
-
-### 4. Database & API
-- **POST /api/custom-layers/[id]/features**: Already accepts `properties`.
-- **PUT /api/custom-layers/[id]/features/[fid]**: Update to accept and save `properties`.
-
-### 5. Map Rendering (`src/components/MapView.tsx`)
-- **Symbol Layer**: Add a new `symbol` layer for each custom source, filtered to points with a `sidc` property.
-- **Dynamic Image Loading**:
-  - Create a utility `ensureMilsymbolImages(map, features)` that:
-    1. Extracts all unique SIDCs from the features.
-    2. Checks if `map.hasImage(id)`.
-    3. If not, generates the image and calls `map.addImage`.
-  - Call this utility after fetching features in `fetchCustomLayerFeatures`.
-
-### Diagram (Mermaid)
-
-```mermaid
-graph TD
-    User[User] -->|Draws Point| MapView
-    MapView -->|Opens| FeatureDialog
-    FeatureDialog -->|Includes| SymbolPicker
-    User -->|Selects Symbol| SymbolPicker
-    User -->|Saves| FeatureDialog
-    FeatureDialog -->|POST /api/.../features| API[Next.js API]
-    API -->|INSERT| DB[(PostGIS)]
-    
-    DB -->|Fetched features| MapView
-    MapView -->|Extract SIDCs| Loader[Symbol Loader]
-    Loader -->|createMilsymbolImage| MilLib[milsymbol library]
-    MilLib -->|Base64 Image| Loader
-    Loader -->|map.addImage| Mapbox[Mapbox GL JS]
-    Mapbox -->|Renders| SymbolLayer
-```
+The SIDC (Symbol Identification Code) used is `SFGPUUSR-------` (Friendly Ground Signal Radio Unit). However, the `fillColor` parameter passed to `milsymbol` overrides the default friendly color with the custom colors listed above.
 
 ## Alternatives Considered
-- **Pre-loading all symbols**: Too many possible SIDCs; would bloat the initial load and memory.
-- **Fixed icon set**: Limit to ~20 icons. This is easier but doesn't meet the "military symbol" requirement which implies the full standard flexibility.
-- **Server-side rendering of icons**: Unnecessary overhead since `milsymbol` is lightweight and works well in the browser.
+
+- **Change the SIDC:** The SIDC already uses 'F' for friendly (`SF...`). The issue is purely the overridden `fillColor`.
+- **Remove `fillColor` entirely:** We could omit the `fillColor` parameter when calling `createMilsymbolImage`, which would allow `milsymbol` to use its default color for friendly units. However, to maintain visual consistency with the app's established UI palette (e.g., `#3b82f6` used for Blue), it is safer and more explicit to pass `#3b82f6` to all radio types.
+
+## Detailed Design
+
+1. Modify `src/components/MapView.tsx`.
+2. Locate the `towerLayers` configuration array inside the `style.load` event handler.
+3. Update the `color` property for all radio types (GSM, UMTS, LTE, CDMA) to the standard friendly blue: `#3b82f6`.
+
+```mermaid
+flowchart TD
+    A[Cell Tower Features] --> B{Mapbox GeoJSON Source}
+    B --> C[cell-towers-gsm]
+    B --> D[cell-towers-umts]
+    B --> E[cell-towers-lte]
+    B --> F[cell-towers-cdma]
+    C --> G[Render with #3b82f6 / Blue]
+    D --> G
+    E --> G
+    F --> G
+```
 
 ## Summary
-The design leverages existing infrastructure (PostGIS properties column, Mapbox dynamic layers) to add a rich military feature set with minimal architectural changes. The key challenge is the async registration of images in Mapbox, which is handled by a reactive loader triggered on data fetch.
+
+By changing the `color` property in the `towerLayers` definition in `src/components/MapView.tsx` to `#3b82f6`, all cell tower markers will correctly display as friendly blue units, aligning with NATO APP-6 military symbol conventions.
 
 ## References
-- [milsymbol documentation](https://www.spatialillusions.com/milsymbol/docs/index.html)
-- [Mapbox GL JS: Add an icon to the map](https://docs.mapbox.com/mapbox-gl-js/example/add-image/)
-- [NATO APP-6D Standard](https://en.wikipedia.org/wiki/NATO_Joint_Military_Symbology)
+
+- Internal `src/lib/milsymbolData.ts` indicating `{ label: "Friend", code: "F", color: "#3b82f6" }`.
+- Military Symbology conventions for SIDC "F" (Friendly).

@@ -458,25 +458,25 @@ export default function MapView({
         {
           id: "cell-towers-gsm",
           radio: "GSM",
-          color: "#fde047",
+          color: "#3b82f6",
           visible: vis.cellGSM,
         },
         {
           id: "cell-towers-umts",
           radio: "UMTS",
-          color: "#fb923c",
+          color: "#3b82f6",
           visible: vis.cellUMTS,
         },
         {
           id: "cell-towers-lte",
           radio: "LTE",
-          color: "#4ade80",
+          color: "#3b82f6",
           visible: vis.cellLTE,
         },
         {
           id: "cell-towers-cdma",
           radio: "CDMA",
-          color: "#c4b5fd",
+          color: "#3b82f6",
           visible: vis.cellCDMA,
         },
       ];

@@ -104,25 +104,25 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
           <SectionHeading label="Comms" />
           <LayerRow
             label="GSM"
-            dotColor="#fde047"
+            dotColor="#3b82f6"
             checked={visibility.cellGSM}
             onToggle={() => onToggle("cellGSM")}
           />
           <LayerRow
             label="UMTS"
-            dotColor="#fb923c"
+            dotColor="#3b82f6"
             checked={visibility.cellUMTS}
             onToggle={() => onToggle("cellUMTS")}
           />
           <LayerRow
             label="LTE"
-            dotColor="#4ade80"
+            dotColor="#3b82f6"
             checked={visibility.cellLTE}
             onToggle={() => onToggle("cellLTE")}
           />
           <LayerRow
             label="CDMA"
-            dotColor="#c4b5fd"
+            dotColor="#3b82f6"
             checked={visibility.cellCDMA}
             onToggle={() => onToggle("cellCDMA")}
           />

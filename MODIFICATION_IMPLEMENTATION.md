@@ -1,60 +1,65 @@
-# Implementation Plan: Military Symbol Support
+# Modification Implementation Plan: Cell Tower Friendly Color
 
-## Overview
-This plan outlines the steps to add NATO military symbol support to custom drawing layers in the Aurora IPB project.
+## Phase 1: Pre-checks
+
+- [ ] Run all tests to ensure the project is in a good state before starting modifications.
+- [ ] Create/modify unit tests for testing the code added or modified in this phase.
+- [ ] Run `eslint --fix .` to auto-fix lint issues.
+- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
+- [ ] Run `npm test` and make sure **all tests pass**. A non-zero exit is a hard blocker.
+- [ ] Run `prettier --write .` to make sure formatting is correct.
+- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message for any changes.
+- [ ] Wait for approval before committing.
+- [ ] After committing the change, verify changes in the browser if the dev server is running.
+
+## Phase 2: Modify Cell Tower Colors
+
+- [ ] Open `src/components/MapView.tsx`.
+- [ ] Find the `towerLayers` configuration array (around line 452).
+- [ ] Change the `color` property for `GSM`, `UMTS`, `LTE`, and `CDMA` radio types from their custom colors to `#3b82f6` (friendly Blue).
+- [ ] Create/modify unit tests for testing the code added or modified in this phase (update `src/components/MapView.test.tsx` if any color assertions exist).
+- [ ] Run `eslint --fix .` to auto-fix lint issues.
+- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
+- [ ] Run `npm test` and make sure **all tests pass**. A non-zero exit is a hard blocker.
+- [ ] Run `prettier --write .` to make sure formatting is correct.
+- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message for any changes.
+- [ ] Wait for approval before committing.
+- [ ] After committing the change, verify changes in the browser if the dev server is running.
+
+## Phase 3: Final Verification and Documentation
+
+- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal.
+- [ ] Update any `README.md` or `CLAUDE.md` file if it references the old colors.
+- [ ] Ask the user to inspect the package (and running app, if any).
+- [ ] Create/modify unit tests for testing the code added or modified in this phase (Not applicable for this documentation phase).
+- [ ] Run `eslint --fix .` to auto-fix lint issues.
+- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
+- [ ] Run `npm test` and make sure **all tests pass**. A non-zero exit is a hard blocker.
+- [ ] Run `prettier --write .` to make sure formatting is correct.
+- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message for any changes.
+- [ ] Wait for approval before committing.
+- [ ] After committing the change, verify changes in the browser if the dev server is running.
+
+---
 
 ## Journal
-- **Phase 1**: Baseline tests passed (229 tests). Verified `DATABASE_URL`.
-- **Phase 2**: Created `milsymbolData.ts` with curated NATO symbols and affiliations. Implemented `SymbolPicker` component with search and preview. Added unit tests for `SymbolPicker` (5 tests passed).
-- **Phase 3**: Integrated `SymbolPicker` into `FeatureDialog`. Updated `MapView` to pass drawing tool type and handle SIDC in save callback. Updated `FeatureDialog` tests (10 tests passed).
-- **Phase 4**: Verified POST route already handles `properties`. Updated PUT route to support `properties` updates. Added API test cases for property persistence (all API tests passed).
-- **Phase 5**: Implemented `ensureMilsymbolImages` utility for dynamic image registration in Mapbox. Added `symbol` layer to `MapView` for custom layers. Fixed lint errors related to `any` usage. Verified with tests (all MapView tests passed).
-- **Phase 6**: Final coverage report: 93.73% Statements, 89.27% Branch. Overall excellent quality. Updated README.md with new features. Fixed bug where symbol picker wasn't visible due to state sync issues.
 
-## Phase 1: Preparation & Baseline
-- [x] Run all tests to ensure the project is in a good state before starting modifications.
-- [x] Verify that `DATABASE_URL` is set in `.env.local` for local testing.
+**[Phase 1]**
 
-## Phase 2: Symbol Data & Picker Component
-- [x] Create `src/lib/milsymbolData.ts` with a curated list of NATO SIDCs and names.
-- [x] Create `src/components/SymbolPicker.tsx` (searchable list + preview).
-- [x] Create a unit test for `SymbolPicker` (rendering, filtering).
-- [x] Run `next lint --fix`.
-- [x] Run `tsc --noEmit`.
-- [x] Run `npm test`.
-- [x] Update Journal.
+- Ran `npm test && npx eslint --fix . && npx tsc --noEmit && npx prettier --write .`
+- All 237 tests passed.
+- Linters, type checks, and formatters executed successfully with no errors.
+- Pre-checks complete.
 
-## Phase 3: Feature Dialog Integration
-- [x] Update `FeatureDialog.tsx` to accept and handle an optional SIDC state.
-- [x] Integrate `SymbolPicker` into `FeatureDialog` (visible only for Point features).
-- [x] Update `MapView.tsx` to pass the feature type to `FeatureDialog` (needed to toggle symbol picker).
-- [x] Update `FeatureDialog.test.tsx` to cover symbol selection.
-- [x] Run `next lint --fix`.
-- [x] Run `tsc --noEmit`.
-- [x] Run `npm test`.
-- [x] Update Journal.
+**[Phase 2]**
+- Modified `src/components/MapView.tsx` to set cell tower radio colors to `#3b82f6` (friendly Blue).
+- Modified `src/components/LayerPanel.tsx` to update the corresponding UI dot colors to `#3b82f6`.
+- Ran `npm test && npx eslint --fix . && npx tsc --noEmit && npx prettier --write .`. All checks and 237 tests passed.
+- Verified changes with `git diff`.
+- Awaiting approval to commit.
 
-## Phase 4: API & Persistence
-- [x] Refine `POST /api/custom-layers/[id]/features` to ensure `properties` are correctly handled.
-- [x] Update `PUT /api/custom-layers/[id]/features/[fid]` to support updating `properties`.
-- [x] Update API tests to verify SIDC persistence.
-- [x] Run `next lint --fix`.
-- [x] Run `tsc --noEmit`.
-- [x] Run `npm test`.
-- [x] Update Journal.
-
-## Phase 5: Map Rendering Logic
-- [x] Create `ensureMilsymbolImages(map, features)` helper in `MapView.tsx` or a new lib file.
-- [x] Add the `symbol` layer to `MapView.tsx` for custom layers (filtered for features with `sidc`).
-- [x] Update `fetchCustomLayerFeatures` to call `ensureMilsymbolImages`.
-- [x] Update `MapView.test.tsx` to verify symbol layer registration and image loading.
-- [x] Run `next lint --fix`.
-- [x] Run `tsc --noEmit`.
-- [x] Run `npm test`.
-- [x] Update Journal.
-
-## Phase 6: Final Validation
-- [x] Run `npm run test:coverage` and record the coverage summary in the Journal.
-- [x] Update `README.md` if necessary.
-- [x] Verify the full flow in the browser: Draw Point -> Select Symbol -> Save -> Refresh -> Symbol renders correctly.
-- [x] Ask the user to inspect the package.
+**[Phase 3]**
+_Pending_
