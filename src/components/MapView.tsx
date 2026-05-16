@@ -63,19 +63,29 @@ function filterByEnabled(
   };
 }
 
-async function fetchCellTowers(
-  map: mapboxgl.Map,
-  rawDataRef: { current: GeoJSON.FeatureCollection },
-  visRef: { current: LayerVisibility },
-): Promise<void> {
+const EMPTY_COLLECTION: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
+
+function getBbox(map: mapboxgl.Map): string {
   const bounds = map.getBounds();
-  if (!bounds) return;
-  const bbox = [
+  if (!bounds) return "";
+  return [
     bounds.getWest(),
     bounds.getSouth(),
     bounds.getEast(),
     bounds.getNorth(),
   ].join(",");
+}
+
+async function fetchCellTowers(
+  map: mapboxgl.Map,
+  rawDataRef: { current: GeoJSON.FeatureCollection },
+  visRef: { current: LayerVisibility },
+): Promise<void> {
+  const bbox = getBbox(map);
+  if (!bbox) return;
 
   try {
     const res = await fetch(`/api/cell-towers?bbox=${bbox}`);
@@ -88,6 +98,46 @@ async function fetchCellTowers(
   } catch (err) {
     console.error("[cell-towers] fetch failed", err);
   }
+}
+
+async function fetchLayer(
+  map: mapboxgl.Map,
+  sourceId: string,
+  endpoint: string,
+): Promise<void> {
+  const bbox = getBbox(map);
+  if (!bbox) return;
+  try {
+    const res = await fetch(`${endpoint}?bbox=${bbox}`);
+    if (!res.ok) return;
+    const data = (await res.json()) as GeoJSON.FeatureCollection;
+    (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(data);
+  } catch (err) {
+    console.error(`[${endpoint}] fetch failed`, err);
+  }
+}
+
+function pavementLabel(type: unknown): string {
+  if (type === 1) return "Asphalt";
+  if (type === 2) return "Gravel";
+  if (type === 3) return "Dirt/Other";
+  return "—";
+}
+
+function popupStyle(title: string, rows: [string, unknown][]): string {
+  const rowsHtml = rows
+    .map(
+      ([label, val]) =>
+        `<div><span style="color:#64748b">${label}</span>&nbsp;&nbsp;${val ?? "—"}</div>`,
+    )
+    .join("");
+  return `<div style="
+    background:#0f172a;color:#e2e8f0;border:1px solid #334155;
+    border-radius:6px;padding:10px 14px;font-family:monospace;
+    font-size:12px;line-height:1.8;min-width:180px;">
+    <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${title}</div>
+    ${rowsHtml}
+  </div>`;
 }
 
 export default function MapView({
@@ -434,6 +484,277 @@ export default function MapView({
       if (vis.terrain3d) {
         map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
       }
+
+      // ── Infrastructure layers ──────────────────────────────────────────
+
+      // Bridge NATO milsymbol icons (SIDC: Friendly Ground Installation)
+      const BRIDGE_SIDC = "SFGPIBE--------";
+      const [bridgeActiveImg, bridgeInactiveImg] = await Promise.all([
+        createMilsymbolImage({ sidc: BRIDGE_SIDC, fillColor: "#facc15" }),
+        createMilsymbolImage({ sidc: BRIDGE_SIDC, fillColor: "#94a3b8" }),
+      ]);
+      map.addImage("bridge-active", bridgeActiveImg);
+      map.addImage("bridge-inactive", bridgeInactiveImg);
+
+      // Municipality boundaries (static — fetch once)
+      map.addSource("municipalities-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "municipalities-fill",
+        type: "fill",
+        source: "municipalities-source",
+        layout: { visibility: vis.municipalities ? "visible" : "none" },
+        paint: { "fill-color": "#ffffff", "fill-opacity": 0.05 },
+      });
+      map.addLayer({
+        id: "municipalities-outline",
+        type: "line",
+        source: "municipalities-source",
+        layout: { visibility: vis.municipalities ? "visible" : "none" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-opacity": 0.4,
+          "line-width": 1,
+        },
+      });
+      fetch("/api/municipalities")
+        .then((r) => r.json())
+        .then((data: GeoJSON.FeatureCollection) => {
+          (
+            map.getSource("municipalities-source") as mapboxgl.GeoJSONSource
+          ).setData(data);
+        })
+        .catch((err) => console.error("[municipalities] fetch failed", err));
+
+      // Roads
+      map.addSource("roads-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "roads-line",
+        type: "line",
+        source: "roads-source",
+        layout: { visibility: vis.roads ? "visible" : "none" },
+        paint: {
+          "line-color": [
+            "case",
+            ["==", ["get", "condition_class"], 1],
+            "#ef4444",
+            ["==", ["get", "condition_class"], 2],
+            "#ef4444",
+            ["==", ["get", "condition_class"], 3],
+            "#eab308",
+            ["==", ["get", "condition_class"], 4],
+            "#22c55e",
+            ["==", ["get", "condition_class"], 5],
+            "#22c55e",
+            "#64748b",
+          ],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 14, 3],
+          "line-opacity": 0.8,
+        },
+      });
+
+      // Bridges
+      map.addSource("bridges-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "bridges-symbol",
+        type: "symbol",
+        source: "bridges-source",
+        layout: {
+          visibility: vis.bridges ? "visible" : "none",
+          "icon-image": [
+            "case",
+            ["==", ["get", "status"], "kaytossa"],
+            "bridge-active",
+            "bridge-inactive",
+          ],
+          "icon-size": 0.5,
+          "icon-allow-overlap": true,
+        },
+      });
+
+      // Railways
+      map.addSource("railways-source", {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+      map.addLayer({
+        id: "railways-line",
+        type: "line",
+        source: "railways-source",
+        layout: { visibility: vis.railways ? "visible" : "none" },
+        paint: {
+          "line-color": "#a78bfa",
+          "line-width": 2,
+          "line-dasharray": [2, 2],
+        },
+      });
+
+      // Click popups for infrastructure layers
+      map.on("click", "roads-line", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as Record<string, unknown>;
+        new mapboxgl.Popup({ className: "aurora-popup" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            popupStyle("Road Segment", [
+              ["Width", p.width_cm != null ? `${p.width_cm} cm` : null],
+              ["Lanes", p.lane_count],
+              [
+                "Max Mass",
+                p.max_mass_kg != null ? `${p.max_mass_kg} kg` : null,
+              ],
+              [
+                "Max Height",
+                p.max_height_cm != null ? `${p.max_height_cm} cm` : null,
+              ],
+              [
+                "Max Bogie",
+                p.max_bogie_mass_kg != null
+                  ? `${p.max_bogie_mass_kg} kg`
+                  : null,
+              ],
+              ["Pavement", pavementLabel(p.pavement_type)],
+              [
+                "Condition",
+                p.condition_text ??
+                  (p.condition_class != null
+                    ? `Class ${p.condition_class}`
+                    : null),
+              ],
+              [
+                "Rut Depth",
+                p.rut_depth_mm != null ? `${p.rut_depth_mm} mm` : null,
+              ],
+              [
+                "Damage",
+                p.has_damage
+                  ? p.damage_recurring
+                    ? "Recurring"
+                    : "Yes"
+                  : "None",
+              ],
+            ]),
+          )
+          .addTo(map);
+      });
+
+      map.on("click", "bridges-symbol", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as Record<string, unknown>;
+        const title = p.name
+          ? `${p.name} (${p.code ?? ""})`
+          : ((p.code as string) ?? "Bridge");
+        new mapboxgl.Popup({ className: "aurora-popup" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            popupStyle(title, [
+              ["Type", p.type_name],
+              ["Status", p.status],
+              [
+                "Max Vehicle",
+                p.max_vehicle_mass_t != null
+                  ? `${p.max_vehicle_mass_t} t`
+                  : null,
+              ],
+              [
+                "Max Combi",
+                p.max_combination_mass_t != null
+                  ? `${p.max_combination_mass_t} t`
+                  : null,
+              ],
+              [
+                "Max Bogie",
+                p.max_bogie_mass_t != null ? `${p.max_bogie_mass_t} t` : null,
+              ],
+              [
+                "Height Limit",
+                p.height_restriction_m != null
+                  ? `${p.height_restriction_m} m`
+                  : null,
+              ],
+              ["Owner", p.owner],
+              ["Network", p.network_type],
+            ]),
+          )
+          .addTo(map);
+      });
+
+      map.on("click", "railways-line", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as Record<string, unknown>;
+        new mapboxgl.Popup({ className: "aurora-popup" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            popupStyle((p.name as string) ?? "Railway Track", [
+              ["Type", p.track_type],
+              ["State", p.state],
+              ["Route", p.route_name],
+              [
+                "Length",
+                p.length_m != null
+                  ? `${Math.round(p.length_m as number)} m`
+                  : null,
+              ],
+              ["District", p.maintenance_district],
+              ["Centre", p.operating_centre],
+            ]),
+          )
+          .addTo(map);
+      });
+
+      map.on("click", "municipalities-fill", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as Record<string, unknown>;
+        const name = p.name_sv
+          ? `${p.name_fi} / ${p.name_sv}`
+          : ((p.name_fi as string) ?? "Municipality");
+        new mapboxgl.Popup({ className: "aurora-popup" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            popupStyle(name, [
+              ["Code", p.nat_code],
+              ["Region", p.aoi_id],
+            ]),
+          )
+          .addTo(map);
+      });
+
+      // Cursor handlers
+      for (const layerId of [
+        "roads-line",
+        "bridges-symbol",
+        "railways-line",
+        "municipalities-fill",
+      ]) {
+        map.on("mouseenter", layerId, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", layerId, () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
+
+      // Fetch on moveend and immediately
+      map.on("moveend", () => {
+        fetchLayer(map, "roads-source", "/api/roads");
+        fetchLayer(map, "bridges-source", "/api/bridges");
+        fetchLayer(map, "railways-source", "/api/railways");
+      });
+      fetchLayer(map, "roads-source", "/api/roads");
+      fetchLayer(map, "bridges-source", "/api/bridges");
+      fetchLayer(map, "railways-source", "/api/railways");
 
       styleLoadedRef.current = true;
     });

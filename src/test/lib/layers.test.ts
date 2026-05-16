@@ -14,6 +14,10 @@ const ALL_KEYS: LayerKey[] = [
   "cellUMTS",
   "cellLTE",
   "cellCDMA",
+  "roads",
+  "bridges",
+  "railways",
+  "municipalities",
 ];
 
 describe("DEFAULT_LAYER_VISIBILITY", () => {
@@ -38,6 +42,16 @@ describe("DEFAULT_LAYER_VISIBILITY", () => {
     expect(DEFAULT_LAYER_VISIBILITY.cellUMTS).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.cellLTE).toBe(true);
     expect(DEFAULT_LAYER_VISIBILITY.cellCDMA).toBe(true);
+  });
+
+  it("has roads, bridges, railways on by default", () => {
+    expect(DEFAULT_LAYER_VISIBILITY.roads).toBe(true);
+    expect(DEFAULT_LAYER_VISIBILITY.bridges).toBe(true);
+    expect(DEFAULT_LAYER_VISIBILITY.railways).toBe(true);
+  });
+
+  it("has municipalities off by default", () => {
+    expect(DEFAULT_LAYER_VISIBILITY.municipalities).toBe(false);
   });
 });
 
@@ -82,5 +96,24 @@ describe("LAYER_GROUPS", () => {
 
   it("cellCDMA maps to cell-towers-cdma layer", () => {
     expect(LAYER_GROUPS.cellCDMA).toEqual(["cell-towers-cdma"]);
+  });
+
+  it("roads maps to roads-line layer", () => {
+    expect(LAYER_GROUPS.roads).toEqual(["roads-line"]);
+  });
+
+  it("bridges maps to bridges-symbol layer", () => {
+    expect(LAYER_GROUPS.bridges).toEqual(["bridges-symbol"]);
+  });
+
+  it("railways maps to railways-line layer", () => {
+    expect(LAYER_GROUPS.railways).toEqual(["railways-line"]);
+  });
+
+  it("municipalities maps to fill and outline layers", () => {
+    expect(LAYER_GROUPS.municipalities).toEqual([
+      "municipalities-fill",
+      "municipalities-outline",
+    ]);
   });
 });

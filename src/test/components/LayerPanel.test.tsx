@@ -10,7 +10,7 @@ const defaultProps = {
 };
 
 describe("LayerPanel", () => {
-  it("renders all layer toggle rows including COMMS section", () => {
+  it("renders all layer toggle rows including COMMS and INFRASTRUCTURE sections", () => {
     render(<LayerPanel {...defaultProps} />);
     expect(screen.getByLabelText(/3D Terrain/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Hillshade/i)).toBeInTheDocument();
@@ -20,25 +20,30 @@ describe("LayerPanel", () => {
     expect(screen.getByLabelText(/UMTS/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/LTE/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/CDMA/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Roads/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Bridges/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Railways/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Municipalities/i)).toBeInTheDocument();
   });
 
-  it("renders the COMMS section heading", () => {
+  it("renders the COMMS and INFRASTRUCTURE section headings", () => {
     render(<LayerPanel {...defaultProps} />);
     expect(screen.getByText(/comms/i)).toBeInTheDocument();
+    expect(screen.getByText(/infrastructure/i)).toBeInTheDocument();
   });
 
   it("reflects checked state from visibility prop", () => {
     render(<LayerPanel {...defaultProps} />);
-    // terrain3d is false by default
+    // terrain3d and municipalities are false by default
     expect(screen.getByLabelText(/3D Terrain/i)).not.toBeChecked();
-    // others are true by default
+    expect(screen.getByLabelText(/Municipalities/i)).not.toBeChecked();
+    // infrastructure layers on by default
+    expect(screen.getByLabelText(/Roads/i)).toBeChecked();
+    expect(screen.getByLabelText(/Bridges/i)).toBeChecked();
+    expect(screen.getByLabelText(/Railways/i)).toBeChecked();
+    // comms on by default
     expect(screen.getByLabelText(/Hillshade/i)).toBeChecked();
-    expect(screen.getByLabelText(/Contour Lines/i)).toBeChecked();
-    expect(screen.getByLabelText(/Land Cover/i)).toBeChecked();
     expect(screen.getByLabelText(/GSM/i)).toBeChecked();
-    expect(screen.getByLabelText(/UMTS/i)).toBeChecked();
-    expect(screen.getByLabelText(/LTE/i)).toBeChecked();
-    expect(screen.getByLabelText(/CDMA/i)).toBeChecked();
   });
 
   it("calls onToggle with 'terrain3d' when 3D Terrain checkbox is clicked", async () => {
@@ -111,6 +116,42 @@ describe("LayerPanel", () => {
     );
     await userEvent.click(screen.getByLabelText(/CDMA/i));
     expect(onToggle).toHaveBeenCalledWith("cellCDMA");
+  });
+
+  it("calls onToggle with 'roads' when Roads checkbox is clicked", async () => {
+    const onToggle = vi.fn();
+    render(
+      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+    );
+    await userEvent.click(screen.getByLabelText(/Roads/i));
+    expect(onToggle).toHaveBeenCalledWith("roads");
+  });
+
+  it("calls onToggle with 'bridges' when Bridges checkbox is clicked", async () => {
+    const onToggle = vi.fn();
+    render(
+      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+    );
+    await userEvent.click(screen.getByLabelText(/Bridges/i));
+    expect(onToggle).toHaveBeenCalledWith("bridges");
+  });
+
+  it("calls onToggle with 'railways' when Railways checkbox is clicked", async () => {
+    const onToggle = vi.fn();
+    render(
+      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+    );
+    await userEvent.click(screen.getByLabelText(/Railways/i));
+    expect(onToggle).toHaveBeenCalledWith("railways");
+  });
+
+  it("calls onToggle with 'municipalities' when Municipalities checkbox is clicked", async () => {
+    const onToggle = vi.fn();
+    render(
+      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+    );
+    await userEvent.click(screen.getByLabelText(/Municipalities/i));
+    expect(onToggle).toHaveBeenCalledWith("municipalities");
   });
 
   it("collapses layer rows when header button is clicked", async () => {

@@ -107,6 +107,13 @@ vi.mock("@/lib/milsymbol", () => ({
 
 import MapView from "@/components/MapView";
 
+const infraOn = {
+  roads: true,
+  bridges: true,
+  railways: true,
+  municipalities: false,
+};
+
 function mockFetchOk() {
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
@@ -269,6 +276,7 @@ describe("MapView", () => {
     render(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -300,6 +308,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -326,6 +335,7 @@ describe("MapView", () => {
 
   it("shows cluster layers when at least one cell type is toggled on", async () => {
     const allOff = {
+      ...infraOn,
       terrain3d: false,
       hillshade: true,
       contours: true,
@@ -362,6 +372,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -389,6 +400,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -409,6 +421,7 @@ describe("MapView", () => {
   it("restores full data when all cell types are re-enabled", async () => {
     mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
     const allOff = {
+      ...infraOn,
       terrain3d: false,
       hillshade: true,
       contours: true,
@@ -439,16 +452,19 @@ describe("MapView", () => {
     expect(lastCall.features).toHaveLength(4);
   });
 
-  it("registers a milsymbol image for each radio type via map.addImage", async () => {
+  it("registers milsymbol images for cell tower types and bridge icons via map.addImage", async () => {
     render(<MapView />);
     await fireStyleLoad();
 
-    expect(mockAddImage).toHaveBeenCalledTimes(4);
+    // 4 cell tower icons + 2 bridge icons (active/inactive)
+    expect(mockAddImage).toHaveBeenCalledTimes(6);
     for (const id of [
       "cell-towers-gsm-icon",
       "cell-towers-umts-icon",
       "cell-towers-lte-icon",
       "cell-towers-cdma-icon",
+      "bridge-active",
+      "bridge-inactive",
     ]) {
       expect(mockAddImage).toHaveBeenCalledWith(id, expect.any(Image));
     }
@@ -705,6 +721,7 @@ describe("MapView", () => {
     render(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: true,
           hillshade: true,
           contours: true,
@@ -730,6 +747,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: false,
           contours: true,
@@ -757,6 +775,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: true,
           contours: false,
@@ -790,6 +809,7 @@ describe("MapView", () => {
     const { rerender } = render(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: true,
           hillshade: true,
           contours: true,
@@ -807,6 +827,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -830,6 +851,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          ...infraOn,
           terrain3d: true,
           hillshade: true,
           contours: true,
@@ -845,5 +867,107 @@ describe("MapView", () => {
     expect(mockSetTerrain).toHaveBeenCalledWith(
       expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
     );
+  });
+
+  it("adds infrastructure sources on style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    for (const id of [
+      "roads-source",
+      "bridges-source",
+      "railways-source",
+      "municipalities-source",
+    ]) {
+      expect(mockAddSource).toHaveBeenCalledWith(
+        id,
+        expect.objectContaining({ type: "geojson" }),
+      );
+    }
+  });
+
+  it("adds infrastructure layers on style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "roads-line", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bridges-symbol", type: "symbol" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "railways-line", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "municipalities-fill", type: "fill" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "municipalities-outline", type: "line" }),
+    );
+  });
+
+  it("shows roads-line popup when roads-line layer is clicked", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "roads-line",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+    expect(clickHandler).toBeDefined();
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            width_cm: 650,
+            lane_count: 2,
+            max_mass_kg: 8000,
+            max_height_cm: 420,
+            has_damage: false,
+            condition_text: "hyvä tai erittäin hyvä",
+          },
+          geometry: { type: "LineString", coordinates: [[22.1, 60.2]] },
+        },
+      ],
+      lngLat: { lng: 22.1, lat: 60.2 },
+    });
+
+    expect(mockSetLngLat).toHaveBeenCalled();
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Road Segment"),
+    );
+    expect(mockAddTo).toHaveBeenCalled();
+  });
+
+  it("shows bridges-symbol popup when bridges-symbol layer is clicked", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "bridges-symbol",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+    expect(clickHandler).toBeDefined();
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name: "Alhon silta",
+            code: "T-1380",
+            status: "kaytossa",
+            max_vehicle_mass_t: 35,
+            max_combination_mass_t: 60,
+          },
+        },
+      ],
+      lngLat: { lng: 21.64, lat: 60.87 },
+    });
+
+    expect(mockSetLngLat).toHaveBeenCalled();
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Alhon silta"),
+    );
+    expect(mockAddTo).toHaveBeenCalled();
   });
 });

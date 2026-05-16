@@ -6,7 +6,11 @@ export type LayerKey =
   | "cellGSM"
   | "cellUMTS"
   | "cellLTE"
-  | "cellCDMA";
+  | "cellCDMA"
+  | "roads"
+  | "bridges"
+  | "railways"
+  | "municipalities";
 
 export interface LayerVisibility extends Record<LayerKey, boolean> {
   terrain3d: boolean;
@@ -17,6 +21,10 @@ export interface LayerVisibility extends Record<LayerKey, boolean> {
   cellUMTS: boolean;
   cellLTE: boolean;
   cellCDMA: boolean;
+  roads: boolean;
+  bridges: boolean;
+  railways: boolean;
+  municipalities: boolean;
 }
 
 export const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
@@ -28,6 +36,10 @@ export const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
   cellUMTS: true,
   cellLTE: true,
   cellCDMA: true,
+  roads: true,
+  bridges: true,
+  railways: true,
+  municipalities: false,
 };
 
 // Maps each toggle key to the Mapbox layer IDs it controls.
@@ -41,4 +53,8 @@ export const LAYER_GROUPS: Record<LayerKey, string[]> = {
   cellUMTS: ["cell-towers-umts"],
   cellLTE: ["cell-towers-lte"],
   cellCDMA: ["cell-towers-cdma"],
+  roads: ["roads-line"],
+  bridges: ["bridges-symbol"],
+  railways: ["railways-line"],
+  municipalities: ["municipalities-fill", "municipalities-outline"],
 };
