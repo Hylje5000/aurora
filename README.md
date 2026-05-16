@@ -1,63 +1,27 @@
-# AURORA IPB
+![Aurora Header Image](img/header.png) 
+> Aurora takes military operations from planning to execution faster and more efficiently than ever.
 
-> **Automated Intelligence Preparation of the Battlespace**  
-> Open-source situational awareness for military operational planning.
+Aurora makes military operational planning faster and easier, so that you can make the right decisions before your enemy does.
 
-Built for the **Junction Defence Hackathon — Challenge by 61N**.  
-Aurora aggregates open-source geospatial, demographic, electoral, communications, and weather data into a single live tactical map — so analysts can focus on decisions, not data wrangling.
+A modern, easy-to-use UI with all the data you need to make decisions right there with you, supported by our operational data model (ODM), offering responsive data retrieval without compromising on security.
 
----
-
-## Features
-
-### Map & Terrain
-- **3D Terrain** — Mapbox DEM with 1.5× exaggeration, toggleable at runtime
-- **Hillshading & Contours** — Topographic detail in Standard night mode
-- **Military Landcover** — GO / SLOW-GO / NO-GO colour scheme over vegetation data
-- **Satellite Basemap** — Toggle between night vector and satellite imagery
-
-### Intelligence Overlays
-- **Cell Tower Network** — Live viewport-scoped fetch of GSM/UMTS/LTE/CDMA towers with NATO APP-6 milsymbol icons, clustering, and per-tower signal/range popups
-- **Municipality Layer** — All 308 Finnish municipalities with click-to-inspect InfoPanel showing:
-  - Demographics (population, age structure, male/female split — Statistics Finland 2025)
-  - 2023 Parliamentary election results as an inline SVG pie chart with Finnish party colours
-- **Weather Widget** — Historical climatology per AOI and date (FMI station data 2016–2026): avg temp ± spread, max/min, rain probability
-
-### Collaborative Drawing
-- **Named Layers** — Create/toggle/delete custom drawing layers, persisted in PostGIS
-- **Drawing Tools** — Point, Line, Polygon, Rectangle (via `@mapbox/mapbox-gl-draw`)
-- **Per-feature Colours** — 8-colour military palette, stored per feature
-- **Shared State** — All users see the same layers via the PostGIS backend
-
-### AI Analysis *(backend ready)*
-- **`POST /api/ai`** — OpenAI-compatible chat completions proxy to **ConfidentialMind / Gemma-4**
-- Accepts `messages`, `maxTokens`, `temperature`; returns `content`, `model`, `usage`
-- Designed to receive viewport context (towers, weather, demographics) for AI-assisted IPB
+Built for the **Aalto Defence Hackathon 2026**, challenge by 61N.
 
 ---
 
-## Areas of Interest
-
-Three pre-defined operational areas, selectable from the top navigation strip:
-
-| Area | Focus |
-|------|-------|
-| **Lappi** | Northern Lapland — E8/E75 corridors, Saariselkä highlands, Inari lake system |
-| **Karjala** | North Karelia — Finnish-Russian border zone, Joensuu hub, Niirala crossing |
-| **Turku** | Archipelago Sea — maritime chokepoints, Turku port, Stockholm/Tallinn ferry links |
-
----
+## Architecture
+![Aurora Architecture diagram](img/architecture.png)
+> Aurora is designed to run in a TL II / NATO SECRET -environment, with a dedicated Data Lakehouse for ingesting data from public data sources.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Turbopack |
-| Map | Mapbox GL JS, milsymbol (NATO APP-6), `@mapbox/mapbox-gl-draw` |
-| Backend | Next.js API Routes, OpenAI SDK (custom baseURL) |
-| Database | PostgreSQL 14+ with PostGIS extension |
-| AI | ConfidentialMind — Gemma 4 (OpenAI-compatible endpoint) |
-| Testing | Vitest 3, React Testing Library, jsdom, v8 coverage |
+| Frontend | Next.js 16 |
+| Map | Mapbox, NATO APP-6 icons from milsymbol |
+| Backend | Next.js API Routes |
+| Database | PostgreSQL 14+ |
+| AI | Gemma 4 from ConfidentialMind|
 
 ---
 
@@ -115,8 +79,6 @@ python scripts/ingest_weather.py        # FMI station data 2016–2026
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — full-screen tactical map, centred on the Archipelago Sea.
-
 ---
 
 ## API Reference
@@ -146,7 +108,8 @@ All routes degrade gracefully — returning empty collections or 503 — when `D
 | Demographics | Statistics Finland (Tilastokeskus) | 2025, all municipalities |
 | Election results | Statistics Finland | 2023 parliamentary, 22 parties |
 | Weather observations | Finnish Meteorological Institute (FMI) | 2016–2026, 3 regions |
-| Terrain / roads | Mapbox Standard vector tiles | Global |
+| Roads & railways | Finnish Transport Infrastructure Agency (Väylävirasto) | All infrastructure on the 3 focus regions |
+|Topographic data|National Land Survey of Finland (Maanmittauslaitos)|10mx10m dataset on the 3 focus regions|
 
 ---
 
