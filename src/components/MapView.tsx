@@ -470,8 +470,6 @@ export default function MapView({
       zoom,
     });
 
-    mapRef.current.addControl(new mapboxgl.NavigationControl());
-
     // Initialise Draw control
     const draw = new MapboxDraw({
       displayControlsDefault: false,
