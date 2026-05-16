@@ -1,3 +1,4 @@
 data/turku/digiroad_dr_leveys.json filter=lfs diff=lfs merge=lfs -text
 data/karjala/digiroad_dr_leveys.json filter=lfs diff=lfs merge=lfs -text
 data/karjala/digiroad_dr_tielinkki_silta_alikulku_tunneli.json filter=lfs diff=lfs merge=lfs -text
+*.asc filter=lfs diff=lfs merge=lfs -text
