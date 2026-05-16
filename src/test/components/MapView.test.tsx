@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, act } from "@testing-library/react";
+import { render, act, screen, fireEvent } from "@testing-library/react";
 
 const {
   mockRemove,
@@ -19,6 +19,8 @@ const {
   mockSetLngLat,
   mockSetHTML,
   mockAddTo,
+  mockRemoveLayer,
+  mockRemoveSource,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -42,6 +44,8 @@ const {
   const mockSetConfigProperty = vi.fn();
   const mockSetLayoutProperty = vi.fn();
   const mockSetTerrain = vi.fn();
+  const mockRemoveLayer = vi.fn();
+  const mockRemoveSource = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -66,6 +70,8 @@ const {
     setConfigProperty: mockSetConfigProperty,
     setLayoutProperty: mockSetLayoutProperty,
     setTerrain: mockSetTerrain,
+    removeLayer: mockRemoveLayer,
+    removeSource: mockRemoveSource,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -86,11 +92,40 @@ const {
     mockSetLngLat,
     mockSetHTML,
     mockAddTo,
+    mockRemoveLayer,
+    mockRemoveSource,
     MockMap,
     MockNavigationControl,
     MockPopup,
   };
 });
+
+const { mockDrawChangeMode, mockDrawDelete, mockDrawTrash, MockMapboxDraw } =
+  vi.hoisted(() => {
+    const mockDrawChangeMode = vi.fn();
+    const mockDrawDelete = vi.fn();
+    const mockDrawTrash = vi.fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const MockMapboxDraw: any = vi.fn(() => ({
+      changeMode: mockDrawChangeMode,
+      delete: mockDrawDelete,
+      trash: mockDrawTrash,
+    }));
+    MockMapboxDraw.modes = {
+      DRAW_LINE_STRING: "draw_line_string",
+      DRAW_POLYGON: "draw_polygon",
+      DRAW_POINT: "draw_point",
+      SIMPLE_SELECT: "simple_select",
+      DIRECT_SELECT: "direct_select",
+      STATIC: "static",
+    };
+    return {
+      mockDrawChangeMode,
+      mockDrawDelete,
+      mockDrawTrash,
+      MockMapboxDraw,
+    };
+  });
 
 vi.mock("mapbox-gl", () => ({
   default: {
@@ -101,11 +136,16 @@ vi.mock("mapbox-gl", () => ({
   },
 }));
 
+vi.mock("@mapbox/mapbox-gl-draw", () => ({ default: MockMapboxDraw }));
+vi.mock("mapbox-gl-draw-rectangle-mode", () => ({ default: {} }));
+vi.mock("@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css", () => ({}));
+
 vi.mock("@/lib/milsymbol", () => ({
   createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())),
 }));
 
 import MapView from "@/components/MapView";
+import type { CustomLayer } from "@/lib/customLayers";
 
 function mockFetchOk() {
   global.fetch = vi.fn().mockResolvedValue({
@@ -137,6 +177,14 @@ async function fireStyleLoad() {
   });
 }
 
+const LAYER_A: CustomLayer = {
+  id: "layer-a",
+  name: "Alpha",
+  color: "#ef4444",
+  created_at: "2026-05-16T00:00:00Z",
+  updated_at: "2026-05-16T00:00:00Z",
+};
+
 describe("MapView", () => {
   beforeEach(() => {
     MockMap.mockClear();
@@ -158,6 +206,12 @@ describe("MapView", () => {
     mockSetHTML.mockClear();
     mockAddTo.mockClear();
     MockPopup.mockClear();
+    mockRemoveLayer.mockClear();
+    mockRemoveSource.mockClear();
+    MockMapboxDraw.mockClear();
+    mockDrawChangeMode.mockClear();
+    mockDrawDelete.mockClear();
+    mockDrawTrash.mockClear();
     mockFetchOk();
   });
 
@@ -177,9 +231,9 @@ describe("MapView", () => {
     );
   });
 
-  it("adds a NavigationControl on mount", () => {
+  it("initialises a MapboxDraw control on mount", () => {
     render(<MapView />);
-    expect(mockAddControl).toHaveBeenCalledTimes(1);
+    expect(MockMapboxDraw).toHaveBeenCalledTimes(1);
     expect(mockAddControl).toHaveBeenCalledWith(
       expect.any(MockNavigationControl),
     );
@@ -845,5 +899,254 @@ describe("MapView", () => {
     expect(mockSetTerrain).toHaveBeenCalledWith(
       expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
     );
+  });
+
+  // ── Custom layer tests ────────────────────────────────────────────────
+
+  it("adds source and layers for each customLayer passed at init time", async () => {
+    render(<MapView customLayers={[LAYER_A]} />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "custom-layer-layer-a",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "custom-layer-layer-a-fill" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "custom-layer-layer-a-line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "custom-layer-layer-a-circle" }),
+    );
+  });
+
+  it("registers draw.create listener after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const drawCreateCall = mockOn.mock.calls.find(
+      ([event]) => event === "draw.create",
+    );
+    expect(drawCreateCall).toBeDefined();
+  });
+
+  it("opens FeatureDialog when draw.create fires with an active drawing layer", async () => {
+    render(<MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />);
+    await fireStyleLoad();
+
+    const drawCreateCb = mockOn.mock.calls.find(
+      ([event]) => event === "draw.create",
+    )![1] as (e: { features: GeoJSON.Feature[] }) => void;
+
+    await act(async () =>
+      drawCreateCb({
+        features: [
+          {
+            type: "Feature",
+            id: "temp-1",
+            geometry: { type: "Polygon", coordinates: [[]] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByTestId("feature-dialog")).toBeTruthy();
+  });
+
+  it("deletes Draw feature immediately if no active drawing layer", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const drawCreateCb = mockOn.mock.calls.find(
+      ([event]) => event === "draw.create",
+    )![1] as (e: { features: GeoJSON.Feature[] }) => void;
+
+    act(() =>
+      drawCreateCb({
+        features: [
+          {
+            type: "Feature",
+            id: "orphan",
+            geometry: { type: "Point", coordinates: [0, 0] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    expect(mockDrawDelete).toHaveBeenCalledWith("orphan");
+  });
+
+  it("posts feature and refreshes source on FeatureDialog save", async () => {
+    render(<MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />);
+    await fireStyleLoad();
+
+    const drawCreateCb = mockOn.mock.calls.find(
+      ([event]) => event === "draw.create",
+    )![1] as (e: { features: GeoJSON.Feature[] }) => void;
+
+    await act(async () =>
+      drawCreateCb({
+        features: [
+          {
+            type: "Feature",
+            id: "temp-1",
+            geometry: { type: "Polygon", coordinates: [[]] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("feature-dialog-name"), {
+        target: { value: "Bravo" },
+      });
+      fireEvent.click(screen.getByTestId("feature-dialog-save"));
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/custom-layers/layer-a/features",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.queryByTestId("feature-dialog")).toBeNull();
+  });
+
+  it("deletes pending Draw feature on FeatureDialog discard", async () => {
+    render(<MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />);
+    await fireStyleLoad();
+
+    const drawCreateCb = mockOn.mock.calls.find(
+      ([event]) => event === "draw.create",
+    )![1] as (e: { features: GeoJSON.Feature[] }) => void;
+
+    await act(async () =>
+      drawCreateCb({
+        features: [
+          {
+            type: "Feature",
+            id: "temp-1",
+            geometry: { type: "Polygon", coordinates: [[]] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("feature-dialog-discard"));
+    });
+
+    expect(mockDrawDelete).toHaveBeenCalledWith("temp-1");
+    expect(screen.queryByTestId("feature-dialog")).toBeNull();
+  });
+
+  it("fetches custom layer features when enabled", async () => {
+    const { rerender } = render(<MapView customLayers={[LAYER_A]} />);
+    await fireStyleLoad();
+    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+
+    rerender(
+      <MapView
+        customLayers={[LAYER_A]}
+        enabledCustomLayerIds={new Set(["layer-a"])}
+      />,
+    );
+    await act(async () => {});
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/custom-layers/layer-a/features?bbox="),
+    );
+  });
+
+  it("clears custom layer source data when disabled", async () => {
+    const { rerender } = render(
+      <MapView
+        customLayers={[LAYER_A]}
+        enabledCustomLayerIds={new Set(["layer-a"])}
+      />,
+    );
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(
+      <MapView customLayers={[LAYER_A]} enabledCustomLayerIds={new Set()} />,
+    );
+    await act(async () => {});
+
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "FeatureCollection", features: [] }),
+    );
+  });
+
+  it("calls draw.changeMode when activeDrawingLayerId is cleared", async () => {
+    const { rerender } = render(
+      <MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />,
+    );
+    await fireStyleLoad();
+    mockDrawChangeMode.mockClear();
+
+    rerender(<MapView customLayers={[LAYER_A]} activeDrawingLayerId={null} />);
+
+    expect(mockDrawChangeMode).toHaveBeenCalledWith("simple_select");
+  });
+
+  it("shows DrawingToolbar when activeDrawingLayerId is set", async () => {
+    render(<MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />);
+    await fireStyleLoad();
+
+    expect(screen.getByTestId("drawing-toolbar")).toBeTruthy();
+  });
+
+  it("does not show DrawingToolbar when activeDrawingLayerId is null", async () => {
+    render(<MapView customLayers={[LAYER_A]} />);
+    await fireStyleLoad();
+
+    expect(screen.queryByTestId("drawing-toolbar")).toBeNull();
+  });
+
+  it("calls onCancelDrawing when toolbar cancel is clicked", async () => {
+    const onCancelDrawing = vi.fn();
+    render(
+      <MapView
+        customLayers={[LAYER_A]}
+        activeDrawingLayerId="layer-a"
+        onCancelDrawing={onCancelDrawing}
+      />,
+    );
+    await fireStyleLoad();
+
+    fireEvent.click(screen.getByTestId("drawing-toolbar-cancel"));
+    expect(onCancelDrawing).toHaveBeenCalledOnce();
+  });
+
+  it("calls draw.trash when Delete Selected is clicked in toolbar", async () => {
+    render(<MapView customLayers={[LAYER_A]} activeDrawingLayerId="layer-a" />);
+    await fireStyleLoad();
+
+    const selectionCb = mockOn.mock.calls.find(
+      ([event]) => event === "draw.selectionchange",
+    )![1] as (e: { features: GeoJSON.Feature[] }) => void;
+
+    await act(async () =>
+      selectionCb({
+        features: [
+          {
+            type: "Feature",
+            id: "sel-1",
+            geometry: { type: "Point", coordinates: [0, 0] },
+            properties: {},
+          },
+        ],
+      }),
+    );
+
+    fireEvent.click(screen.getByTestId("drawing-toolbar-delete"));
+    expect(mockDrawTrash).toHaveBeenCalledOnce();
   });
 });

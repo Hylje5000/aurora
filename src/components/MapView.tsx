@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import MapboxDraw from "@mapbox/mapbox-gl-draw";
+import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
+import DrawRectangle from "mapbox-gl-draw-rectangle-mode";
 import { AREAS_OF_INTEREST } from "@/lib/areas";
 import {
   DEFAULT_LAYER_VISIBILITY,
@@ -10,14 +13,32 @@ import {
   type LayerVisibility,
 } from "@/lib/layers";
 import { createMilsymbolImage } from "@/lib/milsymbol";
+import {
+  COLOUR_PALETTE,
+  type CustomLayer,
+  type DrawingTool,
+} from "@/lib/customLayers";
+import FeatureDialog from "@/components/FeatureDialog";
+import DrawingToolbar from "@/components/DrawingToolbar";
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+
+const DRAW_MODE_MAP: Record<DrawingTool, string> = {
+  Point: "draw_point",
+  LineString: "draw_line_string",
+  Polygon: "draw_polygon",
+  Rectangle: "draw_rectangle",
+};
 
 interface MapViewProps {
   center?: [number, number];
   zoom?: number;
   selectedAreaId?: string | null;
   layerVisibility?: LayerVisibility;
+  customLayers?: CustomLayer[];
+  enabledCustomLayerIds?: Set<string>;
+  activeDrawingLayerId?: string | null;
+  onCancelDrawing?: () => void;
 }
 
 function buildAoiCollection() {
@@ -90,21 +111,160 @@ async function fetchCellTowers(
   }
 }
 
+async function fetchCustomLayerFeatures(
+  map: mapboxgl.Map,
+  layerId: string,
+): Promise<void> {
+  const bounds = map.getBounds();
+  if (!bounds) return;
+  const bbox = [
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth(),
+  ].join(",");
+
+  try {
+    const res = await fetch(
+      `/api/custom-layers/${layerId}/features?bbox=${bbox}`,
+    );
+    if (!res.ok) return;
+    const data = (await res.json()) as GeoJSON.FeatureCollection;
+    (
+      map.getSource(`custom-layer-${layerId}`) as mapboxgl.GeoJSONSource
+    )?.setData(data);
+  } catch (err) {
+    console.error(`[custom-layer] fetch failed for ${layerId}`, err);
+  }
+}
+
+function addCustomLayerSourcesToMap(
+  map: mapboxgl.Map,
+  layerId: string,
+  visible: boolean,
+  registeredIds: Set<string>,
+) {
+  if (registeredIds.has(layerId)) return;
+  registeredIds.add(layerId);
+
+  const sourceId = `custom-layer-${layerId}`;
+  const vis = visible ? "visible" : ("none" as const);
+
+  map.addSource(sourceId, {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+  });
+
+  map.addLayer({
+    id: `${sourceId}-fill`,
+    type: "fill",
+    source: sourceId,
+    filter: ["==", ["geometry-type"], "Polygon"],
+    layout: { visibility: vis },
+    paint: {
+      "fill-color": ["get", "color"],
+      "fill-opacity": 0.3,
+    },
+  });
+
+  map.addLayer({
+    id: `${sourceId}-line`,
+    type: "line",
+    source: sourceId,
+    filter: [
+      "in",
+      ["geometry-type"],
+      ["literal", ["LineString", "Polygon"]],
+    ] as mapboxgl.FilterSpecification,
+    layout: { visibility: vis },
+    paint: {
+      "line-color": ["get", "color"],
+      "line-width": 2,
+    },
+  });
+
+  map.addLayer({
+    id: `${sourceId}-circle`,
+    type: "circle",
+    source: sourceId,
+    filter: ["==", ["geometry-type"], "Point"],
+    layout: { visibility: vis },
+    paint: {
+      "circle-color": ["get", "color"],
+      "circle-radius": 6,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
+    },
+  });
+}
+
+function removeCustomLayerFromMap(
+  map: mapboxgl.Map,
+  layerId: string,
+  registeredIds: Set<string>,
+) {
+  if (!registeredIds.has(layerId)) return;
+  registeredIds.delete(layerId);
+
+  const sourceId = `custom-layer-${layerId}`;
+  for (const suffix of ["-fill", "-line", "-circle"]) {
+    try {
+      map.removeLayer(`${sourceId}${suffix}`);
+    } catch {
+      // layer may not exist if map style reloaded
+    }
+  }
+  try {
+    map.removeSource(sourceId);
+  } catch {
+    // source may not exist
+  }
+}
+
 export default function MapView({
   center = [21.5, 60.2],
   zoom = 7,
   selectedAreaId = null,
   layerVisibility = DEFAULT_LAYER_VISIBILITY,
+  customLayers = [],
+  enabledCustomLayerIds = new Set(),
+  activeDrawingLayerId = null,
+  onCancelDrawing,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const drawRef = useRef<MapboxDraw | null>(null);
   const styleLoadedRef = useRef(false);
+
+  // Cell tower state
   const rawTowerDataRef = useRef<GeoJSON.FeatureCollection>({
     type: "FeatureCollection",
     features: [],
   });
   const layerVisibilityRef = useRef(layerVisibility);
 
+  // Drawing state
+  const activeDrawingLayerIdRef = useRef<string | null>(activeDrawingLayerId);
+  const activeDrawingColourRef = useRef<string>(COLOUR_PALETTE[0].hex);
+  const activeDrawingToolRef = useRef<DrawingTool | null>(null);
+  const pendingDrawFeatureRef = useRef<GeoJSON.Feature | null>(null);
+
+  // Custom layer registration
+  const registeredCustomLayerIdsRef = useRef<Set<string>>(new Set());
+  const enabledCustomLayerIdsRef = useRef<Set<string>>(enabledCustomLayerIds);
+
+  // UI state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeDrawingTool, setActiveDrawingTool] =
+    useState<DrawingTool | null>(null);
+  const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
+    COLOUR_PALETTE[0].hex,
+  );
+  const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
+
+  const activeLayer = customLayers.find((l) => l.id === activeDrawingLayerId);
+
+  // ── Map initialisation (one-shot) ─────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -116,6 +276,18 @@ export default function MapView({
     });
 
     mapRef.current.addControl(new mapboxgl.NavigationControl());
+
+    // Initialise Draw control
+    const draw = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: {},
+      modes: {
+        ...MapboxDraw.modes,
+        draw_rectangle: DrawRectangle,
+      },
+    });
+    mapRef.current.addControl(draw as unknown as mapboxgl.IControl);
+    drawRef.current = draw;
 
     mapRef.current.on("style.load", async () => {
       const map = mapRef.current;
@@ -313,11 +485,32 @@ export default function MapView({
         });
       }
 
-      // Fetch on every pan/zoom and immediately on load
-      map.on("moveend", () =>
-        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef),
-      );
-      fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+      // ── Draw events ────────────────────────────────────────────────────
+      map.on("draw.create", (e: { features: GeoJSON.Feature[] }) => {
+        const feature = e.features[0];
+        if (!feature) return;
+        const layerId = activeDrawingLayerIdRef.current;
+        if (!layerId) {
+          drawRef.current?.delete(feature.id as string);
+          return;
+        }
+        pendingDrawFeatureRef.current = feature;
+        setDialogOpen(true);
+      });
+
+      map.on("draw.selectionchange", (e: { features: GeoJSON.Feature[] }) => {
+        setHasDrawingSelection(e.features.length > 0);
+      });
+
+      // Add sources/layers for any custom layers already in props at init time
+      for (const layer of customLayers) {
+        addCustomLayerSourcesToMap(
+          map,
+          layer.id,
+          enabledCustomLayerIdsRef.current.has(layer.id),
+          registeredCustomLayerIdsRef.current,
+        );
+      }
 
       // ── Terrain & intelligence layers ──────────────────────────────────
 
@@ -435,26 +628,39 @@ export default function MapView({
         map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
       }
 
+      // ── Fetch on every pan/zoom and immediately on load ────────────────
+      map.on("moveend", () => {
+        fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+        for (const layerId of enabledCustomLayerIdsRef.current) {
+          if (registeredCustomLayerIdsRef.current.has(layerId)) {
+            void fetchCustomLayerFeatures(map, layerId);
+          }
+        }
+      });
+      fetchCellTowers(map, rawTowerDataRef, layerVisibilityRef);
+
       styleLoadedRef.current = true;
     });
 
+    const registeredIds = registeredCustomLayerIdsRef.current;
     return () => {
       mapRef.current?.remove();
       mapRef.current = null;
+      drawRef.current = null;
       styleLoadedRef.current = false;
+      registeredIds.clear();
     };
-    // center, zoom, and layerVisibility are intentionally excluded — map init is one-shot
+    // center, zoom, layerVisibility, customLayers intentionally excluded — map init is one-shot
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync layer visibility changes to the live map after style has loaded
+  // ── Sync layer visibility ──────────────────────────────────────────────
   useEffect(() => {
     layerVisibilityRef.current = layerVisibility;
 
     const map = mapRef.current;
     if (!map || !styleLoadedRef.current) return;
 
-    // Re-filter source data so cluster counts reflect only enabled radio types
     (map.getSource("cell-towers-source") as mapboxgl.GeoJSONSource).setData(
       filterByEnabled(rawTowerDataRef.current, layerVisibility),
     );
@@ -493,6 +699,7 @@ export default function MapView({
     }
   }, [layerVisibility]);
 
+  // ── Sync AOI navigation ────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedAreaId || !mapRef.current) return;
     const area = AREAS_OF_INTEREST.find((a) => a.id === selectedAreaId);
@@ -503,5 +710,170 @@ export default function MapView({
     });
   }, [selectedAreaId]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  // ── Sync custom layer sources (add/remove as layers are created/deleted) ─
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    const currentIds = new Set(customLayers.map((l) => l.id));
+
+    for (const layer of customLayers) {
+      addCustomLayerSourcesToMap(
+        map,
+        layer.id,
+        enabledCustomLayerIdsRef.current.has(layer.id),
+        registeredCustomLayerIdsRef.current,
+      );
+    }
+
+    for (const id of [...registeredCustomLayerIdsRef.current]) {
+      if (!currentIds.has(id)) {
+        removeCustomLayerFromMap(map, id, registeredCustomLayerIdsRef.current);
+      }
+    }
+  }, [customLayers]);
+
+  // ── Sync enabled/disabled custom layers ───────────────────────────────
+  useEffect(() => {
+    enabledCustomLayerIdsRef.current = enabledCustomLayerIds;
+
+    const map = mapRef.current;
+    if (!map || !styleLoadedRef.current) return;
+
+    for (const layerId of registeredCustomLayerIdsRef.current) {
+      const enabled = enabledCustomLayerIds.has(layerId);
+      const sourceId = `custom-layer-${layerId}`;
+      const vis = enabled ? "visible" : "none";
+
+      for (const suffix of ["-fill", "-line", "-circle"]) {
+        map.setLayoutProperty(`${sourceId}${suffix}`, "visibility", vis);
+      }
+
+      if (enabled) {
+        void fetchCustomLayerFeatures(map, layerId);
+      } else {
+        (map.getSource(sourceId) as mapboxgl.GeoJSONSource)?.setData({
+          type: "FeatureCollection",
+          features: [],
+        });
+      }
+    }
+  }, [enabledCustomLayerIds]);
+
+  // ── Sync active drawing layer id ──────────────────────────────────────
+  useEffect(() => {
+    activeDrawingLayerIdRef.current = activeDrawingLayerId;
+
+    if (!activeDrawingLayerId) {
+      drawRef.current?.changeMode("simple_select");
+    }
+  }, [activeDrawingLayerId]);
+
+  // ── Sync active drawing tool → Draw mode ──────────────────────────────
+  // Derive the effective tool: null when no layer is selected
+  const effectiveTool = activeDrawingLayerId ? activeDrawingTool : null;
+
+  useEffect(() => {
+    activeDrawingToolRef.current = effectiveTool;
+
+    const draw = drawRef.current;
+    if (!draw) return;
+
+    if (!effectiveTool) {
+      draw.changeMode("simple_select");
+      return;
+    }
+
+    draw.changeMode(DRAW_MODE_MAP[effectiveTool]);
+  }, [effectiveTool]);
+
+  // ── Sync active drawing colour ─────────────────────────────────────────
+  useEffect(() => {
+    activeDrawingColourRef.current = activeDrawingColour;
+  }, [activeDrawingColour]);
+
+  // ── Feature dialog handlers ────────────────────────────────────────────
+  async function handleFeatureSave(name: string, description: string) {
+    const feature = pendingDrawFeatureRef.current;
+    const layerId = activeDrawingLayerIdRef.current;
+    const map = mapRef.current;
+
+    setDialogOpen(false);
+    pendingDrawFeatureRef.current = null;
+
+    if (!feature || !layerId || !map) return;
+
+    drawRef.current?.delete(feature.id as string);
+
+    const geomType = (feature.geometry as GeoJSON.Geometry).type;
+    const featureType: DrawingTool =
+      activeDrawingToolRef.current === "Rectangle"
+        ? "Rectangle"
+        : geomType === "Point"
+          ? "Point"
+          : geomType === "LineString"
+            ? "LineString"
+            : "Polygon";
+
+    try {
+      const res = await fetch(`/api/custom-layers/${layerId}/features`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name,
+          description,
+          feature_type: featureType,
+          geometry: feature.geometry,
+          color: activeDrawingColourRef.current,
+        }),
+      });
+      if (res.ok) {
+        void fetchCustomLayerFeatures(map, layerId);
+      }
+    } catch (err) {
+      console.error("[custom-layer] feature save failed", err);
+    }
+  }
+
+  function handleFeatureDiscard() {
+    const feature = pendingDrawFeatureRef.current;
+    if (feature) drawRef.current?.delete(feature.id as string);
+    pendingDrawFeatureRef.current = null;
+    setDialogOpen(false);
+  }
+
+  function handleDeleteSelected() {
+    drawRef.current?.trash();
+  }
+
+  function handleCancelDrawing() {
+    setActiveDrawingTool(null);
+    drawRef.current?.changeMode("simple_select");
+    onCancelDrawing?.();
+  }
+
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+
+      {activeDrawingLayerId && activeLayer && (
+        <DrawingToolbar
+          activeDrawingLayerName={activeLayer.name}
+          activeTool={effectiveTool}
+          activeColour={activeDrawingColour}
+          hasSelection={hasDrawingSelection}
+          onToolChange={setActiveDrawingTool}
+          onColourChange={setActiveDrawingColour}
+          onCancel={handleCancelDrawing}
+          onDeleteSelected={handleDeleteSelected}
+        />
+      )}
+
+      <FeatureDialog
+        open={dialogOpen}
+        onSave={handleFeatureSave}
+        onDiscard={handleFeatureDiscard}
+      />
+    </div>
+  );
 }
