@@ -7,6 +7,7 @@ const {
   mockOn,
   mockAddSource,
   mockAddLayer,
+  mockAddImage,
   mockFitBounds,
   mockGetBounds,
   mockSetData,
@@ -27,6 +28,7 @@ const {
   const mockOn = vi.fn();
   const mockAddSource = vi.fn();
   const mockAddLayer = vi.fn();
+  const mockAddImage = vi.fn();
   const mockFitBounds = vi.fn();
   const mockGetBounds = vi.fn(() => ({
     getWest: () => 20,
@@ -56,6 +58,7 @@ const {
     on: mockOn,
     addSource: mockAddSource,
     addLayer: mockAddLayer,
+    addImage: mockAddImage,
     fitBounds: mockFitBounds,
     getBounds: mockGetBounds,
     getSource: mockGetSource,
@@ -71,6 +74,7 @@ const {
     mockOn,
     mockAddSource,
     mockAddLayer,
+    mockAddImage,
     mockFitBounds,
     mockGetBounds,
     mockSetData,
@@ -97,6 +101,10 @@ vi.mock("mapbox-gl", () => ({
   },
 }));
 
+vi.mock("@/lib/milsymbol", () => ({
+  createMilsymbolImage: vi.fn(() => Promise.resolve(new Image())),
+}));
+
 import MapView from "@/components/MapView";
 
 function mockFetchOk() {
@@ -121,10 +129,12 @@ function mockFetchWithTowers(radios: string[]) {
   } as unknown as Response);
 }
 
-function fireStyleLoad() {
+async function fireStyleLoad() {
   const call = mockOn.mock.calls.find(([event]) => event === "style.load");
-  const cb = call![1] as () => void;
-  act(() => cb());
+  const cb = call![1] as () => Promise<void>;
+  await act(async () => {
+    await cb();
+  });
 }
 
 describe("MapView", () => {
@@ -143,6 +153,7 @@ describe("MapView", () => {
     mockSetConfigProperty.mockClear();
     mockSetLayoutProperty.mockClear();
     mockSetTerrain.mockClear();
+    mockAddImage.mockClear();
     mockSetLngLat.mockClear();
     mockSetHTML.mockClear();
     mockAddTo.mockClear();
@@ -190,7 +201,7 @@ describe("MapView", () => {
 
   it("sets lightPreset to night after style.load fires", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockSetConfigProperty).toHaveBeenCalledWith(
       "basemap",
@@ -201,7 +212,7 @@ describe("MapView", () => {
 
   it("adds aoi-source, aoi-fill, and aoi-outline after style.load fires", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockAddSource).toHaveBeenCalledWith(
       "aoi-source",
@@ -217,7 +228,7 @@ describe("MapView", () => {
 
   it("adds cell-towers-source with cluster:true after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockAddSource).toHaveBeenCalledWith(
       "cell-towers-source",
@@ -227,7 +238,7 @@ describe("MapView", () => {
 
   it("adds cluster and cluster-count layers after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "cell-towers-clusters", type: "circle" }),
@@ -242,7 +253,7 @@ describe("MapView", () => {
 
   it("cluster layers start visible when cell types are on (default)", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const clusterLayer = mockAddLayer.mock.calls.find(
       ([l]) => l.id === "cell-towers-clusters",
@@ -269,7 +280,7 @@ describe("MapView", () => {
         }}
       />,
     );
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const clusterLayer = mockAddLayer.mock.calls.find(
       ([l]) => l.id === "cell-towers-clusters",
@@ -283,7 +294,7 @@ describe("MapView", () => {
 
   it("hides cluster layers when all cell types are toggled off", async () => {
     const { rerender } = render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetLayoutProperty.mockClear();
 
     rerender(
@@ -325,7 +336,7 @@ describe("MapView", () => {
       cellCDMA: false,
     };
     const { rerender } = render(<MapView layerVisibility={allOff} />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetLayoutProperty.mockClear();
 
     rerender(<MapView layerVisibility={{ ...allOff, cellLTE: true }} />);
@@ -345,7 +356,7 @@ describe("MapView", () => {
   it("filters source data by enabled types when a cell type is toggled off", async () => {
     mockFetchWithTowers(["GSM", "LTE", "LTE"]);
     const { rerender } = render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetData.mockClear();
 
     rerender(
@@ -372,7 +383,7 @@ describe("MapView", () => {
   it("produces empty source when all cell types are toggled off", async () => {
     mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
     const { rerender } = render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetData.mockClear();
 
     rerender(
@@ -408,7 +419,7 @@ describe("MapView", () => {
       cellCDMA: false,
     };
     const { rerender } = render(<MapView layerVisibility={allOff} />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetData.mockClear();
 
     rerender(
@@ -428,26 +439,41 @@ describe("MapView", () => {
     expect(lastCall.features).toHaveLength(4);
   });
 
-  it("adds four per-type tower layers with correct filters and colors", async () => {
+  it("registers a milsymbol image for each radio type via map.addImage", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
-    const cases: Array<{ id: string; radio: string; color: string }> = [
-      { id: "cell-towers-gsm", radio: "GSM", color: "#fde047" },
-      { id: "cell-towers-umts", radio: "UMTS", color: "#fb923c" },
-      { id: "cell-towers-lte", radio: "LTE", color: "#4ade80" },
-      { id: "cell-towers-cdma", radio: "CDMA", color: "#c4b5fd" },
+    expect(mockAddImage).toHaveBeenCalledTimes(4);
+    for (const id of [
+      "cell-towers-gsm-icon",
+      "cell-towers-umts-icon",
+      "cell-towers-lte-icon",
+      "cell-towers-cdma-icon",
+    ]) {
+      expect(mockAddImage).toHaveBeenCalledWith(id, expect.any(Image));
+    }
+  });
+
+  it("adds four per-type tower layers as symbol layers with icon-image", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    const cases: Array<{ id: string; radio: string }> = [
+      { id: "cell-towers-gsm", radio: "GSM" },
+      { id: "cell-towers-umts", radio: "UMTS" },
+      { id: "cell-towers-lte", radio: "LTE" },
+      { id: "cell-towers-cdma", radio: "CDMA" },
     ];
 
-    for (const { id, radio, color } of cases) {
+    for (const { id, radio } of cases) {
       expect(mockAddLayer).toHaveBeenCalledWith(
         expect.objectContaining({
           id,
-          type: "circle",
+          type: "symbol",
           filter: expect.arrayContaining([
             expect.arrayContaining(["==", expect.anything(), radio]),
           ]),
-          paint: expect.objectContaining({ "circle-color": color }),
+          layout: expect.objectContaining({ "icon-image": `${id}-icon` }),
         }),
       );
     }
@@ -455,7 +481,7 @@ describe("MapView", () => {
 
   it("registers a moveend listener after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const moveendCall = mockOn.mock.calls.find(
       ([event]) => event === "moveend",
@@ -465,7 +491,7 @@ describe("MapView", () => {
 
   it("fetches cell towers immediately after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/cell-towers?bbox="),
@@ -474,7 +500,7 @@ describe("MapView", () => {
 
   it("calls setData on the cell-towers source after a successful fetch", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockGetSource).toHaveBeenCalledWith("cell-towers-source");
     expect(mockSetData).toHaveBeenCalledWith(
@@ -484,7 +510,7 @@ describe("MapView", () => {
 
   it("fetches cell towers again when moveend fires", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const fetchCallsBefore = (global.fetch as ReturnType<typeof vi.fn>).mock
       .calls.length;
@@ -501,7 +527,7 @@ describe("MapView", () => {
 
   it("registers click, mouseenter, and mouseleave handlers for each per-type tower layer", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const layerIds = [
       "cell-towers-gsm",
@@ -531,7 +557,7 @@ describe("MapView", () => {
 
   it("opens a Popup when a per-type tower is clicked", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const clickCall = mockOn.mock.calls.find(
       ([event, layer]) => event === "click" && layer === "cell-towers-lte",
@@ -583,7 +609,7 @@ describe("MapView", () => {
     } as unknown as Response);
 
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockSetData).not.toHaveBeenCalled();
   });
@@ -599,7 +625,7 @@ describe("MapView", () => {
 
   it("bbox string uses map bounds in correct order", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     const url = (global.fetch as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as string;
@@ -610,7 +636,7 @@ describe("MapView", () => {
 
   it("applies military config hardening after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockSetConfigProperty).toHaveBeenCalledWith(
       "basemap",
@@ -636,7 +662,7 @@ describe("MapView", () => {
 
   it("adds mapbox-dem and terrain-v2 sources after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockAddSource).toHaveBeenCalledWith(
       "mapbox-dem",
@@ -650,7 +676,7 @@ describe("MapView", () => {
 
   it("adds hillshading, landcover-military, and contour layers after style.load", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
 
     expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "hillshading", type: "hillshade" }),
@@ -671,7 +697,7 @@ describe("MapView", () => {
 
   it("does not call setTerrain on style.load when terrain3d is false (default)", async () => {
     render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     expect(mockSetTerrain).not.toHaveBeenCalled();
   });
 
@@ -690,7 +716,7 @@ describe("MapView", () => {
         }}
       />,
     );
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     expect(mockSetTerrain).toHaveBeenCalledWith(
       expect.objectContaining({ source: "mapbox-dem", exaggeration: 1.5 }),
     );
@@ -698,7 +724,7 @@ describe("MapView", () => {
 
   it("calls setLayoutProperty for hillshade layer when hillshade is toggled off", async () => {
     const { rerender } = render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetLayoutProperty.mockClear();
 
     rerender(
@@ -725,7 +751,7 @@ describe("MapView", () => {
 
   it("calls setLayoutProperty for all contour layers when contours is toggled off", async () => {
     const { rerender } = render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetLayoutProperty.mockClear();
 
     rerender(
@@ -775,7 +801,7 @@ describe("MapView", () => {
         }}
       />,
     );
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetTerrain.mockClear();
 
     rerender(
@@ -798,7 +824,7 @@ describe("MapView", () => {
 
   it("calls setTerrain when terrain3d is toggled on after style.load", async () => {
     const { rerender } = render(<MapView />);
-    await act(async () => fireStyleLoad());
+    await fireStyleLoad();
     mockSetTerrain.mockClear();
 
     rerender(
