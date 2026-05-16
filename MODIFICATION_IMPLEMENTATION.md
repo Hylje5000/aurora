@@ -90,8 +90,21 @@
 
 ---
 
-## Coverage Summary (to be filled in Phase 3)
+## Coverage Summary (Phase 3 — 476 tests)
 
 ```
-(run npm run test:coverage and paste summary here)
+All files  | 88.16% stmts | 83.95% branch | 79.68% functions
+LayerPanel.tsx       100% stmts / 100% branch
+DatePicker.tsx       100% stmts / 100% branch
+WeatherWidget.tsx    ~98.5% stmts
+RoutePanel.tsx       ~96% stmts
+MapWithNav.tsx       ~80% stmts
+MapView.tsx          ~83% stmts (branch gaps at async null guards — expected)
 ```
+
+### Journal
+
+- **Phase 0**: All 477 baseline tests passed.
+- **Phase 1**: Replaced 4 individual COMMS rows (GSM/UMTS/LTE/CDMA) with a single "Cell Towers" row. Added `onToggleComms` prop to LayerPanel; `handleCommsToggle` in MapWithNav sets all four cell keys atomically. Added `max-h-[calc(100vh-10rem)] overflow-y-auto` to LayerPanel content. Reduced gap/padding. Tests updated: net -1 test (4 removed, 3 added). 476 tests pass.
+- **Phase 2**: Merged area-name header row + DatePicker date row into one compact `py-1.5` row in MapWithNav weather panel. Reduced DatePicker select padding (`px-1.5 py-0.5`), WeatherWidget label margin (`mb-0.5`). No test changes needed — stubs are unaffected. 476 tests pass.
+- **Phase 3**: Coverage run complete. CLAUDE.md updated with LayerPanel `onToggleComms`/scroll notes, weather panel compact-header description, and updated coverage summary.
