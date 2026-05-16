@@ -21,7 +21,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Aurora Operational Planning",
+  title: "Aurora",
   description:
     "Aurora Operational Planning.",
 };
