@@ -38,6 +38,11 @@ interface RoutePanelProps {
   /** When provided, expanded state is controlled externally. */
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  summaryLoading?: boolean;
+  onSummaryLoadingChange?: (loading: boolean) => void;
+  routeSummary?: string | null;
+  onSummaryChange?: (summary: string | null) => void;
+  onSummaryModalOpen?: () => void;
 }
 
 const PROFILES: RouteProfile[] = ["driving", "walking", "cycling"];
@@ -111,6 +116,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       onClose,
       expanded: expandedProp,
       onExpandedChange,
+      summaryLoading,
+      onSummaryLoadingChange,
+      routeSummary,
+      onSummaryChange,
+      onSummaryModalOpen,
     },
     ref,
   ) {
@@ -155,6 +165,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const intelAbortRef = useRef<AbortController | null>(null);
     const intelDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const aiAbortRef = useRef<AbortController | null>(null);
+
     const onRouteChangeRef = useRef(onRouteChange);
     // eslint-disable-next-line react-hooks/refs
     onRouteChangeRef.current = onRouteChange;
@@ -220,6 +232,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       setIntelligence(null);
       onRouteChangeRef.current(null, profile, []);
       onHazardsChangeRef.current?.(null);
+      onSummaryChange?.(null);
+      onSummaryLoadingChange?.(false);
     }
 
     function applyPreset(index: number) {
@@ -331,6 +345,70 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
         if (intelDebounceRef.current) clearTimeout(intelDebounceRef.current);
       };
     }, [route, vehicle]);
+
+    // Fetch AI Summary when Intelligence changes
+    useEffect(() => {
+      if (!intelligence || !route) {
+        onSummaryChange?.(null);
+        return;
+      }
+
+      aiAbortRef.current?.abort();
+      const controller = new AbortController();
+      aiAbortRef.current = controller;
+
+      onSummaryLoadingChange?.(true);
+
+      const fetchAI = async () => {
+        try {
+          const prompt = `You are a Senior Military Planning Officer (G3/S3). Provide a concise, tactical executive summary for the following route analysis.
+          
+          Route Overview:
+          - Profile: ${profileLabel(profile)}
+          - Distance: ${formatDistance(route.total_distance_m)}
+          - Duration: ${formatDuration(route.total_duration_s)}
+
+          Vehicle:
+          - Type: ${vehicle.label}
+          - Mass: ${vehicle.mass_t}t
+          - Dimensions: ${vehicle.width_m}m (W) x ${vehicle.height_m}m (H)
+
+          Hazards (Critical: ${intelligence.summary.critical}, Warning: ${intelligence.summary.warning}, Info: ${intelligence.summary.info}):
+          ${intelligence.hazards.map(h => `- [${h.severity.toUpperCase()}] ${h.message}`).join('\n')}
+
+          Comms Coverage:
+          ${intelligence.coverage ? `- Covered: ${intelligence.coverage.covered_pct}%\n- Gaps: ${intelligence.coverage.gap_count} (Max: ${intelligence.coverage.longest_gap_m}m)` : "- No data"}
+
+          Focus on:
+          1. Mobility Assessment
+          2. Critical Constraints
+          3. Tactical Recommendations
+          
+          Keep it professional, tactical, and format nicely with markdown.`;
+
+          const res = await fetch("/api/ai", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              messages: [{ role: "user", content: prompt }],
+              temperature: 0.1,
+            }),
+            signal: controller.signal,
+          });
+
+          if (!res.ok) return;
+
+          const data = await res.json();
+          onSummaryChange?.(data.content);
+        } catch (err) {
+          if ((err as { name?: string }).name === "AbortError") return;
+        } finally {
+          onSummaryLoadingChange?.(false);
+        }
+      };
+
+      fetchAI();
+    }, [intelligence, route, profile, vehicle, onSummaryChange, onSummaryLoadingChange]);
 
     return (
       <div
@@ -601,9 +679,21 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                 className="border-t border-slate-700/60 pt-1.5 flex flex-col gap-1"
                 data-testid="route-assessment"
               >
-                <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                  Route Assessment
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                    Route Assessment
+                  </span>
+                  {(summaryLoading || routeSummary) && (
+                    <button
+                      onClick={onSummaryModalOpen}
+                      disabled={summaryLoading}
+                      className="text-[9px] font-mono px-2 py-0.5 rounded border border-blue-500/50 bg-blue-900/30 text-blue-300 hover:bg-blue-800/50 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid="ai-summary-btn"
+                    >
+                      {summaryLoading ? "Generating..." : "AI Summary"}
+                    </button>
+                  )}
+                </div>
 
                 {intelligenceLoading && (
                   <p
@@ -748,3 +838,4 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 );
 
 export default RoutePanel;
+

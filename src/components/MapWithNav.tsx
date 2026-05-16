@@ -8,6 +8,7 @@ import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
 import DatePicker from "./DatePicker";
 import RoutePanel, { type RoutePanelHandle } from "./RoutePanel";
+import SummaryModal from "./SummaryModal";
 import { AREAS_OF_INTEREST } from "@/lib/areas";
 import {
   DEFAULT_LAYER_VISIBILITY,
@@ -62,6 +63,11 @@ export default function MapWithNav() {
   const [routeIntelligence, setRouteIntelligence] =
     useState<RouteIntelligence | null>(null);
   const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
+
+  // AI Summary state
+  const [routeSummary, setRouteSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
   // Whenever infoPanelData becomes non-null (any municipality/elevation click),
   // guarantee the panel is uncollapsed and route panel is collapsed.
@@ -153,7 +159,10 @@ export default function MapWithNav() {
 
   function handleHazardsChange(intel: RouteIntelligence | null) {
     setRouteIntelligence(intel);
-    if (!intel) setFocusedHazard(null);
+    if (!intel) {
+      setFocusedHazard(null);
+      setRouteSummary(null);
+    }
   }
 
   function handleHazardFocus(hazard: RouteHazard) {
@@ -242,6 +251,11 @@ export default function MapWithNav() {
             setRoutePanelOpen(false);
             setAddingWaypoint(false);
           }}
+          summaryLoading={summaryLoading}
+          onSummaryLoadingChange={setSummaryLoading}
+          routeSummary={routeSummary}
+          onSummaryChange={setRouteSummary}
+          onSummaryModalOpen={() => setSummaryModalOpen(true)}
         />
       )}
       <InfoPanel
@@ -282,6 +296,11 @@ export default function MapWithNav() {
           />
         </div>
       )}
+      <SummaryModal
+        open={summaryModalOpen}
+        summary={routeSummary}
+        onClose={() => setSummaryModalOpen(false)}
+      />
     </div>
   );
 }
