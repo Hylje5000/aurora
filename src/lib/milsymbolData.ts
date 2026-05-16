@@ -15,43 +15,42 @@ export interface MilitarySymbol {
  */
 export const MILITARY_SYMBOLS: MilitarySymbol[] = [
   // ── GROUND COMBAT UNITS ───────────────────────────────────────────────
-  { name: "Infantry",              sidc: "SFGPUCI--------" },
+  { name: "Infantry", sidc: "SFGPUCI--------" },
   { name: "Infantry (Mechanized)", sidc: "SFGPUCIM-------" },
-  { name: "Armor / Tank",          sidc: "SFGPUCV--------" },
-  { name: "Artillery",             sidc: "SFGPUCA--------" },
+  { name: "Armor / Tank", sidc: "SFGPUCV--------" },
+  { name: "Artillery", sidc: "SFGPUCA--------" },
   { name: "Air Defense Artillery", sidc: "SFGPUCAA-------" },
-  { name: "Cavalry / Recon",       sidc: "SFGPUCR--------" },
-  { name: "Engineer",              sidc: "SFGPUCE--------" },
-  { name: "Medical",               sidc: "SFGPUCM--------" },
-  { name: "Signal / Comms",        sidc: "SFGPUCS--------" },
-  { name: "Logistics / Supply",    sidc: "SFGPUS---------" },
-  { name: "Military Police",       sidc: "SFGPUSMP-------" },
-  { name: "Electronic Warfare",    sidc: "SFGPEWG--------" },
-  { name: "Aviation (Helo)",       sidc: "SFGPUH---------" },
-  { name: "Special Operations",    sidc: "SFOPUCI--------" },
+  { name: "Cavalry / Recon", sidc: "SFGPUCR--------" },
+  { name: "Engineer", sidc: "SFGPUCE--------" },
+  { name: "Medical", sidc: "SFGPUCM--------" },
+  { name: "Signal / Comms", sidc: "SFGPUCS--------" },
+  { name: "Logistics / Supply", sidc: "SFGPUS---------" },
+  { name: "Military Police", sidc: "SFGPUSMP-------" },
+  { name: "Electronic Warfare", sidc: "SFGPEWG--------" },
+  { name: "Aviation (Helo)", sidc: "SFGPUH---------" },
 
   // ── COMMAND & INSTALLATIONS ───────────────────────────────────────────
-  { name: "Command Post / HQ",     sidc: "SFGPUCI----H---" },
-  { name: "Observation Post",      sidc: "SFGPUUI--------" },
-  { name: "Bridge",                sidc: "SFGPIB---------" },
+  { name: "Command Post / HQ", sidc: "SFGPUCI----H---" },
+  { name: "Observation Post", sidc: "SFGPUUI--------" },
+  { name: "Bridge", sidc: "SFGPIB---------" },
 
   // ── EQUIPMENT ─────────────────────────────────────────────────────────
-  { name: "Radar",                 sidc: "SFGPESR--------" },
-  { name: "Radio",                 sidc: "SFGPUUSR-------" },
+  { name: "Radar", sidc: "SFGPESR--------" },
+  { name: "Radio", sidc: "SFGPUUSR-------" },
 
   // ── AIR ───────────────────────────────────────────────────────────────
-  { name: "Fighter Aircraft",      sidc: "SFAPMF---------" },
-  { name: "Bomber Aircraft",       sidc: "SFAPWB---------" },
-  { name: "Helicopter",            sidc: "SFAPMH---------" },
-  { name: "UAV / Drone",           sidc: "SFAPWD---------" },
+  { name: "Fighter Aircraft", sidc: "SFAPMF---------" },
+  { name: "Bomber Aircraft", sidc: "SFAPWB---------" },
+  { name: "Helicopter", sidc: "SFAPMH---------" },
+  { name: "UAV / Drone", sidc: "SFAPWD---------" },
 
   // ── SEA ───────────────────────────────────────────────────────────────
-  { name: "Surface Warship",       sidc: "SFSPCP---------" },
-  { name: "Submarine",             sidc: "SFUPNA---------" },
+  { name: "Surface Warship", sidc: "SFSPCP---------" },
+  { name: "Submarine", sidc: "SFUPNA---------" },
 ];
 
 export const AFFILIATIONS = [
-  { label: "Friend",  code: "F", color: "#3b82f6" },
+  { label: "Friend", code: "F", color: "#3b82f6" },
   { label: "Hostile", code: "H", color: "#ef4444" },
   { label: "Neutral", code: "N", color: "#22c55e" },
   { label: "Unknown", code: "U", color: "#eab308" },

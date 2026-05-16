@@ -65,14 +65,14 @@ export function CustomLayerSection({
               style={{ backgroundColor: layer.color }}
             />
 
-            {/* Name — click to set as active drawing layer */}
+            {/* Name + pencil — click to activate drawing on this layer */}
             <button
               onClick={() =>
                 onSetActiveDrawingLayer(
                   activeDrawingLayerId === layer.id ? null : layer.id,
                 )
               }
-              className={`flex-1 text-left text-xs font-mono truncate transition-colors ${
+              className={`flex-1 flex items-center gap-1 text-left text-xs font-mono truncate transition-colors ${
                 activeDrawingLayerId === layer.id
                   ? "text-white"
                   : "text-slate-300 hover:text-white"
@@ -84,18 +84,22 @@ export function CustomLayerSection({
               }
               data-testid={`layer-name-${layer.id}`}
             >
-              {layer.name}
-            </button>
-
-            {/* Pencil icon when active */}
-            {activeDrawingLayerId === layer.id && (
+              <span className="truncate">{layer.name}</span>
               <span
-                className="text-[10px] text-slate-400"
-                aria-label="Active drawing layer"
+                className={`text-[10px] flex-shrink-0 transition-colors ${
+                  activeDrawingLayerId === layer.id
+                    ? "text-blue-400"
+                    : "text-slate-600 group-hover:text-slate-400"
+                }`}
+                aria-label={
+                  activeDrawingLayerId === layer.id
+                    ? "Active drawing layer"
+                    : "Click to draw"
+                }
               >
                 ✏
               </span>
-            )}
+            </button>
 
             {/* Delete */}
             <button
