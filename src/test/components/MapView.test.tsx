@@ -288,7 +288,13 @@ describe("MapView", () => {
       expect.objectContaining({ id: "aoi-fill", type: "fill" }),
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "aoi-outline-glow", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: "aoi-outline", type: "line" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "aoi-outline-outer", type: "line" }),
     );
   });
 

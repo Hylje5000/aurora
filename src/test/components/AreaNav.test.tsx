@@ -23,9 +23,9 @@ describe("AreaNav", () => {
     const lappiBtn = screen.getByRole("button", { name: "Lappi" });
     const karjalaBtn = screen.getByRole("button", { name: "Karjala" });
     // Active button has inline border/shadow styles set
-    expect(lappiBtn).toHaveStyle({ borderColor: "#ef4444" });
+    expect(lappiBtn).toHaveStyle({ borderColor: "#fde047" });
     // Inactive button has no inline borderColor
-    expect(karjalaBtn).not.toHaveStyle({ borderColor: "#ef4444" });
+    expect(karjalaBtn).not.toHaveStyle({ borderColor: "#fde047" });
   });
 
   it("calls onSelect when each button is clicked", async () => {
