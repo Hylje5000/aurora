@@ -1,53 +1,73 @@
-# Design: Historical Weather Widget
+# Design: Municipality Demographic Data Integration
 
 ## Overview
 
-Add a historical weather widget to the Aurora IPB map that shows climate statistics for the selected Area of Interest. When a region is active, a compact panel in the top-left corner displays aggregated temperature and precipitation statistics for a user-chosen calendar day, derived from 10 years of FMI station data (~3,600 daily readings per region).
+Enrich the municipality info panel — shown when a user clicks a highlighted municipality on the map — with demographic statistics from Statistics Finland (Tilastokeskus) data. The source is `data/demographic_data.json`, a GeoJSON FeatureCollection covering all 308 Finnish municipalities with 2025 population figures. Data is ingested into PostgreSQL and served through the existing `/api/municipalities` route so no new API surface is needed.
 
-Weather data is first ingested from CSV into PostgreSQL (matching the existing infrastructure data pattern), and the API route queries the DB rather than reading files at request time.
+---
 
 ## Detailed Analysis
 
 ### Source Data
 
-Three CSV files at `data/weather/{region}_weather.csv` (turku, karjala, lappi). Each row is one daily observation from a fixed FMI weather station:
+`data/demographic_data.json` — GeoJSON FeatureCollection, 308 features (all Finnish municipalities). Geometry is in **EPSG:3067** (Finnish national grid, meters). We do **not** need the geometry; only the `properties` object matters:
 
-| Column (Finnish)     | Meaning             | Notes                          |
-| -------------------- | ------------------- | ------------------------------ |
-| Havaintoasema        | Station name        | Not stored — not displayed     |
-| Vuosi                | Year                | 2016–2026                      |
-| Kuukausi             | Month               | 1–12                           |
-| Päivä                | Day                 | 1–31                           |
-| Aika                 | Time (local)        | Always 03:00, ignored          |
-| Sademäärä [mm]       | Precipitation mm    | **-1 = no rain, treated as 0** |
-| Ilman keskilämpötila | Mean temperature °C |                                |
-| Ylin lämpötila       | Max temperature °C  |                                |
-| Alin lämpötila       | Min temperature °C  |                                |
+| Property                 | Type      | Meaning                                              |
+| ------------------------ | --------- | ---------------------------------------------------- |
+| `kunta`                  | `string`  | 3-digit zero-padded municipality code — **join key** |
+| `nimi` / `namn` / `name` | `string`  | Finnish / Swedish / English names                    |
+| `til_vuosi`              | `integer` | Statistical year (2025)                              |
+| `vaesto`                 | `integer` | Total population                                     |
+| `vaesto_p`               | `float`   | Population as % of Finland total                     |
+| `miehet`                 | `integer` | Male count                                           |
+| `miehet_p`               | `float`   | Male %                                               |
+| `naiset`                 | `integer` | Female count                                         |
+| `naiset_p`               | `float`   | Female %                                             |
+| `ika_0_14`               | `integer` | Count aged 0–14                                      |
+| `ika_0_14p`              | `float`   | % aged 0–14                                          |
+| `ika_15_64`              | `integer` | Count aged 15–64                                     |
+| `ika_15_64p`             | `float`   | % aged 15–64                                         |
+| `ika_65_`                | `integer` | Count aged 65+                                       |
+| `ika_65_p`               | `float`   | % aged 65+                                           |
 
-~10 years → ~10 matching rows per calendar day per region.
+No null values in any field. The `kunta` code (e.g. `"005"`) matches the `nat_code` column already stored in the `municipalities` PostgreSQL table.
 
 ### Goal
 
-- Ingest weather observations into PostgreSQL table `weather_observations`
-- API route queries DB, aggregates by (region, month, day)
-- Stats displayed: avg mean/min/max temp with ± spread, rain probability %, avg mm on wet days
-- Widget hidden when no region selected; date picker defaults to today
+When a user clicks a municipality on the map, the info panel should show:
+
+```
+Alajärvi / Alajärvi
+  Code        005
+  Region      karjala
+  Population  8,982
+  Male        4 516 (50.3%)
+  Female      4 466 (49.7%)
+  Under 15    1 373 (15.3%)
+  Over 65     2 916 (32.5%)
+  Data year   2025
+```
 
 ### Constraints
 
-- Station name is **not** stored or displayed
-- No new npm dependencies; ingestion uses existing Python stack (psycopg2, tqdm, dotenv)
-- API route uses existing `query` helper from `src/lib/db.ts`
-- Consistent with existing dark-slate UI style
+- No new npm dependencies.
+- No new API routes — extend the existing `/api/municipalities` response.
+- Ingestion follows the existing Python pattern (`scripts/ingest_geodata.py`, `scripts/ingest_weather.py`).
+- Graceful degradation: if demographics are absent for a municipality (LEFT JOIN miss), the info panel shows only what it already shows today.
+- Tests must remain green.
+
+---
 
 ## Alternatives Considered
 
-| Approach                            | Pros                                                  | Cons                                                           | Decision   |
-| ----------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------- | ---------- |
-| DB ingest + SQL aggregate           | Fast queries, consistent with all other data, indexed | Requires ingestion step                                        | **Chosen** |
-| API route reads CSV directly        | No ingestion step                                     | Slow file I/O per request, not consistent with project pattern | Rejected   |
-| Static JSON pre-built at build time | No fetch latency                                      | Requires build script, harder to extend                        | Rejected   |
-| Bundle CSV as static import         | Simple                                                | ~300 KB added to JS, leaks raw data to client                  | Rejected   |
+| Approach                                       | Pros                                                                                              | Cons                                                                            | Decision   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------- |
+| **Ingest into DB, JOIN in API**                | Consistent with all other data; 308-row table adds negligible query overhead; easy to update data | Requires ingestion step                                                         | **Chosen** |
+| Static TS lookup module                        | Zero DB overhead; no ingestion                                                                    | Adds ~30 KB to server bundle; breaks the "data in DB" project invariant         | Rejected   |
+| New `/api/demographics?code=xxx` route         | Clean separation                                                                                  | Extra fetch per click (latency); more code surface                              | Rejected   |
+| Add columns directly to `municipalities` table | One table                                                                                         | Re-running `ingest_geodata.py` would silently drop demographics; tight coupling | Rejected   |
+
+---
 
 ## Detailed Design
 
@@ -55,192 +75,120 @@ Three CSV files at `data/weather/{region}_weather.csv` (turku, karjala, lappi). 
 
 ```mermaid
 flowchart LR
-    A["MapWithNav\n(selectedAreaId, selectedDay state)"] -->|props| B["WeatherWidget"]
-    A -->|props| C["DatePicker"]
-    B -->|"fetch /api/weather?region&month&day"| D["GET /api/weather\n(route.ts)"]
-    D -->|"SQL aggregate"| E["PostgreSQL\nweather_observations"]
-    F["ingest_weather.py"] -->|"INSERT rows"| E
-    G["data/weather/*.csv"] -->|reads| F
+    A["data/demographic_data.json"] -->|"ingest_demographics.py"| B["PostgreSQL\nmunicipality_demographics"]
+    C["GET /api/municipalities"] -->|"LEFT JOIN"| B
+    C -->|"GeoJSON + population props"| D["MapView.tsx\nmunicipalities-source"]
+    D -->|"click → f.properties"| E["InfoPanel\nwith demographics"]
 ```
 
-### Phase 0 — DB Ingestion Script
+### Phase 0 — DB Ingestion
 
-**File:** `scripts/ingest_weather.py`
+**File:** `scripts/ingest_demographics.py`
 
-Follows the same pattern as `ingest_geodata.py`:
+Follows the same pattern as `ingest_geodata.py` and `ingest_weather.py`:
 
 - Reads `.env.local` for `DATABASE_URL`
 - `--no-drop` flag for idempotent re-runs
-- `tqdm` progress bars
-- `execute_values` + per-batch commits (500 rows/batch)
+- Creates `municipality_demographics` table
+- Reads `data/demographic_data.json`, extracts only `properties` (ignores geometry)
+- Uses `execute_values` + per-batch commits (500 rows/batch)
+- `tqdm` progress bar
 
 **Table schema:**
 
 ```sql
-CREATE TABLE IF NOT EXISTS weather_observations (
-  id         SERIAL PRIMARY KEY,
-  region_id  TEXT    NOT NULL,   -- 'turku' | 'karjala' | 'lappi'
-  year       SMALLINT NOT NULL,
-  month      SMALLINT NOT NULL,
-  day        SMALLINT NOT NULL,
-  precip_mm  REAL,               -- NULL when original value was -1
-  mean_temp  REAL NOT NULL,
-  max_temp   REAL NOT NULL,
-  min_temp   REAL NOT NULL
+CREATE TABLE IF NOT EXISTS municipality_demographics (
+  nat_code       TEXT     PRIMARY KEY,
+  til_vuosi      SMALLINT NOT NULL,
+  population     INTEGER  NOT NULL,
+  male           INTEGER  NOT NULL,
+  male_pct       REAL     NOT NULL,
+  female         INTEGER  NOT NULL,
+  female_pct     REAL     NOT NULL,
+  age_0_14       INTEGER  NOT NULL,
+  age_0_14_pct   REAL     NOT NULL,
+  age_15_64      INTEGER  NOT NULL,
+  age_15_64_pct  REAL     NOT NULL,
+  age_65plus     INTEGER  NOT NULL,
+  age_65plus_pct REAL     NOT NULL
 );
-CREATE INDEX IF NOT EXISTS weather_region_month_day
-  ON weather_observations (region_id, month, day);
 ```
 
-Station name is intentionally excluded from the schema.
+No geometry is stored — municipality boundaries are already in the `municipalities` table.
 
-`-1` precipitation values are stored as `NULL` (no rain).
+### Phase 1 — API Route Update
 
-### API Route: `GET /api/weather`
+**File:** `src/app/api/municipalities/route.ts`
 
-**File:** `src/app/api/weather/route.ts`
-
-**Query params:** `region` (turku|karjala|lappi), `month` (1–12), `day` (1–31)
-
-**SQL:**
+Extend the SQL query with a `LEFT JOIN`:
 
 ```sql
 SELECT
-  COUNT(*)                                          AS sample_size,
-  AVG(mean_temp)                                    AS avg_temp,
-  AVG(min_temp)                                     AS min_temp,
-  AVG(max_temp)                                     AS max_temp,
-  AVG((max_temp - min_temp) / 2.0)                  AS temp_spread,
-  100.0 * COUNT(precip_mm) / COUNT(*)               AS rain_probability,
-  COALESCE(AVG(precip_mm), 0)                       AS avg_rain_mm
-FROM weather_observations
-WHERE region_id = $1
-  AND month     = $2
-  AND day       = $3
+  m.id, m.nat_code, m.name_fi, m.name_sv, m.aoi_id,
+  ST_AsGeoJSON(m.geom) AS geojson,
+  d.til_vuosi,
+  d.population,
+  d.male,          d.male_pct,
+  d.female,        d.female_pct,
+  d.age_0_14,      d.age_0_14_pct,
+  d.age_15_64,     d.age_15_64_pct,
+  d.age_65plus,    d.age_65plus_pct
+FROM municipalities m
+LEFT JOIN municipality_demographics d ON d.nat_code = m.nat_code
 ```
 
-`COUNT(precip_mm)` counts only non-NULL rows (rainy days), so rain probability and avg are correct automatically — no special -1 handling needed after ingestion.
+All new columns are included in the GeoJSON `properties` object. `null` values (LEFT JOIN miss — municipality boundary exists but no demographics row) pass through naturally.
 
-**Response type:**
+### Phase 2 — MapView Click Handler Update
 
-```ts
-interface WeatherStats {
-  region: string;
-  month: number;
-  day: number;
-  avgTemp: number;
-  minTemp: number;
-  maxTemp: number;
-  tempSpread: number;
-  rainProbability: number;
-  avgRainMm: number;
-  sampleSize: number;
-}
-```
+**File:** `src/components/MapView.tsx`
 
-Graceful degradation: if `DATABASE_URL` is absent or query fails, returns zeroed stats with `sampleSize: 0`.
+The `municipalities-fill` click handler builds an `InfoPanelData`. Extend it to conditionally append demographic rows when `p.population != null`:
 
-### State in `MapWithNav`
+```typescript
+const rows: [string, string | null | undefined][] = [
+  ["Code", p.nat_code as string],
+  ["Region", p.aoi_id as string],
+];
 
-```ts
-const [selectedDay, setSelectedDay] = useState<{ month: number; day: number }>(
-  () => {
-    const now = new Date();
-    return { month: now.getMonth() + 1, day: now.getDate() };
-  },
-);
-```
-
-`selectedDay` always has a value (defaults to today). The whole widget block renders only when `selectedAreaId !== null`.
-
-### New Components
-
-#### `WeatherWidget`
-
-**File:** `src/components/WeatherWidget.tsx`
-**Props:** `region: string`, `month: number`, `day: number`
-
-- Fetches `/api/weather?…` on prop changes via `useEffect`
-- Shows a loading skeleton while fetching
-- Layout:
-
-```
-🌡 12.3°C ± 4.1°   ↑17.1°  ↓7.5°
-🌧 42% chance · avg 3.2 mm on wet days
-```
-
-Styling: `absolute left-4 top-16 z-10`, dark slate card, `font-mono text-xs`, same palette as LayerPanel / InfoPanel.
-
-#### `DatePicker`
-
-**File:** `src/components/DatePicker.tsx`
-**Props:** `month: number`, `day: number`, `onChange: (month: number, day: number) => void`
-
-- Two `<select>` dropdowns: Month (Jan–Dec) and Day (1–31)
-- Days clamped to valid range for chosen month (Feb max 29)
-- Same dark-slate styling
-
-### Layout in `MapWithNav`
-
-```tsx
-{
-  selectedAreaId && (
-    <div className="absolute left-4 top-16 z-10 flex items-start gap-2">
-      <WeatherWidget
-        region={selectedAreaId}
-        month={selectedDay.month}
-        day={selectedDay.day}
-      />
-      <DatePicker
-        month={selectedDay.month}
-        day={selectedDay.day}
-        onChange={(month, day) => setSelectedDay({ month, day })}
-      />
-    </div>
+if (p.population != null) {
+  rows.push(
+    ["Population", Number(p.population).toLocaleString("fi-FI")],
+    ["Male", `${Number(p.male).toLocaleString("fi-FI")} (${p.male_pct}%)`],
+    [
+      "Female",
+      `${Number(p.female).toLocaleString("fi-FI")} (${p.female_pct}%)`,
+    ],
+    [
+      "Under 15",
+      `${Number(p.age_0_14).toLocaleString("fi-FI")} (${p.age_0_14_pct}%)`,
+    ],
+    [
+      "Over 65",
+      `${Number(p.age_65plus).toLocaleString("fi-FI")} (${p.age_65plus_pct}%)`,
+    ],
+    ["Data year", String(p.til_vuosi)],
   );
 }
+
+onInfoPanel?.({ title: name, rows });
 ```
 
-### Sequence Diagram
+`toLocaleString("fi-FI")` formats integers with Finnish thousands separators (non-breaking space).
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant MWN as MapWithNav
-    participant DP as DatePicker
-    participant WW as WeatherWidget
-    participant API as "/api/weather"
-    participant DB as PostgreSQL
-
-    U->>MWN: "selects region turku"
-    MWN->>WW: "region=turku month=5 day=16"
-    WW->>API: "GET /api/weather?region=turku&month=5&day=16"
-    API->>DB: "SELECT aggregate WHERE region=turku month=5 day=16"
-    DB-->>API: row with aggregated stats
-    API-->>WW: WeatherStats JSON
-    WW-->>U: displays stats
-
-    U->>DP: "changes month to 12 day to 1"
-    DP->>MWN: "onChange(12, 1)"
-    MWN->>WW: "month=12 day=1"
-    WW->>API: "GET /api/weather?region=turku&month=12&day=1"
-    API->>DB: "SELECT aggregate WHERE region=turku month=12 day=1"
-    DB-->>API: row
-    API-->>WW: WeatherStats JSON
-    WW-->>U: displays updated stats
-```
+---
 
 ## Summary
 
-- **Phase 0:** Python ingestion script (`scripts/ingest_weather.py`) loads CSVs → `weather_observations` table; station name excluded; `-1` precipitation stored as `NULL`
-- **Phase 1:** API route (`/api/weather`) queries DB with a single aggregate SQL, uses existing `query` helper
-- **Phase 2:** `WeatherWidget` component fetches and displays stats (no station name shown)
-- **Phase 3:** `DatePicker` component for month/day selection
-- **Phase 4:** Wire everything into `MapWithNav`; final tests and docs
+- **Phase 0:** `scripts/ingest_demographics.py` — reads `data/demographic_data.json` properties, writes 308 rows to `municipality_demographics` table; geometry ignored.
+- **Phase 1:** `/api/municipalities` LEFT JOINs `municipality_demographics`; 13 new nullable fields in GeoJSON properties.
+- **Phase 2:** `MapView.tsx` click handler conditionally renders 5 demographic rows (population, male/female split, under-15, over-65) plus data year in the existing `InfoPanel`.
+
+---
 
 ## References
 
-- FMI open data: https://www.ilmatieteenlaitos.fi/avoin-data
-- Existing ingestion pattern: `scripts/ingest_geodata.py`
-- Style reference: `src/components/LayerPanel.tsx`, `src/components/InfoPanel.tsx`
-- Next.js Route Handlers: https://nextjs.org/docs/app/building-your-application/routing/route-handlers
+- Statistics Finland open geodata: https://www.stat.fi/org/avoindata/paikkatietoaineistot_en.html
+- Existing ingestion pattern: `scripts/ingest_geodata.py`, `scripts/ingest_weather.py`
+- InfoPanel component: `src/components/InfoPanel.tsx`
+- Municipalities click handler: `src/components/MapView.tsx` ~line 1073

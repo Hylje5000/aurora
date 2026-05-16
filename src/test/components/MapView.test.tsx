@@ -608,6 +608,97 @@ describe("MapView", () => {
     expect(MockPopup).not.toHaveBeenCalled();
   });
 
+  it("includes demographic rows in InfoPanel when population data is present", async () => {
+    const onInfoPanel = vi.fn();
+    render(<MapView onInfoPanel={onInfoPanel} />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "Parainen",
+            name_sv: "Pargas",
+            nat_code: "445",
+            aoi_id: "turku",
+            population: 15600,
+            male: 7700,
+            male_pct: 49.4,
+            female: 7900,
+            female_pct: 50.6,
+            age_0_14: 2200,
+            age_0_14_pct: 14.1,
+            age_15_64: 9100,
+            age_15_64_pct: 58.3,
+            age_65plus: 4300,
+            age_65plus_pct: 27.6,
+            til_vuosi: 2025,
+          },
+        },
+      ],
+      lngLat: { lng: 22.1, lat: 60.5 },
+    });
+
+    const call = onInfoPanel.mock.calls[0][0] as {
+      title: string;
+      rows: [string, string][];
+    };
+    const rowLabels = call.rows.map(([label]) => label);
+    expect(rowLabels).toContain("Population");
+    expect(rowLabels).toContain("Male");
+    expect(rowLabels).toContain("Female");
+    expect(rowLabels).toContain("Under 15");
+    expect(rowLabels).toContain("Over 65");
+    expect(rowLabels).toContain("Data year");
+
+    const dataYearRow = call.rows.find(([label]) => label === "Data year");
+    expect(dataYearRow?.[1]).toBe("2025");
+  });
+
+  it("omits demographic rows when population is null (LEFT JOIN miss)", async () => {
+    const onInfoPanel = vi.fn();
+    render(<MapView onInfoPanel={onInfoPanel} />);
+    await fireStyleLoad();
+
+    const clickHandler = mockOn.mock.calls.find(
+      ([event, layer]) => event === "click" && layer === "municipalities-fill",
+    )?.[2] as ((e: Record<string, unknown>) => void) | undefined;
+
+    clickHandler?.({
+      features: [
+        {
+          properties: {
+            name_fi: "TestKunta",
+            name_sv: null,
+            nat_code: "999",
+            aoi_id: "lappi",
+            population: null,
+            male: null,
+            female: null,
+            age_0_14: null,
+            age_65plus: null,
+            til_vuosi: null,
+          },
+        },
+      ],
+      lngLat: { lng: 25.0, lat: 68.0 },
+    });
+
+    const call = onInfoPanel.mock.calls[0][0] as {
+      rows: [string, string][];
+    };
+    const rowLabels = call.rows.map(([label]) => label);
+    expect(rowLabels).toContain("Code");
+    expect(rowLabels).toContain("Region");
+    expect(rowLabels).not.toContain("Population");
+    expect(rowLabels).not.toContain("Under 15");
+    expect(rowLabels).not.toContain("Over 65");
+  });
+
   it("clicking municipalities-fill updates highlight source and starts animation", async () => {
     render(<MapView onInfoPanel={vi.fn()} />);
     await fireStyleLoad();

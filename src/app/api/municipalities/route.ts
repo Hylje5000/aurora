@@ -25,11 +25,32 @@ export async function GET() {
       name_sv: string | null;
       aoi_id: string;
       geojson: string;
+      til_vuosi: number | null;
+      population: number | null;
+      male: number | null;
+      male_pct: number | null;
+      female: number | null;
+      female_pct: number | null;
+      age_0_14: number | null;
+      age_0_14_pct: number | null;
+      age_15_64: number | null;
+      age_15_64_pct: number | null;
+      age_65plus: number | null;
+      age_65plus_pct: number | null;
     }>(
       `
-      SELECT id, nat_code, name_fi, name_sv, aoi_id,
-             ST_AsGeoJSON(geom) AS geojson
-      FROM municipalities
+      SELECT
+        m.id, m.nat_code, m.name_fi, m.name_sv, m.aoi_id,
+        ST_AsGeoJSON(m.geom) AS geojson,
+        d.til_vuosi,
+        d.population,
+        d.male,          d.male_pct,
+        d.female,        d.female_pct,
+        d.age_0_14,      d.age_0_14_pct,
+        d.age_15_64,     d.age_15_64_pct,
+        d.age_65plus,    d.age_65plus_pct
+      FROM municipalities m
+      LEFT JOIN municipality_demographics d ON d.nat_code = m.nat_code
       `,
     );
 
@@ -42,6 +63,18 @@ export async function GET() {
         name_fi: row.name_fi,
         name_sv: row.name_sv,
         aoi_id: row.aoi_id,
+        til_vuosi: row.til_vuosi,
+        population: row.population,
+        male: row.male,
+        male_pct: row.male_pct,
+        female: row.female,
+        female_pct: row.female_pct,
+        age_0_14: row.age_0_14,
+        age_0_14_pct: row.age_0_14_pct,
+        age_15_64: row.age_15_64,
+        age_15_64_pct: row.age_15_64_pct,
+        age_65plus: row.age_65plus,
+        age_65plus_pct: row.age_65plus_pct,
       },
     }));
 

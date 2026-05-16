@@ -1077,13 +1077,36 @@ export default function MapView({
         const name = p.name_sv
           ? `${p.name_fi} / ${p.name_sv}`
           : ((p.name_fi as string) ?? "Municipality");
-        onInfoPanel?.({
-          title: name,
-          rows: [
-            ["Code", p.nat_code as string],
-            ["Region", p.aoi_id as string],
-          ],
-        });
+
+        const rows: [string, string | null | undefined][] = [
+          ["Code", p.nat_code as string],
+          ["Region", p.aoi_id as string],
+        ];
+
+        if (p.population != null) {
+          rows.push(
+            ["Population", Number(p.population).toLocaleString("fi-FI")],
+            [
+              "Male",
+              `${Number(p.male).toLocaleString("fi-FI")} (${p.male_pct}%)`,
+            ],
+            [
+              "Female",
+              `${Number(p.female).toLocaleString("fi-FI")} (${p.female_pct}%)`,
+            ],
+            [
+              "Under 15",
+              `${Number(p.age_0_14).toLocaleString("fi-FI")} (${p.age_0_14_pct}%)`,
+            ],
+            [
+              "Over 65",
+              `${Number(p.age_65plus).toLocaleString("fi-FI")} (${p.age_65plus_pct}%)`,
+            ],
+            ["Data year", String(p.til_vuosi)],
+          );
+        }
+
+        onInfoPanel?.({ title: name, rows });
         (
           map.getSource(
             "municipality-highlight-source",

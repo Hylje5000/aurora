@@ -1,26 +1,22 @@
-# Implementation Plan: Historical Weather Widget
+# Implementation Plan: Municipality Demographic Data Integration
 
 ## Overview
 
-Adds a historical weather widget to the Aurora IPB map. Weather CSV data is ingested into PostgreSQL, queried via a new API route, and displayed in two new components (`WeatherWidget` + `DatePicker`) wired into `MapWithNav`.
+Ingests `data/demographic_data.json` into PostgreSQL, extends `/api/municipalities` with a LEFT JOIN, and updates the `MapView` click handler to display population statistics in the info panel.
 
 ---
 
 ## Phase 0 — Pre-flight & DB Ingestion Script
 
 - [x] Run all tests to ensure the project is in a good state before starting.
-  ```
-  npm test
-  ```
-- [x] Write `scripts/ingest_weather.py`:
+- [x] Write `scripts/ingest_demographics.py`:
   - Reads `.env.local` for `DATABASE_URL`
   - `--no-drop` flag for idempotent re-runs
-  - Creates `weather_observations` table (with index on `region_id, month, day`)
-  - Parses all three CSVs; converts `-1` precip to `NULL`; skips station name column
-  - Uses `execute_values` + per-batch commits (500 rows/batch) with `tqdm` progress bars
-- [x] Run the script against the dev database and confirm row counts (~10,800 rows total).
+  - Creates `municipality_demographics` table (PRIMARY KEY on `nat_code`)
+  - Reads `data/demographic_data.json`; extracts only `properties` (ignores geometry)
+  - Uses `execute_values` + per-batch commits (500 rows/batch) with `tqdm` progress bar
+- [x] Run the script against the dev database and confirm 308 rows inserted.
 - [x] After completing tasks, add any TODOs found to this plan.
-- [x] Create/modify unit tests for the ingestion script if relevant.
 - [x] Run `tsc --noEmit` and fix any TypeScript errors.
 - [x] Run `npm test` — must be green before proceeding.
 - [x] Run `prettier --write .`.
@@ -30,116 +26,60 @@ Adds a historical weather widget to the Aurora IPB map. Weather CSV data is inge
 
 ---
 
-## Phase 1 — API Route `/api/weather`
+## Phase 1 — API Route Update
 
-- [x] Create `src/app/api/weather/route.ts`:
-  - Validates `region`, `month`, `day` query params (400 on bad input)
-  - Runs single aggregate SQL query against `weather_observations`
-  - Returns `WeatherStats` JSON
-  - Graceful degradation (returns `sampleSize: 0` zeroed stats when DB is absent or query fails)
-- [x] Export the `WeatherStats` type from the route file (or a shared lib file if needed).
+- [x] Update `src/app/api/municipalities/route.ts`:
+  - Add `LEFT JOIN municipality_demographics d ON d.nat_code = m.nat_code` to the SQL query
+  - Include all demographic columns in the SELECT
+  - Include the new fields in the GeoJSON `properties` object (nullable — LEFT JOIN may miss)
 - [x] After completing tasks, add any TODOs found to this plan.
-- [x] Write unit tests in `src/test/api/weather.test.ts` covering:
-  - Valid request returns correct aggregated stats
-  - `-1` precip excluded from rain average (NULL handling)
-  - Missing params → 400
-  - Invalid region → 400
-  - DB failure → 200 with zeroed stats
+- [x] Update unit tests in `src/test/api/municipalities.test.ts`:
+  - Add test: response includes demographic fields when DB returns them
+  - Add test: demographic fields are `null` when LEFT JOIN returns no match (graceful degradation)
+  - Add test: SQL uses LEFT JOIN
 - [x] Run `tsc --noEmit` and fix any TypeScript errors.
 - [x] Run `npm test` — must be green before proceeding.
 - [x] Run `prettier --write .`.
 - [x] Re-read this file and update as needed.
 - [x] Update Journal below.
-- [x] `git diff` — present commit message for user approval.
+- [x] Present commit message for user approval. Do not commit until approved.
 
 ---
 
-## Phase 2 — `WeatherWidget` Component
+## Phase 2 — MapView Click Handler Update
 
-- [x] Create `src/components/WeatherWidget.tsx`:
-  - Props: `region: string`, `month: number`, `day: number`
-  - `useEffect` fetches `/api/weather?…` on prop change
-  - Loading state while fetching
-  - Displays: avg mean temp ± spread, avg max/min, rain probability %, avg mm on wet days
-  - Hidden/zeroed gracefully when `sampleSize === 0`
-  - Styling: dark slate card, `font-mono text-xs`, consistent with InfoPanel / LayerPanel
+- [x] Update the `municipalities-fill` click handler in `src/components/MapView.tsx`:
+  - Build base `rows` array with `Code` and `Region` as before
+  - When `p.population != null`, push demographic rows (Population, Male, Female, Under 15, Over 65, Data year)
 - [x] After completing tasks, add any TODOs found to this plan.
-- [x] Write unit tests in `src/test/components/WeatherWidget.test.tsx` covering:
-  - Renders loading state initially
-  - Displays stats after successful fetch
-  - Shows fallback when `sampleSize === 0`
-  - Refetches when props change
+- [x] Update `src/test/components/MapView.test.tsx`:
+  - Add test: clicking a municipality feature with demographic properties shows population rows in the InfoPanel
+  - Add test: clicking a municipality feature without demographic properties (null) shows only Code and Region
 - [x] Run `tsc --noEmit` and fix any TypeScript errors.
 - [x] Run `npm test` — must be green before proceeding.
 - [x] Run `prettier --write .`.
 - [x] Re-read this file and update as needed.
 - [x] Update Journal below.
-- [x] `git diff` — present commit message for user approval.
+- [x] Present commit message for user approval. Do not commit until approved.
 
 ---
 
-## Phase 3 — `DatePicker` Component
+## Phase 3 — Final Checks & Docs
 
-- [x] Create `src/components/DatePicker.tsx`:
-  - Props: `month: number`, `day: number`, `onChange: (month: number, day: number) => void`
-  - Two `<select>` dropdowns: Month (Jan–Dec) and Day (1–31)
-  - Days clamped to valid range for the chosen month (Feb max 29)
-  - When month changes and current day is out of range, clamp day to new month's max
-  - Styling: dark slate, consistent with other panels
-- [x] After completing tasks, add any TODOs found to this plan.
-- [x] Write unit tests in `src/test/components/DatePicker.test.tsx` covering:
-  - Renders correct month and day selects
-  - Calls `onChange` with correct values on month change
-  - Calls `onChange` with correct values on day change
-  - Clamps day when month changes to shorter month
-- [x] Run `tsc --noEmit` and fix any TypeScript errors.
-- [x] Run `npm test` — must be green before proceeding.
-- [x] Run `prettier --write .`.
-- [x] Re-read this file and update as needed.
-- [x] Update Journal below.
-- [x] `git diff` — present commit message for user approval.
-
----
-
-## Phase 4 — Wire into `MapWithNav` + Final Polish
-
-- [x] Add `selectedDay` state to `MapWithNav` (defaults to today's month/day).
-- [x] Render `WeatherWidget` + `DatePicker` in a `absolute left-4 top-16 z-10` container, conditional on `selectedAreaId !== null`.
-- [x] Ensure the widget resets/refetches when the selected region changes.
-- [x] After completing tasks, add any TODOs found to this plan.
-- [x] Update `MapWithNav` tests to cover the new weather widget stub and date picker stub.
-- [x] Run `tsc --noEmit` and fix any TypeScript errors.
-- [x] Run `npm test` — must be green before proceeding.
-- [x] Run `prettier --write .`.
-- [x] Re-read this file and update as needed.
-- [x] Update Journal below.
-- [x] `git diff` — present commit message for user approval.
-
----
-
-## Phase 5 — Final Checks & Docs
-
-- [ ] Run `npm run test:coverage` and record the summary in the Journal below.
-- [ ] Update `CLAUDE.md` to reflect new components, API route, DB table, and ingestion script.
+- [x] Run `npm run test:coverage` and record the summary in the Journal below.
+- [x] Update `CLAUDE.md` to reflect the new ingestion script, DB table, and API/MapView changes.
 - [ ] Ask the user to inspect the running app and confirm they are satisfied.
 
 ---
 
 ## Journal
 
-### Phase 0 (2026-05-16)
+### Phases 0–2 (2026-05-16)
 
-- Started with 248 passing tests.
-- Wrote `scripts/ingest_weather.py` following `ingest_geodata.py` pattern exactly.
-- **Surprise:** FMI CSV uses `'-'` (bare dash) as well as `'-1'` for missing values. `'-'` appears in precip and occasionally in temperature columns (station downtime). Fixed by adding `_parse_float()` helper that returns `None` for `'-'`, and skipping rows where any temperature column is missing (`NOT NULL` constraint).
-- **Surprise:** `prettier --write .` OOM-crashed trying to format large GeoJSON data files. Created `.prettierignore` with `data/` to exclude them.
-- Ingested 10,852 rows total (turku: 3,651 | karjala: 3,549 | lappi: 3,652). Slightly under the expected ~10,800 due to skipped rows with missing temperature readings.
+All three phases implemented in one session.
 
-### Phases 1–4 (2026-05-16)
-
-All phases implemented in one session:
-
-- **Phase 1:** `src/app/api/weather/route.ts` — validates params, runs aggregate SQL, exports `WeatherStats`. DB errors degrade gracefully to zeroed stats (200) rather than 500. 12 tests, 260 total.
-- **Phase 2:** `src/components/WeatherWidget.tsx` — useEffect + AbortController for clean fetch cancellation on re-render. Shows loading → stats or "No data". 6 tests, 266 total.
-- **Phase 3:** `src/components/DatePicker.tsx` — two `<select>` dropdowns, day clamped to month max, Feb capped at 29. 9 tests, 275 total.
-- **Phase 4:** `MapWithNav.tsx` wired — `selectedDay` state defaults to today, conditional render block `{selectedAreaId && ...}`, WeatherWidget refetches automatically when region changes. Added WeatherWidget + DatePicker stubs to MapWithNav tests. 4 new tests, 279 total.
+- **Phase 0:** 279 tests green at start. `scripts/ingest_demographics.py` follows the same pattern as `ingest_weather.py`. Ingested 308 rows (all Finnish municipalities, 2025 data). Used `ON CONFLICT (nat_code) DO UPDATE` for idempotent `--no-drop` runs.
+- **Phase 1:** API route updated with LEFT JOIN. 6 tests (up from 4), covering full demographics match, LEFT JOIN null miss, and SQL shape. `/api/municipalities` at 100% coverage.
+- **Phase 2:** Click handler extended conditionally — `p.population != null` guard ensures graceful degradation when demographics are absent. 2 new MapView tests (with/without demographics). 283 tests total, all passing.
+- **Coverage (283 tests):** All API routes ≥96%, `/api/municipalities` 100%, `MapView.tsx` ~83% (unchanged — branch gaps in async callbacks).
+- **No surprises.** The `kunta` code in the demographic JSON directly matches `nat_code` in the municipalities table, so no translation was needed.
