@@ -150,17 +150,59 @@ vi.mock("@/components/InfoPanel", () => ({
     data ? <div data-testid="info-panel">{data.title}</div> : null,
 }));
 
-// Stub LayerPanel — renders buttons that call onToggle
+// Stub LayerPanel — renders toggle buttons + proxies customLayerProps as the custom-layer-panel stub
 vi.mock("@/components/LayerPanel", () => ({
   default: ({
     onToggle,
+    customLayerProps,
   }: {
     visibility: LayerVisibility;
     onToggle: (key: LayerKey) => void;
+    customLayerProps?: {
+      layers: CustomLayer[];
+      enabledLayerIds: Set<string>;
+      activeDrawingLayerId: string | null;
+      onCreateLayer: (name: string, color: string) => void;
+      onDeleteLayer: (id: string) => void;
+      onToggleLayer: (id: string) => void;
+      onSetActiveDrawingLayer: (id: string | null) => void;
+    };
   }) => (
     <div data-testid="layer-panel">
       <button onClick={() => onToggle("hillshade")}>Toggle Hillshade</button>
       <button onClick={() => onToggle("terrain3d")}>Toggle Terrain</button>
+      {customLayerProps && (
+        <div
+          data-testid="custom-layer-panel"
+          data-layer-count={customLayerProps.layers.length}
+          data-enabled-count={customLayerProps.enabledLayerIds.size}
+          data-drawing-layer={customLayerProps.activeDrawingLayerId ?? ""}
+        >
+          <button
+            onClick={() =>
+              customLayerProps.onCreateLayer("Test Layer", "#ef4444")
+            }
+          >
+            CreateLayer
+          </button>
+          <button onClick={() => customLayerProps.onDeleteLayer("layer-1")}>
+            DeleteLayer
+          </button>
+          <button onClick={() => customLayerProps.onToggleLayer("layer-1")}>
+            ToggleLayer
+          </button>
+          <button
+            onClick={() => customLayerProps.onSetActiveDrawingLayer("layer-1")}
+          >
+            SetActiveLayer
+          </button>
+          <button
+            onClick={() => customLayerProps.onSetActiveDrawingLayer(null)}
+          >
+            ClearActiveLayer
+          </button>
+        </div>
+      )}
     </div>
   ),
 }));
@@ -206,46 +248,6 @@ vi.mock("@/components/DatePicker", () => ({
   ),
 }));
 
-// Stub CustomLayerPanel — exposes callbacks as buttons
-vi.mock("@/components/CustomLayerPanel", () => ({
-  default: ({
-    layers,
-    enabledLayerIds,
-    activeDrawingLayerId,
-    onCreateLayer,
-    onDeleteLayer,
-    onToggleLayer,
-    onSetActiveDrawingLayer,
-  }: {
-    layers: CustomLayer[];
-    enabledLayerIds: Set<string>;
-    activeDrawingLayerId: string | null;
-    onCreateLayer: (name: string, color: string) => void;
-    onDeleteLayer: (id: string) => void;
-    onToggleLayer: (id: string) => void;
-    onSetActiveDrawingLayer: (id: string | null) => void;
-  }) => (
-    <div
-      data-testid="custom-layer-panel"
-      data-layer-count={layers.length}
-      data-enabled-count={enabledLayerIds.size}
-      data-drawing-layer={activeDrawingLayerId ?? ""}
-    >
-      <button onClick={() => onCreateLayer("Test Layer", "#ef4444")}>
-        CreateLayer
-      </button>
-      <button onClick={() => onDeleteLayer("layer-1")}>DeleteLayer</button>
-      <button onClick={() => onToggleLayer("layer-1")}>ToggleLayer</button>
-      <button onClick={() => onSetActiveDrawingLayer("layer-1")}>
-        SetActiveLayer
-      </button>
-      <button onClick={() => onSetActiveDrawingLayer(null)}>
-        ClearActiveLayer
-      </button>
-    </div>
-  ),
-}));
-
 import MapWithNav from "@/components/MapWithNav";
 
 const LAYER: CustomLayer = {
@@ -275,7 +277,7 @@ describe("MapWithNav", () => {
     expect(container.firstChild).not.toBeNull();
   });
 
-  it("renders AreaNav, MapView, LayerPanel, CustomLayerPanel, and InfoPanel (hidden)", async () => {
+  it("renders AreaNav, MapView, LayerPanel (with custom layers section), and InfoPanel (hidden)", async () => {
     render(<MapWithNav />);
     await act(async () => {});
     expect(screen.getByTestId("area-nav")).toBeInTheDocument();
@@ -285,10 +287,13 @@ describe("MapWithNav", () => {
     expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
   });
 
-  it("starts with no area selected", async () => {
+  it("starts with turku selected by default", async () => {
     render(<MapWithNav />);
     await act(async () => {});
-    expect(screen.getByTestId("map-view")).toHaveAttribute("data-selected", "");
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-selected",
+      "turku",
+    );
   });
 
   it("propagates selected area from AreaNav to MapView", async () => {
@@ -515,11 +520,11 @@ describe("MapWithNav", () => {
     );
   });
 
-  it("does not render WeatherWidget or DatePicker when no area is selected", async () => {
+  it("renders WeatherWidget and DatePicker on initial load (turku default)", async () => {
     render(<MapWithNav />);
     await act(async () => {});
-    expect(screen.queryByTestId("weather-widget")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("date-picker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("weather-widget")).toBeInTheDocument();
+    expect(screen.getByTestId("date-picker")).toBeInTheDocument();
   });
 
   it("renders WeatherWidget and DatePicker when an area is selected", async () => {
@@ -574,27 +579,33 @@ describe("MapWithNav", () => {
 
   // ── Route planning wiring tests ───────────────────────────────────────
 
-  it("renders the Route toggle button", async () => {
+  it("renders the Plan a Route toggle button", async () => {
     render(<MapWithNav />);
     await act(async () => {});
+    const btn = screen.getByTestId("route-toggle-btn");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent("Plan a Route");
+  });
+
+  it("shows RoutePanel when Plan a Route button is clicked", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
+  });
+
+  it("hides RoutePanel and restores button when CloseRoutePanel is clicked", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("route-toggle-btn")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "CloseRoutePanel" }),
+    );
+    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
     expect(screen.getByTestId("route-toggle-btn")).toBeInTheDocument();
-  });
-
-  it("shows RoutePanel when Route button is clicked", async () => {
-    render(<MapWithNav />);
-    await act(async () => {});
-    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("route-toggle-btn"));
-    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
-  });
-
-  it("hides RoutePanel when Route button is clicked again", async () => {
-    render(<MapWithNav />);
-    await act(async () => {});
-    await userEvent.click(screen.getByTestId("route-toggle-btn"));
-    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("route-toggle-btn"));
-    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
   });
 
   it("sets addingWaypoint=true on MapView when RoutePanel starts waypoint adding", async () => {

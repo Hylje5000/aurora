@@ -62,7 +62,7 @@ export const LAYER_GROUPS: Record<LayerKey, string[]> = {
   cellLTE: ["cell-towers-lte"],
   cellCDMA: ["cell-towers-cdma"],
   cellCoverageCircles: ["coverage-circles-fill", "coverage-circles-line"],
-  roads: ["roads-line"],
+  roads: ["roads-line-casing", "roads-line"],
   bridges: ["bridges-symbol"],
   railways: ["railways-line"],
   municipalities: ["municipalities-fill", "municipalities-outline"],

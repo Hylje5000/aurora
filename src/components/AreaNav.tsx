@@ -16,18 +16,12 @@ export default function AreaNav({ selectedAreaId, onSelect }: AreaNavProps) {
           <button
             key={area.id}
             onClick={() => onSelect(area.id)}
-            style={
-              isActive
-                ? {
-                    borderColor: area.color,
-                    boxShadow: `0 0 0 2px ${area.color}`,
-                  }
-                : {}
-            }
             className={[
               "rounded px-4 py-1.5 text-sm font-semibold text-white transition-all",
               "bg-black/60 backdrop-blur-sm hover:bg-black/80",
-              isActive ? "border border-transparent" : "border border-white/30",
+              isActive
+                ? "border border-blue-400 shadow-[0_0_0_2px_#38bdf8]"
+                : "border border-white/30",
             ].join(" ")}
           >
             {area.name}

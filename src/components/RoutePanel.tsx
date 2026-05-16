@@ -35,6 +35,9 @@ interface RoutePanelProps {
   onHazardsChange?: (intel: RouteIntelligence | null) => void;
   onHazardFocus?: (hazard: RouteHazard) => void;
   onClose: () => void;
+  /** When provided, expanded state is controlled externally. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 const PROFILES: RouteProfile[] = ["driving", "walking", "cycling"];
@@ -106,6 +109,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       onHazardsChange,
       onHazardFocus,
       onClose,
+      expanded: expandedProp,
+      onExpandedChange,
     },
     ref,
   ) {
@@ -115,6 +120,20 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
+    const [panelExpandedLocal, setPanelExpandedLocal] = useState(true);
+
+    const controlledExpanded = expandedProp !== undefined;
+    const panelExpanded = controlledExpanded
+      ? expandedProp
+      : panelExpandedLocal;
+
+    function setPanelExpanded(next: boolean) {
+      if (controlledExpanded) {
+        onExpandedChange?.(next);
+      } else {
+        setPanelExpandedLocal(next);
+      }
+    }
 
     // Vehicle state — index into VEHICLE_PRESETS + editable fields
     const [presetIndex, setPresetIndex] = useState(0);
@@ -315,14 +334,23 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
     return (
       <div
-        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 w-96 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
+        className="absolute right-4 bottom-10 z-20 w-80 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
         data-testid="route-panel"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/60">
-          <span className="text-[10px] font-mono tracking-widest uppercase text-slate-400">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/60">
+          <span className="text-[10px] font-mono tracking-widest uppercase text-slate-400 flex-1">
             Route Planning
           </span>
+          <button
+            onClick={() => setPanelExpanded(!panelExpanded)}
+            aria-label={
+              panelExpanded ? "collapse route panel" : "expand route panel"
+            }
+            className="text-slate-600 hover:text-white transition-colors text-[10px]"
+          >
+            {panelExpanded ? "▾" : "▸"}
+          </button>
           <button
             onClick={onClose}
             className="text-slate-600 hover:text-white transition-colors text-xs"
@@ -332,317 +360,325 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
           </button>
         </div>
 
-        <div className="px-3 py-2 flex flex-col gap-2">
-          {/* Profile selector */}
-          <div className="flex gap-1" role="group" aria-label="Travel profile">
-            {PROFILES.map((p) => (
-              <button
-                key={p}
-                onClick={() => setProfile(p)}
-                title={profileLabel(p)}
-                aria-label={profileLabel(p)}
-                aria-pressed={profile === p}
-                className={`flex-1 text-sm rounded py-0.5 transition-colors border ${
-                  profile === p
-                    ? "bg-slate-700 text-white"
-                    : "border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-500"
-                }`}
-                style={
-                  profile === p ? { borderColor: PROFILE_COLORS[p] } : undefined
-                }
-              >
-                {PROFILE_ICONS[p]}
-              </button>
-            ))}
-          </div>
-
-          {/* Vehicle selector */}
-          <div className="flex flex-col gap-1.5 border border-slate-700/60 rounded p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                Vehicle
-              </span>
-            </div>
-            <select
-              value={presetIndex}
-              onChange={(e) => applyPreset(Number(e.target.value))}
-              className="w-full rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-200 px-1.5 py-1 focus:outline-none focus:border-slate-500"
-              aria-label="Vehicle preset"
-              data-testid="vehicle-preset-select"
+        {panelExpanded && (
+          <div className="px-3 py-2 flex flex-col gap-2">
+            {/* Profile selector */}
+            <div
+              className="flex gap-1"
+              role="group"
+              aria-label="Travel profile"
             >
-              {VEHICLE_PRESETS.map((v, i) => (
-                <option key={v.label} value={i}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-            <div className="grid grid-cols-2 gap-1.5">
-              <VehicleField
-                label="Mass"
-                unit="t"
-                value={vehicle.mass_t}
-                onChange={(v) => updateVehicleField("mass_t", v)}
-              />
-              <VehicleField
-                label="Axle"
-                unit="t"
-                value={vehicle.axle_mass_t}
-                onChange={(v) => updateVehicleField("axle_mass_t", v)}
-              />
-              <VehicleField
-                label="Bogie"
-                unit="t"
-                value={vehicle.bogie_mass_t}
-                onChange={(v) => updateVehicleField("bogie_mass_t", v)}
-              />
-              <VehicleField
-                label="Height"
-                unit="m"
-                value={vehicle.height_m}
-                onChange={(v) => updateVehicleField("height_m", v)}
-              />
-              <VehicleField
-                label="Width"
-                unit="m"
-                value={vehicle.width_m}
-                onChange={(v) => updateVehicleField("width_m", v)}
-              />
-            </div>
-          </div>
-
-          {/* Waypoint list */}
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center justify-between mb-0.5">
-              <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                Waypoints
-              </span>
-              {waypoints.length > 0 && (
+              {PROFILES.map((p) => (
                 <button
-                  onClick={handleClear}
-                  className="text-[9px] font-mono text-slate-600 hover:text-red-400 transition-colors"
-                  aria-label="Clear all waypoints"
+                  key={p}
+                  onClick={() => setProfile(p)}
+                  title={profileLabel(p)}
+                  aria-label={profileLabel(p)}
+                  aria-pressed={profile === p}
+                  className={`flex-1 text-sm rounded py-0.5 transition-colors border ${
+                    profile === p
+                      ? "bg-slate-700 text-white"
+                      : "border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-500"
+                  }`}
+                  style={
+                    profile === p
+                      ? { borderColor: PROFILE_COLORS[p] }
+                      : undefined
+                  }
                 >
-                  Clear
+                  {PROFILE_ICONS[p]}
                 </button>
-              )}
+              ))}
             </div>
 
-            {waypoints.length === 0 && (
-              <p className="text-[10px] text-slate-600 font-mono py-0.5">
-                Click &ldquo;Add Stop&rdquo; then click the map.
+            {/* Vehicle selector */}
+            <div className="flex flex-col gap-1.5 border border-slate-700/60 rounded p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                  Vehicle
+                </span>
+              </div>
+              <select
+                value={presetIndex}
+                onChange={(e) => applyPreset(Number(e.target.value))}
+                className="w-full rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-200 px-1.5 py-1 focus:outline-none focus:border-slate-500"
+                aria-label="Vehicle preset"
+                data-testid="vehicle-preset-select"
+              >
+                {VEHICLE_PRESETS.map((v, i) => (
+                  <option key={v.label} value={i}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-1.5">
+                <VehicleField
+                  label="Mass"
+                  unit="t"
+                  value={vehicle.mass_t}
+                  onChange={(v) => updateVehicleField("mass_t", v)}
+                />
+                <VehicleField
+                  label="Axle"
+                  unit="t"
+                  value={vehicle.axle_mass_t}
+                  onChange={(v) => updateVehicleField("axle_mass_t", v)}
+                />
+                <VehicleField
+                  label="Bogie"
+                  unit="t"
+                  value={vehicle.bogie_mass_t}
+                  onChange={(v) => updateVehicleField("bogie_mass_t", v)}
+                />
+                <VehicleField
+                  label="Height"
+                  unit="m"
+                  value={vehicle.height_m}
+                  onChange={(v) => updateVehicleField("height_m", v)}
+                />
+                <VehicleField
+                  label="Width"
+                  unit="m"
+                  value={vehicle.width_m}
+                  onChange={(v) => updateVehicleField("width_m", v)}
+                />
+              </div>
+            </div>
+
+            {/* Waypoint list */}
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                  Waypoints
+                </span>
+                {waypoints.length > 0 && (
+                  <button
+                    onClick={handleClear}
+                    className="text-[9px] font-mono text-slate-600 hover:text-red-400 transition-colors"
+                    aria-label="Clear all waypoints"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {waypoints.length === 0 && (
+                <p className="text-[10px] text-slate-600 font-mono py-0.5">
+                  Click &ldquo;Add Stop&rdquo; then click the map.
+                </p>
+              )}
+
+              {waypoints.map((wp, i) => (
+                <div
+                  key={wp.id}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, i)}
+                  onDragOver={(e) => handleDragOver(e, i)}
+                  onDrop={(e) => handleDrop(e, i)}
+                  onDragEnd={handleDragEnd}
+                  className={[
+                    "flex items-center gap-1.5 rounded px-0.5 py-0.5 transition-colors",
+                    dragIndex === i ? "opacity-40" : "",
+                    dragOverIndex === i && dragIndex !== i
+                      ? "border-t-2 border-blue-400"
+                      : "",
+                  ].join(" ")}
+                  data-testid={`waypoint-row-${i}`}
+                >
+                  <span
+                    className="cursor-grab text-slate-600 hover:text-slate-400 text-[11px] flex-shrink-0 leading-none"
+                    aria-hidden="true"
+                    title="Drag to reorder"
+                  >
+                    ⠿
+                  </span>
+                  <span
+                    className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
+                    style={{ backgroundColor: PROFILE_COLORS[profile] }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-[10px] font-mono text-slate-300 truncate">
+                    {wp.label}
+                  </span>
+                  <button
+                    onClick={() => removeWaypoint(wp.id)}
+                    className="text-slate-600 hover:text-red-400 transition-colors text-[9px] flex-shrink-0"
+                    aria-label={`Remove ${wp.label}`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+
+              <button
+                onClick={() => onAddingWaypointChange(true)}
+                disabled={waypoints.length >= 25}
+                className="mt-1 w-full text-[10px] font-mono text-slate-500 hover:text-white border border-slate-700/60 hover:border-slate-500 rounded py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Add stop"
+                data-testid="add-stop-btn"
+              >
+                + Add Stop
+              </button>
+            </div>
+
+            {/* Loading / error */}
+            {loading && (
+              <p
+                className="text-[10px] font-mono text-slate-400 text-center py-1"
+                data-testid="route-loading"
+              >
+                Calculating route…
+              </p>
+            )}
+            {error && !loading && (
+              <p
+                className="text-[10px] font-mono text-red-400 py-0.5"
+                data-testid="route-error"
+              >
+                {error}
               </p>
             )}
 
-            {waypoints.map((wp, i) => (
+            {/* Route summary + legs */}
+            {route && !loading && (
               <div
-                key={wp.id}
-                draggable={true}
-                onDragStart={(e) => handleDragStart(e, i)}
-                onDragOver={(e) => handleDragOver(e, i)}
-                onDrop={(e) => handleDrop(e, i)}
-                onDragEnd={handleDragEnd}
-                className={[
-                  "flex items-center gap-1.5 rounded px-0.5 py-0.5 transition-colors",
-                  dragIndex === i ? "opacity-40" : "",
-                  dragOverIndex === i && dragIndex !== i
-                    ? "border-t-2 border-blue-400"
-                    : "",
-                ].join(" ")}
-                data-testid={`waypoint-row-${i}`}
+                className="border-t border-slate-700/60 pt-1.5"
+                data-testid="route-summary"
               >
-                <span
-                  className="cursor-grab text-slate-600 hover:text-slate-400 text-[11px] flex-shrink-0 leading-none"
-                  aria-hidden="true"
-                  title="Drag to reorder"
+                <p
+                  className="text-[10px] font-mono font-semibold"
+                  style={{ color: PROFILE_COLORS[profile] }}
                 >
-                  ⠿
-                </span>
-                <span
-                  className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
-                  style={{ backgroundColor: PROFILE_COLORS[profile] }}
-                >
-                  {i + 1}
-                </span>
-                <span className="flex-1 text-[10px] font-mono text-slate-300 truncate">
-                  {wp.label}
-                </span>
-                <button
-                  onClick={() => removeWaypoint(wp.id)}
-                  className="text-slate-600 hover:text-red-400 transition-colors text-[9px] flex-shrink-0"
-                  aria-label={`Remove ${wp.label}`}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                  {formatDistance(route.total_distance_m)} ·{" "}
+                  {formatDuration(route.total_duration_s)}
+                </p>
 
-            <button
-              onClick={() => onAddingWaypointChange(true)}
-              disabled={waypoints.length >= 25}
-              className="mt-1 w-full text-[10px] font-mono text-slate-500 hover:text-white border border-slate-700/60 hover:border-slate-500 rounded py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Add stop"
-              data-testid="add-stop-btn"
-            >
-              + Add Stop
-            </button>
-          </div>
-
-          {/* Loading / error */}
-          {loading && (
-            <p
-              className="text-[10px] font-mono text-slate-400 text-center py-1"
-              data-testid="route-loading"
-            >
-              Calculating route…
-            </p>
-          )}
-          {error && !loading && (
-            <p
-              className="text-[10px] font-mono text-red-400 py-0.5"
-              data-testid="route-error"
-            >
-              {error}
-            </p>
-          )}
-
-          {/* Route summary + legs */}
-          {route && !loading && (
-            <div
-              className="border-t border-slate-700/60 pt-1.5"
-              data-testid="route-summary"
-            >
-              <p
-                className="text-[10px] font-mono font-semibold"
-                style={{ color: PROFILE_COLORS[profile] }}
-              >
-                {formatDistance(route.total_distance_m)} ·{" "}
-                {formatDuration(route.total_duration_s)}
-              </p>
-
-              <div className="flex flex-col gap-0.5 mt-1 max-h-32 overflow-y-auto">
-                {route.legs.map((leg, i) => (
-                  <div key={i}>
-                    <button
-                      onClick={() =>
-                        setExpandedLeg(expandedLeg === i ? null : i)
-                      }
-                      className="flex items-center gap-1 text-left text-[10px] font-mono text-slate-400 hover:text-white transition-colors w-full"
-                      aria-expanded={expandedLeg === i}
-                      aria-label={`Toggle leg ${i + 1} steps`}
-                      data-testid={`leg-toggle-${i}`}
-                    >
-                      <span className="text-[8px]">
-                        {expandedLeg === i ? "▼" : "▶"}
-                      </span>
-                      <span>
-                        Leg {i + 1} — {formatDistance(leg.distance_m)} /{" "}
-                        {formatDuration(leg.duration_s)}
-                      </span>
-                    </button>
-                    {expandedLeg === i && (
-                      <div
-                        className="ml-3 flex flex-col gap-0.5 mt-0.5"
-                        data-testid={`leg-steps-${i}`}
+                <div className="flex flex-col gap-0.5 mt-1 max-h-32 overflow-y-auto">
+                  {route.legs.map((leg, i) => (
+                    <div key={i}>
+                      <button
+                        onClick={() =>
+                          setExpandedLeg(expandedLeg === i ? null : i)
+                        }
+                        className="flex items-center gap-1 text-left text-[10px] font-mono text-slate-400 hover:text-white transition-colors w-full"
+                        aria-expanded={expandedLeg === i}
+                        aria-label={`Toggle leg ${i + 1} steps`}
+                        data-testid={`leg-toggle-${i}`}
                       >
-                        {leg.steps.map((step, j) => (
-                          <p
-                            key={j}
-                            className="text-[9px] font-mono text-slate-500 leading-relaxed"
+                        <span className="text-[8px]">
+                          {expandedLeg === i ? "▼" : "▶"}
+                        </span>
+                        <span>
+                          Leg {i + 1} — {formatDistance(leg.distance_m)} /{" "}
+                          {formatDuration(leg.duration_s)}
+                        </span>
+                      </button>
+                      {expandedLeg === i && (
+                        <div
+                          className="ml-3 flex flex-col gap-0.5 mt-0.5"
+                          data-testid={`leg-steps-${i}`}
+                        >
+                          {leg.steps.map((step, j) => (
+                            <p
+                              key={j}
+                              className="text-[9px] font-mono text-slate-500 leading-relaxed"
+                            >
+                              • {step.instruction}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Route Assessment */}
+            {route && !loading && (
+              <div
+                className="border-t border-slate-700/60 pt-1.5 flex flex-col gap-1"
+                data-testid="route-assessment"
+              >
+                <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
+                  Route Assessment
+                </span>
+
+                {intelligenceLoading && (
+                  <p
+                    className="text-[9px] font-mono text-slate-500"
+                    data-testid="intel-loading"
+                  >
+                    Analysing route…
+                  </p>
+                )}
+
+                {!intelligenceLoading && intelligence && (
+                  <>
+                    {/* Summary line */}
+                    {intelligence.summary.passable ? (
+                      <p
+                        className="text-[10px] font-mono font-semibold text-green-400"
+                        data-testid="assessment-passable"
+                      >
+                        ✓ Route passable ({vehicle.label})
+                        {intelligence.summary.warning > 0 ||
+                        intelligence.summary.info > 0
+                          ? ` · ${intelligence.summary.warning + intelligence.summary.info} notice${intelligence.summary.warning + intelligence.summary.info > 1 ? "s" : ""}`
+                          : ""}
+                      </p>
+                    ) : (
+                      <p
+                        className="text-[10px] font-mono font-semibold text-red-400"
+                        data-testid="assessment-impassable"
+                      >
+                        ✗ IMPASSABLE — {intelligence.summary.critical} critical
+                        hazard{intelligence.summary.critical > 1 ? "s" : ""}
+                      </p>
+                    )}
+
+                    {/* Hazard list */}
+                    {intelligence.hazards.length > 0 && (
+                      <div
+                        className="flex flex-col gap-0.5 max-h-48 overflow-y-auto"
+                        data-testid="hazard-list"
+                      >
+                        {intelligence.hazards.map((hazard) => (
+                          <button
+                            key={hazard.id}
+                            onClick={() => onHazardFocus?.(hazard)}
+                            className={[
+                              "flex items-start gap-1.5 text-left rounded px-1.5 py-1 transition-colors w-full",
+                              SEVERITY_BG[hazard.severity],
+                            ].join(" ")}
+                            data-testid={`hazard-row-${hazard.id}`}
                           >
-                            • {step.instruction}
-                          </p>
+                            <span
+                              className="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
+                              style={{
+                                backgroundColor:
+                                  SEVERITY_COLOR[hazard.severity],
+                              }}
+                              aria-hidden="true"
+                            />
+                            <span className="text-[9px] font-mono text-slate-300 leading-relaxed">
+                              {hazard.message}
+                            </span>
+                          </button>
                         ))}
                       </div>
                     )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  </>
+                )}
 
-          {/* Route Assessment */}
-          {route && !loading && (
-            <div
-              className="border-t border-slate-700/60 pt-1.5 flex flex-col gap-1"
-              data-testid="route-assessment"
-            >
-              <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
-                Route Assessment
-              </span>
+                {!intelligenceLoading && !intelligence && (
+                  <p className="text-[9px] font-mono text-slate-600">
+                    No infrastructure data available.
+                  </p>
+                )}
 
-              {intelligenceLoading && (
-                <p
-                  className="text-[9px] font-mono text-slate-500"
-                  data-testid="intel-loading"
-                >
-                  Analysing route…
-                </p>
-              )}
-
-              {!intelligenceLoading && intelligence && (
-                <>
-                  {/* Summary line */}
-                  {intelligence.summary.passable ? (
-                    <p
-                      className="text-[10px] font-mono font-semibold text-green-400"
-                      data-testid="assessment-passable"
-                    >
-                      ✓ Route passable ({vehicle.label})
-                      {intelligence.summary.warning > 0 ||
-                      intelligence.summary.info > 0
-                        ? ` · ${intelligence.summary.warning + intelligence.summary.info} notice${intelligence.summary.warning + intelligence.summary.info > 1 ? "s" : ""}`
-                        : ""}
-                    </p>
-                  ) : (
-                    <p
-                      className="text-[10px] font-mono font-semibold text-red-400"
-                      data-testid="assessment-impassable"
-                    >
-                      ✗ IMPASSABLE — {intelligence.summary.critical} critical
-                      hazard{intelligence.summary.critical > 1 ? "s" : ""}
-                    </p>
-                  )}
-
-                  {/* Hazard list */}
-                  {intelligence.hazards.length > 0 && (
-                    <div
-                      className="flex flex-col gap-0.5 max-h-48 overflow-y-auto"
-                      data-testid="hazard-list"
-                    >
-                      {intelligence.hazards.map((hazard) => (
-                        <button
-                          key={hazard.id}
-                          onClick={() => onHazardFocus?.(hazard)}
-                          className={[
-                            "flex items-start gap-1.5 text-left rounded px-1.5 py-1 transition-colors w-full",
-                            SEVERITY_BG[hazard.severity],
-                          ].join(" ")}
-                          data-testid={`hazard-row-${hazard.id}`}
-                        >
-                          <span
-                            className="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
-                            style={{
-                              backgroundColor: SEVERITY_COLOR[hazard.severity],
-                            }}
-                            aria-hidden="true"
-                          />
-                          <span className="text-[9px] font-mono text-slate-300 leading-relaxed">
-                            {hazard.message}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {!intelligenceLoading && !intelligence && (
-                <p className="text-[9px] font-mono text-slate-600">
-                  No infrastructure data available.
-                </p>
-              )}
-
-              {/* COMMS Coverage */}
+                {/* COMMS Coverage */}
               {!intelligenceLoading && (
                 <div
                   className="border-t border-slate-700/40 pt-1.5 mt-0.5"
@@ -704,7 +740,9 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             </div>
           )}
         </div>
+        )}
       </div>
+
     );
   },
 );

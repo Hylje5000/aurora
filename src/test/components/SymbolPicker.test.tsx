@@ -12,7 +12,7 @@ vi.mock("milsymbol", () => ({
 }));
 
 describe("SymbolPicker", () => {
-  const defaultSidc = "SFG-UCI--------"; // Infantry Friend
+  const defaultSidc = "SFGPUCI--------"; // Infantry Friend Present
 
   it("renders with initial SIDC and affiliation", () => {
     render(<SymbolPicker selectedSidc={defaultSidc} onChange={() => {}} />);
@@ -39,7 +39,7 @@ describe("SymbolPicker", () => {
     fireEvent.click(screen.getByText("Hostile"));
 
     // Position 2 changed from F to H
-    expect(onChange).toHaveBeenCalledWith("SHG-UCI--------");
+    expect(onChange).toHaveBeenCalledWith("SHGPUCI--------");
   });
 
   it("calls onChange when a new symbol is selected", () => {
@@ -48,19 +48,18 @@ describe("SymbolPicker", () => {
 
     fireEvent.click(screen.getByText("Armor / Tank"));
 
-    // Base SIDC for Armor is SFG-UCV--------
-    // It should keep the current affiliation (F)
-    expect(onChange).toHaveBeenCalledWith("SFG-UCV--------");
+    // Keeps current affiliation (F) and status (P) from the base SIDC
+    expect(onChange).toHaveBeenCalledWith("SFGPUCV--------");
   });
 
   it("maintains current affiliation when switching symbols", () => {
     const onChange = vi.fn();
-    const hostileInfantry = "SHG-UCI--------";
+    const hostileInfantry = "SHGPUCI--------";
     render(<SymbolPicker selectedSidc={hostileInfantry} onChange={onChange} />);
 
     fireEvent.click(screen.getByText("Armor / Tank"));
 
-    // Should result in Hostile Armor
-    expect(onChange).toHaveBeenCalledWith("SHG-UCV--------");
+    // Should result in Hostile Armor Present
+    expect(onChange).toHaveBeenCalledWith("SHGPUCV--------");
   });
 });

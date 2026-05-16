@@ -320,12 +320,9 @@ describe("MapView", () => {
     );
   });
 
-  it("adds NavigationControl and MapboxDraw on mount", () => {
+  it("adds MapboxDraw control on mount", () => {
     render(<MapView />);
     expect(MockMapboxDraw).toHaveBeenCalledTimes(1);
-    expect(mockAddControl).toHaveBeenCalledWith(
-      expect.any(MockNavigationControl),
-    );
   });
 
   it("calls map.remove() on unmount", () => {
@@ -1123,7 +1120,7 @@ describe("MapView", () => {
       expect.objectContaining({ type: "geojson" }),
     );
     expect(mockAddLayer).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "route-line", type: "line", slot: "top" }),
+      expect.objectContaining({ id: "route-line", type: "line" }),
     );
   });
 
@@ -1235,7 +1232,7 @@ describe("MapView", () => {
     expect(mockSetPaintProperty).toHaveBeenCalledWith(
       "route-line",
       "line-color",
-      "#22c55e",
+      "#4ade80",
     );
   });
 

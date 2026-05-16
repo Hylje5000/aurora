@@ -95,4 +95,15 @@ describe("DatePicker", () => {
     }) as HTMLSelectElement;
     expect(daySelect.options.length).toBe(30);
   });
+
+  it("bare=true renders selects without the outer panel wrapper", () => {
+    const { container } = render(
+      <DatePicker bare month={5} day={16} onChange={vi.fn()} />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root?.className).not.toContain("rounded-lg");
+    expect(root?.className).not.toContain("border");
+    expect(screen.getByRole("combobox", { name: "Month" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Day" })).toBeInTheDocument();
+  });
 });

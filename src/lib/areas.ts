@@ -17,7 +17,7 @@ export const AREAS_OF_INTEREST: AreaOfInterest[] = [
     name: "Lappi",
     bbox: [20.500488, 68.114293, 23.708496, 69.388049],
     center: [22.104492, 68.751171],
-    color: "#ef4444",
+    color: "#f87171",
     description:
       "Northern Lapland — sparse road network, extreme weather conditions, border zone with Norway and Sweden. " +
       "Key features: E8/E75 highway corridors, Saariselkä highlands, Inari lake system, Ivalo airfield.",
@@ -37,7 +37,7 @@ export const AREAS_OF_INTEREST: AreaOfInterest[] = [
     name: "Turku",
     bbox: [21.09375, 59.76746, 23.115234, 60.565379],
     center: [22.104492, 60.166419],
-    color: "#22c55e",
+    color: "#4ade80",
     description:
       "Archipelago Sea / Turku region — maritime chokepoints, island chains, critical ferry routes. " +
       "Key features: Turku port and logistics node, Archipelago Sea national park, Stockholm and Tallinn ferry links, coastal bridge network.",

@@ -308,7 +308,7 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "line-color": ["get", "color"],
-      "line-width": 4,
+      "line-width": 5,
     },
   });
 
@@ -324,7 +324,7 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "circle-color": ["get", "color"],
-      "circle-radius": 10,
+      "circle-radius": 11,
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 2.5,
     },
@@ -348,13 +348,18 @@ function addCustomLayerSourcesToMap(
   });
 }
 
-function registerCustomLayerClickHandlers(map: mapboxgl.Map, layerId: string) {
+function registerCustomLayerClickHandlers(
+  map: mapboxgl.Map,
+  layerId: string,
+  addingWaypointRef: { current: boolean },
+) {
   const sourceId = `custom-layer-${layerId}`;
 
   for (const suffix of ["-fill", "-line", "-circle", "-symbol"]) {
     const fullId = `${sourceId}${suffix}`;
 
     map.on("click", fullId, (e) => {
+      if (addingWaypointRef.current) return;
       const feature = e.features?.[0];
       if (!feature?.properties) return;
       const { name, description } = feature.properties as {
@@ -488,6 +493,10 @@ export default function MapView({
   const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const elevationPopupRef = useRef<mapboxgl.Popup | null>(null);
 
+  // Always-current ref for onInfoPanel — style.load closure would otherwise capture stale prop
+  const onInfoPanelRef = useRef(onInfoPanel);
+  onInfoPanelRef.current = onInfoPanel;
+
   // Route layer refs
   const addingWaypointRef = useRef(addingWaypoint);
   const onWaypointClickRef = useRef(onWaypointClick);
@@ -530,8 +539,6 @@ export default function MapView({
       zoom,
     });
 
-    mapRef.current.addControl(new mapboxgl.NavigationControl());
-
     // Initialise Draw control
     const draw = new MapboxDraw({
       displayControlsDefault: false,
@@ -570,20 +577,20 @@ export default function MapView({
         type: "fill",
         source: "aoi-source",
         paint: {
-          "fill-color": ["get", "color"],
-          "fill-opacity": 0.4,
+          "fill-color": "#38bdf8",
+          "fill-opacity": 0.06,
         },
       });
-      // Glow layer for maximum visibility
+      // Glow layer for visibility
       map.addLayer({
         id: "aoi-outline-glow",
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": ["get", "color"],
-          "line-width": 12,
-          "line-blur": 5,
-          "line-opacity": 0.6,
+          "line-color": "#38bdf8",
+          "line-width": 16,
+          "line-blur": 6,
+          "line-opacity": 0.7,
         },
       });
       map.addLayer({
@@ -591,7 +598,7 @@ export default function MapView({
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": "#ffffff", // Pure white inner line for high contrast
+          "line-color": "#ffffff",
           "line-width": 2,
         },
       });
@@ -600,9 +607,8 @@ export default function MapView({
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": ["get", "color"],
+          "line-color": "#38bdf8",
           "line-width": 6,
-          "line-offset": 0,
         },
       });
 
@@ -624,10 +630,11 @@ export default function MapView({
         id: "cell-towers-clusters",
         type: "circle",
         source: "cell-towers-source",
+        slot: "top",
         filter: ["has", "point_count"],
         layout: { visibility: clustersVisible ? "visible" : "none" },
         paint: {
-          "circle-color": "#94a3b8",
+          "circle-color": "#f97316",
           "circle-radius": [
             "step",
             ["get", "point_count"],
@@ -638,6 +645,8 @@ export default function MapView({
             24,
           ],
           "circle-opacity": 0.85,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
         },
       });
 
@@ -646,6 +655,7 @@ export default function MapView({
         id: "cell-towers-cluster-count",
         type: "symbol",
         source: "cell-towers-source",
+        slot: "top",
         filter: ["has", "point_count"],
         layout: {
           visibility: clustersVisible ? "visible" : "none",
@@ -704,6 +714,7 @@ export default function MapView({
           id,
           type: "symbol",
           source: "cell-towers-source",
+          slot: "top",
           filter: [
             "all",
             ["!", ["has", "point_count"]],
@@ -729,6 +740,7 @@ export default function MapView({
       if (!eventsAttachedRef.current) {
         for (const layerId of TOWER_LAYER_IDS) {
           map.on("click", layerId, (e) => {
+            if (addingWaypointRef.current) return;
             const feature = e.features?.[0];
             if (!feature) return;
             const { radio, aoi_id, range_m, avg_signal } =
@@ -806,7 +818,7 @@ export default function MapView({
           enabledCustomLayerIdsRef.current.has(layer.id),
           registeredCustomLayerIdsRef.current,
         );
-        registerCustomLayerClickHandlers(map, layer.id);
+        registerCustomLayerClickHandlers(map, layer.id, addingWaypointRef);
         if (enabledCustomLayerIdsRef.current.has(layer.id)) {
           void fetchCustomLayerFeatures(map, layer.id);
         }
@@ -833,11 +845,11 @@ export default function MapView({
         slot: "bottom",
         layout: { visibility: vis.hillshade ? "visible" : "none" },
         paint: {
-          "hillshade-exaggeration": 0.3,
+          "hillshade-exaggeration": 0.15,
           "hillshade-illumination-direction": 335,
-          "hillshade-shadow-color": "#253545",
-          "hillshade-highlight-color": "#7aaabf",
-          "hillshade-accent-color": "#1a2a38",
+          "hillshade-shadow-color": "#1e3040",
+          "hillshade-highlight-color": "#8ab8cc",
+          "hillshade-accent-color": "#1e3040",
         },
       });
 
@@ -853,15 +865,15 @@ export default function MapView({
             "match",
             ["get", "class"],
             "wood",
-            "rgba(50,180,90,0.38)",
+            "rgba(80,200,110,0.18)",
             "scrub",
-            "rgba(110,170,50,0.28)",
+            "rgba(140,195,80,0.13)",
             "grass",
-            "rgba(130,200,70,0.20)",
+            "rgba(160,220,100,0.10)",
             "crop",
-            "rgba(160,210,80,0.20)",
+            "rgba(180,230,110,0.10)",
             "snow",
-            "rgba(210,235,255,0.30)",
+            "rgba(210,235,255,0.12)",
             "rgba(0,0,0,0)",
           ],
         },
@@ -968,6 +980,16 @@ export default function MapView({
       });
       // slot:"top" renders above Standard style night-mode color pipeline
       map.addLayer({
+        id: "municipality-highlight-fill",
+        type: "fill",
+        source: "municipality-highlight-source",
+        slot: "top",
+        paint: {
+          "fill-color": "#ffffff",
+          "fill-opacity": 0.08,
+        },
+      });
+      map.addLayer({
         id: "municipality-highlight-line",
         type: "line",
         source: "municipality-highlight-source",
@@ -993,6 +1015,19 @@ export default function MapView({
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
+      // Dark halo casing renders below the colour line for contrast
+      map.addLayer({
+        id: "roads-line-casing",
+        type: "line",
+        minzoom: 12,
+        source: "roads-source",
+        layout: { visibility: vis.roads ? "visible" : "none" },
+        paint: {
+          "line-color": "#0f172a",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2, 14, 4],
+          "line-opacity": 0.45,
+        },
+      });
       map.addLayer({
         id: "roads-line",
         type: "line",
@@ -1012,10 +1047,10 @@ export default function MapView({
             "#22c55e",
             ["==", ["get", "condition_class"], 5],
             "#22c55e",
-            "#64748b",
+            "#94a3b8",
           ],
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 14, 3],
-          "line-opacity": 0.8,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 14, 2.5],
+          "line-opacity": 0.6,
         },
       });
 
@@ -1054,13 +1089,14 @@ export default function MapView({
         layout: { visibility: vis.railways ? "visible" : "none" },
         paint: {
           "line-color": "#a78bfa",
-          "line-width": 2,
-          "line-dasharray": [2, 2],
+          "line-width": 3,
+          "line-dasharray": [4, 2],
         },
       });
 
       // Click popups for infrastructure layers
       map.on("click", "roads-line", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1110,6 +1146,7 @@ export default function MapView({
       });
 
       map.on("click", "bridges-symbol", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1152,6 +1189,7 @@ export default function MapView({
       });
 
       map.on("click", "railways-line", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1176,6 +1214,7 @@ export default function MapView({
       });
 
       map.on("click", "municipalities-fill", (e) => {
+        if (addingWaypointRef.current) return;
         const f = e.features?.[0];
         if (!f) return;
         const p = f.properties as Record<string, unknown>;
@@ -1216,7 +1255,7 @@ export default function MapView({
           ? (JSON.parse(rawElection) as Record<string, number>)
           : null;
 
-        onInfoPanel?.({
+        onInfoPanelRef.current?.({
           title: name,
           rows,
           component: electionData ? (
@@ -1403,16 +1442,28 @@ export default function MapView({
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
+      // No slot — non-slotted layers render above slot:"top" layers in Standard style,
+      // so route must be slotless and added after roads to win the z-order battle.
+      map.addLayer({
+        id: "route-line-outline",
+        type: "line",
+        source: "route-source",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 28,
+          "line-opacity": 0.4,
+        },
+      });
       map.addLayer({
         id: "route-line",
         type: "line",
         source: "route-source",
-        slot: "top",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": PROFILE_COLORS["driving"],
-          "line-width": 5,
-          "line-opacity": 0.9,
+          "line-width": 16,
+          "line-opacity": 1.0,
         },
       });
 
@@ -1425,39 +1476,36 @@ export default function MapView({
         id: "route-hazards-info",
         type: "circle",
         source: "route-hazards-source",
-        slot: "top",
         filter: ["==", ["get", "severity"], "info"],
         paint: {
           "circle-color": "#94a3b8",
-          "circle-radius": 5,
+          "circle-radius": 7,
           "circle-stroke-color": "#fff",
-          "circle-stroke-width": 1,
+          "circle-stroke-width": 1.5,
         },
       });
       map.addLayer({
         id: "route-hazards-warning",
         type: "circle",
         source: "route-hazards-source",
-        slot: "top",
         filter: ["==", ["get", "severity"], "warning"],
         paint: {
-          "circle-color": "#eab308",
-          "circle-radius": 6,
+          "circle-color": "#f97316",
+          "circle-radius": 9,
           "circle-stroke-color": "#fff",
-          "circle-stroke-width": 1,
+          "circle-stroke-width": 2,
         },
       });
       map.addLayer({
         id: "route-hazards-critical",
         type: "circle",
         source: "route-hazards-source",
-        slot: "top",
         filter: ["==", ["get", "severity"], "critical"],
         paint: {
-          "circle-color": "#ef4444",
-          "circle-radius": 8,
+          "circle-color": "#ff2d2d",
+          "circle-radius": 11,
           "circle-stroke-color": "#fff",
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 2.5,
         },
       });
 
@@ -1489,13 +1537,13 @@ export default function MapView({
         id: "coverage-circles-fill",
         type: "fill",
         source: "coverage-circles-source",
-        slot: "bottom",
+        slot: "middle",
         layout: {
           visibility: DEFAULT_LAYER_VISIBILITY.cellCoverageCircles
             ? "visible"
             : "none",
         },
-        paint: { "fill-color": "#3b82f6", "fill-opacity": 0.07 },
+        paint: { "fill-color": "#f97316", "fill-opacity": 0.15 },
       });
       map.addLayer({
         id: "coverage-circles-line",
@@ -1508,9 +1556,9 @@ export default function MapView({
             : "none",
         },
         paint: {
-          "line-color": "#3b82f6",
-          "line-width": 1,
-          "line-opacity": 0.3,
+          "line-color": "#f97316",
+          "line-width": 1.5,
+          "line-opacity": 0.55,
         },
       });
 
@@ -1638,7 +1686,7 @@ export default function MapView({
         registeredCustomLayerIdsRef.current,
       );
       if (isNew) {
-        registerCustomLayerClickHandlers(map, layer.id);
+        registerCustomLayerClickHandlers(map, layer.id, addingWaypointRef);
         if (enabledCustomLayerIdsRef.current.has(layer.id)) {
           void fetchCustomLayerFeatures(map, layer.id);
         }

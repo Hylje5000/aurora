@@ -4,11 +4,11 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import AreaNav from "./AreaNav";
 import MapView from "./MapView";
 import LayerPanel from "./LayerPanel";
-import CustomLayerPanel from "./CustomLayerPanel";
 import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
 import DatePicker from "./DatePicker";
 import RoutePanel, { type RoutePanelHandle } from "./RoutePanel";
+import { AREAS_OF_INTEREST } from "@/lib/areas";
 import {
   DEFAULT_LAYER_VISIBILITY,
   type LayerKey,
@@ -24,7 +24,7 @@ import type {
 } from "@/lib/routing";
 
 export default function MapWithNav() {
-  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>("turku");
   const [selectedDay, setSelectedDay] = useState<{
     month: number;
     day: number;
@@ -46,6 +46,10 @@ export default function MapWithNav() {
     null,
   );
 
+  // Panel collapse coordination
+  const [infoPanelCollapsed, setInfoPanelCollapsed] = useState(false);
+  const [routePanelExpanded, setRoutePanelExpanded] = useState(true);
+
   // Route planning state
   const [routePanelOpen, setRoutePanelOpen] = useState(false);
   const [plannedRoute, setPlannedRoute] = useState<PlannedRoute | null>(null);
@@ -58,6 +62,15 @@ export default function MapWithNav() {
   const [routeIntelligence, setRouteIntelligence] =
     useState<RouteIntelligence | null>(null);
   const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
+
+  // Whenever infoPanelData becomes non-null (any municipality/elevation click),
+  // guarantee the panel is uncollapsed and route panel is collapsed.
+  useEffect(() => {
+    if (infoPanelData) {
+      setInfoPanelCollapsed(false);
+      setRoutePanelExpanded(false);
+    }
+  }, [infoPanelData]);
 
   // Fetch all custom layers on mount
   useEffect(() => {
@@ -100,6 +113,26 @@ export default function MapWithNav() {
       }
     } catch {
       // graceful degradation — no DB
+    }
+  }
+
+  function handleInfoPanel(data: InfoPanelData | null) {
+    setInfoPanelData(data);
+  }
+
+  function handleInfoPanelCollapsedChange(collapsed: boolean) {
+    setInfoPanelCollapsed(collapsed);
+    if (!collapsed) {
+      // Expanding info panel → collapse route panel
+      setRoutePanelExpanded(false);
+    }
+  }
+
+  function handleRoutePanelExpandedChange(expanded: boolean) {
+    setRoutePanelExpanded(expanded);
+    if (expanded) {
+      // Expanding route panel → collapse info panel
+      setInfoPanelCollapsed(true);
     }
   }
 
@@ -149,21 +182,21 @@ export default function MapWithNav() {
     <div className="relative w-full h-full">
       <AreaNav selectedAreaId={selectedAreaId} onSelect={setSelectedAreaId} />
 
-      {/* Route toggle button */}
-      <button
-        onClick={() => setRoutePanelOpen((o) => !o)}
-        className={[
-          "absolute top-4 right-20 z-10 rounded px-3 py-1.5 text-sm font-semibold text-white transition-all",
-          "bg-black/60 backdrop-blur-sm hover:bg-black/80",
-          routePanelOpen
-            ? "border border-blue-400 shadow-[0_0_0_2px_#60a5fa]"
-            : "border border-white/30",
-        ].join(" ")}
-        aria-label="Toggle route planning panel"
-        data-testid="route-toggle-btn"
-      >
-        Route
-      </button>
+      {/* Route toggle button — only shown when RoutePanel is not mounted */}
+      {!routePanelOpen && (
+        <button
+          onClick={() => {
+            setRoutePanelOpen(true);
+            setRoutePanelExpanded(true);
+            setInfoPanelCollapsed(true);
+          }}
+          className="absolute bottom-10 right-4 z-10 rounded-lg px-4 py-2 text-sm font-bold tracking-wide text-white bg-blue-600 hover:bg-blue-700 border border-blue-500 transition-all backdrop-blur-sm"
+          aria-label="Toggle route planning panel"
+          data-testid="route-toggle-btn"
+        >
+          Plan a Route
+        </button>
+      )}
 
       <MapView
         selectedAreaId={selectedAreaId}
@@ -172,7 +205,7 @@ export default function MapWithNav() {
         enabledCustomLayerIds={enabledCustomLayerIds}
         activeDrawingLayerId={activeDrawingLayerId}
         onCancelDrawing={() => setActiveDrawingLayerId(null)}
-        onInfoPanel={setInfoPanelData}
+        onInfoPanel={handleInfoPanel}
         infoPanelOpen={infoPanelData !== null}
         plannedRoute={plannedRoute}
         routeProfile={routeProfile}
@@ -183,15 +216,18 @@ export default function MapWithNav() {
         routeCoverageGaps={routeIntelligence?.coverage?.gap_geometry ?? null}
         focusedHazard={focusedHazard}
       />
-      <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
-      <CustomLayerPanel
-        layers={customLayers}
-        enabledLayerIds={enabledCustomLayerIds}
-        activeDrawingLayerId={activeDrawingLayerId}
-        onCreateLayer={handleCreateLayer}
-        onDeleteLayer={handleDeleteLayer}
-        onToggleLayer={handleToggleLayer}
-        onSetActiveDrawingLayer={setActiveDrawingLayerId}
+      <LayerPanel
+        visibility={layerVisibility}
+        onToggle={handleToggle}
+        customLayerProps={{
+          layers: customLayers,
+          enabledLayerIds: enabledCustomLayerIds,
+          activeDrawingLayerId,
+          onCreateLayer: handleCreateLayer,
+          onDeleteLayer: handleDeleteLayer,
+          onToggleLayer: handleToggleLayer,
+          onSetActiveDrawingLayer: setActiveDrawingLayerId,
+        }}
       />
       {routePanelOpen && (
         <RoutePanel
@@ -200,6 +236,8 @@ export default function MapWithNav() {
           onRouteChange={handleRouteChange}
           onHazardsChange={handleHazardsChange}
           onHazardFocus={handleHazardFocus}
+          expanded={routePanelExpanded}
+          onExpandedChange={handleRoutePanelExpandedChange}
           onClose={() => {
             setRoutePanelOpen(false);
             setAddingWaypoint(false);
@@ -208,22 +246,39 @@ export default function MapWithNav() {
       )}
       <InfoPanel
         data={infoPanelData}
+        collapsed={infoPanelCollapsed}
+        onCollapsedChange={handleInfoPanelCollapsedChange}
         onClose={() => {
           setInfoPanelData(null);
           setFocusedHazard(null);
         }}
       />
       {selectedAreaId && (
-        <div className="absolute left-4 top-16 z-10 flex items-start gap-2">
+        <div className="absolute left-4 top-10 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl">
+          {/* Area name header */}
+          <div className="px-3 pt-2.5 pb-1">
+            <span className="text-sm font-bold tracking-wide text-white">
+              {AREAS_OF_INTEREST.find((a) => a.id === selectedAreaId)?.name ??
+                selectedAreaId}
+            </span>
+          </div>
+          {/* Date row */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40">
+            <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex-1">
+              Date
+            </span>
+            <DatePicker
+              bare
+              month={selectedDay.month}
+              day={selectedDay.day}
+              onChange={(month, day) => setSelectedDay({ month, day })}
+            />
+          </div>
           <WeatherWidget
+            bare
             region={selectedAreaId}
             month={selectedDay.month}
             day={selectedDay.day}
-          />
-          <DatePicker
-            month={selectedDay.month}
-            day={selectedDay.day}
-            onChange={(month, day) => setSelectedDay({ month, day })}
           />
         </div>
       )}
