@@ -4,7 +4,7 @@ import { useState } from "react";
 import { COLOUR_PALETTE, DEFAULT_LAYER_COLOUR } from "@/lib/customLayers";
 import type { CustomLayer, ColourOption } from "@/lib/customLayers";
 
-interface CustomLayerPanelProps {
+export interface CustomLayerPanelProps {
   layers: CustomLayer[];
   enabledLayerIds: Set<string>;
   activeDrawingLayerId: string | null;
@@ -14,7 +14,9 @@ interface CustomLayerPanelProps {
   onSetActiveDrawingLayer: (id: string | null) => void;
 }
 
-export default function CustomLayerPanel({
+// Inner content — no panel wrapper, no collapse toggle.
+// Rendered inside LayerPanel as a section, and inside the legacy CustomLayerPanel wrapper.
+export function CustomLayerSection({
   layers,
   enabledLayerIds,
   activeDrawingLayerId,
@@ -23,7 +25,6 @@ export default function CustomLayerPanel({
   onToggleLayer,
   onSetActiveDrawingLayer,
 }: CustomLayerPanelProps) {
-  const [open, setOpen] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(DEFAULT_LAYER_COLOUR);
@@ -45,6 +46,178 @@ export default function CustomLayerPanel({
     onDeleteLayer(id);
     setConfirmDeleteId(null);
   }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {/* Layer list */}
+      {layers.length === 0 && !showCreate && (
+        <p className="text-[10px] text-slate-600 font-mono py-1">
+          No layers yet.
+        </p>
+      )}
+
+      {layers.map((layer) => (
+        <div key={layer.id} className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            {/* Visibility toggle */}
+            <input
+              type="checkbox"
+              checked={enabledLayerIds.has(layer.id)}
+              onChange={() => onToggleLayer(layer.id)}
+              className="w-3.5 h-3.5 accent-emerald-500 cursor-pointer flex-shrink-0"
+              aria-label={`Toggle ${layer.name}`}
+              data-testid={`layer-toggle-${layer.id}`}
+            />
+
+            {/* Colour dot */}
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: layer.color }}
+            />
+
+            {/* Name — click to set as active drawing layer */}
+            <button
+              onClick={() =>
+                onSetActiveDrawingLayer(
+                  activeDrawingLayerId === layer.id ? null : layer.id,
+                )
+              }
+              className={`flex-1 text-left text-xs font-mono truncate transition-colors ${
+                activeDrawingLayerId === layer.id
+                  ? "text-white"
+                  : "text-slate-300 hover:text-white"
+              }`}
+              title={
+                activeDrawingLayerId === layer.id
+                  ? "Click to stop drawing on this layer"
+                  : "Click to draw on this layer"
+              }
+              data-testid={`layer-name-${layer.id}`}
+            >
+              {layer.name}
+            </button>
+
+            {/* Pencil icon when active */}
+            {activeDrawingLayerId === layer.id && (
+              <span
+                className="text-[10px] text-slate-400"
+                aria-label="Active drawing layer"
+              >
+                ✏
+              </span>
+            )}
+
+            {/* Delete */}
+            <button
+              onClick={() =>
+                setConfirmDeleteId(
+                  confirmDeleteId === layer.id ? null : layer.id,
+                )
+              }
+              className="text-slate-600 hover:text-red-400 transition-colors text-xs"
+              aria-label={`Delete layer ${layer.name}`}
+              data-testid={`layer-delete-${layer.id}`}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Inline delete confirm */}
+          {confirmDeleteId === layer.id && (
+            <div className="ml-5 flex gap-1 items-center mt-0.5">
+              <span className="text-[9px] text-red-400 font-mono">Delete?</span>
+              <button
+                onClick={() => handleDeleteConfirm(layer.id)}
+                className="text-[9px] font-mono text-red-400 hover:text-red-300 border border-red-900/50 rounded px-1"
+                data-testid={`layer-delete-confirm-${layer.id}`}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="text-[9px] font-mono text-slate-500 hover:text-slate-300"
+                data-testid={`layer-delete-cancel-${layer.id}`}
+              >
+                No
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* New layer form */}
+      {showCreate ? (
+        <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-700/60">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+              if (e.key === "Escape") setShowCreate(false);
+            }}
+            placeholder="Layer name..."
+            autoFocus
+            className="w-full rounded bg-slate-800 border border-slate-600 px-2 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-400"
+            data-testid="new-layer-name-input"
+          />
+
+          {/* Colour swatches */}
+          <div
+            className="flex flex-wrap gap-1"
+            data-testid="new-layer-colour-palette"
+          >
+            {COLOUR_PALETTE.map((c: ColourOption) => (
+              <button
+                key={c.hex}
+                title={c.label}
+                aria-label={c.label}
+                aria-pressed={newColor === c.hex}
+                onClick={() => setNewColor(c.hex)}
+                className={`w-4 h-4 rounded-full border-2 transition-all ${
+                  newColor === c.hex
+                    ? "border-white scale-110"
+                    : "border-transparent hover:border-slate-400"
+                }`}
+                style={{ backgroundColor: c.hex }}
+                data-testid={`new-layer-colour-${c.label.toLowerCase()}`}
+              />
+            ))}
+          </div>
+
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleCreate}
+              disabled={!newName.trim()}
+              className="flex-1 text-[10px] font-mono py-1 rounded bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              data-testid="new-layer-create-btn"
+            >
+              Create
+            </button>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="text-[10px] font-mono py-1 px-2 rounded text-slate-500 hover:text-slate-300 border border-slate-700 transition-colors"
+              data-testid="new-layer-cancel-btn"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowCreate(true)}
+          className="mt-1 w-full text-[10px] font-mono text-slate-500 hover:text-white border border-slate-700/60 hover:border-slate-500 rounded py-1 transition-colors"
+          data-testid="new-layer-btn"
+        >
+          + New Layer
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Legacy wrapper — keeps the standalone panel UI for backwards-compatible usage and tests.
+export default function CustomLayerPanel(props: CustomLayerPanelProps) {
+  const [open, setOpen] = useState(true);
 
   return (
     <div
@@ -71,171 +244,8 @@ export default function CustomLayerPanel({
       </button>
 
       {open && (
-        <div className="px-3 pb-3 flex flex-col gap-1.5">
-          {/* Layer list */}
-          {layers.length === 0 && !showCreate && (
-            <p className="text-[10px] text-slate-600 font-mono py-1">
-              No layers yet.
-            </p>
-          )}
-
-          {layers.map((layer) => (
-            <div key={layer.id} className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-1.5">
-                {/* Visibility toggle */}
-                <input
-                  type="checkbox"
-                  checked={enabledLayerIds.has(layer.id)}
-                  onChange={() => onToggleLayer(layer.id)}
-                  className="w-3.5 h-3.5 accent-emerald-500 cursor-pointer flex-shrink-0"
-                  aria-label={`Toggle ${layer.name}`}
-                  data-testid={`layer-toggle-${layer.id}`}
-                />
-
-                {/* Colour dot */}
-                <span
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: layer.color }}
-                />
-
-                {/* Name — click to set as active drawing layer */}
-                <button
-                  onClick={() =>
-                    onSetActiveDrawingLayer(
-                      activeDrawingLayerId === layer.id ? null : layer.id,
-                    )
-                  }
-                  className={`flex-1 text-left text-xs font-mono truncate transition-colors ${
-                    activeDrawingLayerId === layer.id
-                      ? "text-white"
-                      : "text-slate-300 hover:text-white"
-                  }`}
-                  title={
-                    activeDrawingLayerId === layer.id
-                      ? "Click to stop drawing on this layer"
-                      : "Click to draw on this layer"
-                  }
-                  data-testid={`layer-name-${layer.id}`}
-                >
-                  {layer.name}
-                </button>
-
-                {/* Pencil icon when active */}
-                {activeDrawingLayerId === layer.id && (
-                  <span
-                    className="text-[10px] text-slate-400"
-                    aria-label="Active drawing layer"
-                  >
-                    ✏
-                  </span>
-                )}
-
-                {/* Delete */}
-                <button
-                  onClick={() =>
-                    setConfirmDeleteId(
-                      confirmDeleteId === layer.id ? null : layer.id,
-                    )
-                  }
-                  className="text-slate-600 hover:text-red-400 transition-colors text-xs"
-                  aria-label={`Delete layer ${layer.name}`}
-                  data-testid={`layer-delete-${layer.id}`}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Inline delete confirm */}
-              {confirmDeleteId === layer.id && (
-                <div className="ml-5 flex gap-1 items-center mt-0.5">
-                  <span className="text-[9px] text-red-400 font-mono">
-                    Delete?
-                  </span>
-                  <button
-                    onClick={() => handleDeleteConfirm(layer.id)}
-                    className="text-[9px] font-mono text-red-400 hover:text-red-300 border border-red-900/50 rounded px-1"
-                    data-testid={`layer-delete-confirm-${layer.id}`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    onClick={() => setConfirmDeleteId(null)}
-                    className="text-[9px] font-mono text-slate-500 hover:text-slate-300"
-                    data-testid={`layer-delete-cancel-${layer.id}`}
-                  >
-                    No
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* New layer form */}
-          {showCreate ? (
-            <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-700/60">
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") setShowCreate(false);
-                }}
-                placeholder="Layer name..."
-                autoFocus
-                className="w-full rounded bg-slate-800 border border-slate-600 px-2 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-400"
-                data-testid="new-layer-name-input"
-              />
-
-              {/* Colour swatches */}
-              <div
-                className="flex flex-wrap gap-1"
-                data-testid="new-layer-colour-palette"
-              >
-                {COLOUR_PALETTE.map((c: ColourOption) => (
-                  <button
-                    key={c.hex}
-                    title={c.label}
-                    aria-label={c.label}
-                    aria-pressed={newColor === c.hex}
-                    onClick={() => setNewColor(c.hex)}
-                    className={`w-4 h-4 rounded-full border-2 transition-all ${
-                      newColor === c.hex
-                        ? "border-white scale-110"
-                        : "border-transparent hover:border-slate-400"
-                    }`}
-                    style={{ backgroundColor: c.hex }}
-                    data-testid={`new-layer-colour-${c.label.toLowerCase()}`}
-                  />
-                ))}
-              </div>
-
-              <div className="flex gap-1.5">
-                <button
-                  onClick={handleCreate}
-                  disabled={!newName.trim()}
-                  className="flex-1 text-[10px] font-mono py-1 rounded bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  data-testid="new-layer-create-btn"
-                >
-                  Create
-                </button>
-                <button
-                  onClick={() => setShowCreate(false)}
-                  className="text-[10px] font-mono py-1 px-2 rounded text-slate-500 hover:text-slate-300 border border-slate-700 transition-colors"
-                  data-testid="new-layer-cancel-btn"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="mt-1 w-full text-[10px] font-mono text-slate-500 hover:text-white border border-slate-700/60 hover:border-slate-500 rounded py-1 transition-colors"
-              data-testid="new-layer-btn"
-            >
-              + New Layer
-            </button>
-          )}
+        <div className="px-3 pb-3">
+          <CustomLayerSection {...props} />
         </div>
       )}
     </div>

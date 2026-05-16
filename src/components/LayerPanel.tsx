@@ -2,10 +2,15 @@
 
 import { useState } from "react";
 import { type LayerKey, type LayerVisibility } from "@/lib/layers";
+import {
+  CustomLayerSection,
+  type CustomLayerPanelProps,
+} from "./CustomLayerPanel";
 
 interface LayerPanelProps {
   visibility: LayerVisibility;
   onToggle: (key: LayerKey) => void;
+  customLayerProps?: CustomLayerPanelProps;
 }
 
 interface LayerRowProps {
@@ -45,11 +50,15 @@ function SectionHeading({ label }: { label: string }) {
   );
 }
 
-export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
+export default function LayerPanel({
+  visibility,
+  onToggle,
+  customLayerProps,
+}: LayerPanelProps) {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="absolute left-4 bottom-10 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none">
+    <div className="absolute left-4 bottom-10 z-10 w-56 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none">
       {/* Header */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -160,6 +169,13 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
             checked={visibility.municipalities}
             onToggle={() => onToggle("municipalities")}
           />
+
+          {customLayerProps && (
+            <>
+              <SectionHeading label="Custom Layers" />
+              <CustomLayerSection {...customLayerProps} />
+            </>
+          )}
         </div>
       )}
     </div>

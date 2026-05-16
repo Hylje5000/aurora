@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import AreaNav from "./AreaNav";
 import MapView from "./MapView";
 import LayerPanel from "./LayerPanel";
-import CustomLayerPanel from "./CustomLayerPanel";
 import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
 import DatePicker from "./DatePicker";
@@ -182,15 +181,18 @@ export default function MapWithNav() {
         routeHazards={routeIntelligence?.hazards ?? []}
         focusedHazard={focusedHazard}
       />
-      <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
-      <CustomLayerPanel
-        layers={customLayers}
-        enabledLayerIds={enabledCustomLayerIds}
-        activeDrawingLayerId={activeDrawingLayerId}
-        onCreateLayer={handleCreateLayer}
-        onDeleteLayer={handleDeleteLayer}
-        onToggleLayer={handleToggleLayer}
-        onSetActiveDrawingLayer={setActiveDrawingLayerId}
+      <LayerPanel
+        visibility={layerVisibility}
+        onToggle={handleToggle}
+        customLayerProps={{
+          layers: customLayers,
+          enabledLayerIds: enabledCustomLayerIds,
+          activeDrawingLayerId,
+          onCreateLayer: handleCreateLayer,
+          onDeleteLayer: handleDeleteLayer,
+          onToggleLayer: handleToggleLayer,
+          onSetActiveDrawingLayer: setActiveDrawingLayerId,
+        }}
       />
       {routePanelOpen && (
         <RoutePanel

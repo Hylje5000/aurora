@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LayerPanel from "@/components/LayerPanel";
 import { DEFAULT_LAYER_VISIBILITY } from "@/lib/layers";
+import type { CustomLayerPanelProps } from "@/components/CustomLayerPanel";
 
 const defaultProps = {
   visibility: DEFAULT_LAYER_VISIBILITY,
@@ -141,5 +142,38 @@ describe("LayerPanel", () => {
     await userEvent.click(btn);
     await userEvent.click(btn);
     expect(screen.getByLabelText(/3D Terrain/i)).toBeInTheDocument();
+  });
+
+  it("renders Custom Layers section when customLayerProps is provided", () => {
+    const customLayerProps: CustomLayerPanelProps = {
+      layers: [
+        {
+          id: "layer-1",
+          name: "Alpha",
+          color: "#ef4444",
+          description: "",
+          created_at: "",
+          updated_at: "",
+        },
+      ],
+      enabledLayerIds: new Set(["layer-1"]),
+      activeDrawingLayerId: null,
+      onCreateLayer: vi.fn(),
+      onDeleteLayer: vi.fn(),
+      onToggleLayer: vi.fn(),
+      onSetActiveDrawingLayer: vi.fn(),
+    };
+    render(
+      <LayerPanel {...defaultProps} customLayerProps={customLayerProps} />,
+    );
+    expect(screen.getByText(/custom layers/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Toggle Alpha")).toBeInTheDocument();
+    expect(screen.getByTestId("new-layer-btn")).toBeInTheDocument();
+  });
+
+  it("does not render Custom Layers section when customLayerProps is omitted", () => {
+    render(<LayerPanel {...defaultProps} />);
+    expect(screen.queryByText(/custom layers/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("new-layer-btn")).not.toBeInTheDocument();
   });
 });
