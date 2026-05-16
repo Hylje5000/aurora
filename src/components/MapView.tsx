@@ -861,24 +861,15 @@ export default function MapView({
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
-      // Dark casing first so white outline has contrast against any background
-      map.addLayer({
-        id: "municipality-highlight-casing",
-        type: "line",
-        source: "municipality-highlight-source",
-        paint: {
-          "line-color": "#000000",
-          "line-width": 9,
-          "line-opacity": 0.55,
-        },
-      });
+      // slot:"top" renders above Standard style night-mode color pipeline
       map.addLayer({
         id: "municipality-highlight-line",
         type: "line",
         source: "municipality-highlight-source",
+        slot: "top",
         paint: {
           "line-color": "#ffffff",
-          "line-width": 4,
+          "line-width": 5,
           "line-opacity": 1,
         },
       });
