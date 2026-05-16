@@ -6,6 +6,8 @@
 
 **Phase 1 (2026-05-16):** Created `.local/setup_custom_layers.sql` (gitignored, for manual DB setup), `src/lib/customLayers.ts` (types + palette), and 10 unit tests. 129 tests pass. Discovered `.local/` is in `.gitignore` — SQL script will not be committed, only lives locally for the user to run.
 
+**Phase 2 (2026-05-16):** Created 4 API route files (GET+POST `/api/custom-layers`, DELETE `/api/custom-layers/[id]`, GET+POST `/api/custom-layers/[id]/features`, PUT+DELETE `/api/custom-layers/[id]/features/[fid]`) and 38 unit tests covering all routes. Lesson: module-level `const NO_DB = !process.env.DATABASE_URL` is evaluated once at import time — tests that set `DATABASE_URL` after import see stale value. Fixed by checking `process.env.DATABASE_URL` inline in each handler. 167 tests pass.
+
 ---
 
 ## Phase 0 — Baseline health check
