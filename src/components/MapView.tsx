@@ -1505,7 +1505,25 @@ export default function MapView({
 
     const map = mapRef.current;
     if (!map) return;
-    map.getCanvas().style.cursor = addingWaypoint ? "crosshair" : "";
+
+    const canvas = map.getCanvas();
+    if (addingWaypoint) {
+      // Lock the crosshair: disable Mapbox's dragPan (which overrides cursor
+      // to "grabbing" on mousedown) and pin the cursor via a mousemove
+      // listener so Mapbox's hover handlers can't reset it.
+      map.dragPan.disable();
+      canvas.style.cursor = "crosshair";
+      const keepCrosshair = () => {
+        canvas.style.cursor = "crosshair";
+      };
+      canvas.addEventListener("mousemove", keepCrosshair);
+      return () => {
+        canvas.removeEventListener("mousemove", keepCrosshair);
+      };
+    } else {
+      map.dragPan.enable();
+      canvas.style.cursor = "";
+    }
   }, [addingWaypoint, onWaypointClick]);
 
   // ── Sync planned route geometry and line color ────────────────────────

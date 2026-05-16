@@ -64,6 +64,10 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
     const [error, setError] = useState<string | null>(null);
     const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
 
+    // Drag-and-drop state
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
     const abortRef = useRef<AbortController | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onRouteChangeRef = useRef(onRouteChange);
@@ -89,22 +93,36 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
       setWaypoints((prev) => relabel(prev.filter((w) => w.id !== id)));
     }
 
-    function moveUp(index: number) {
+    function handleDragStart(e: React.DragEvent, index: number) {
+      setDragIndex(index);
+      e.dataTransfer.effectAllowed = "move";
+      // Required for Firefox
+      e.dataTransfer.setData("text/plain", String(index));
+    }
+
+    function handleDragOver(e: React.DragEvent, index: number) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (dragOverIndex !== index) setDragOverIndex(index);
+    }
+
+    function handleDrop(e: React.DragEvent, dropIndex: number) {
+      e.preventDefault();
+      const fromIndex = dragIndex;
+      setDragIndex(null);
+      setDragOverIndex(null);
+      if (fromIndex === null || fromIndex === dropIndex) return;
       setWaypoints((prev) => {
-        if (index === 0) return prev;
         const next = [...prev];
-        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(dropIndex, 0, moved);
         return relabel(next);
       });
     }
 
-    function moveDown(index: number) {
-      setWaypoints((prev) => {
-        if (index >= prev.length - 1) return prev;
-        const next = [...prev];
-        [next[index], next[index + 1]] = [next[index + 1], next[index]];
-        return relabel(next);
-      });
+    function handleDragEnd() {
+      setDragIndex(null);
+      setDragOverIndex(null);
     }
 
     function handleClear() {
@@ -172,7 +190,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
 
     return (
       <div
-        className="absolute left-4 bottom-40 z-10 w-56 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 w-64 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
         data-testid="route-panel"
       >
         {/* Header */}
@@ -214,8 +232,8 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
           </div>
 
           {/* Waypoint list */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center justify-between mb-0.5">
               <span className="text-[9px] font-mono tracking-widest text-slate-500 uppercase">
                 Waypoints
               </span>
@@ -239,37 +257,46 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             {waypoints.map((wp, i) => (
               <div
                 key={wp.id}
-                className="flex items-center gap-1"
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={(e) => handleDrop(e, i)}
+                onDragEnd={handleDragEnd}
+                className={[
+                  "flex items-center gap-1.5 rounded px-0.5 py-0.5 transition-colors",
+                  dragIndex === i ? "opacity-40" : "",
+                  dragOverIndex === i && dragIndex !== i
+                    ? "border-t-2 border-blue-400"
+                    : "",
+                ].join(" ")}
                 data-testid={`waypoint-row-${i}`}
               >
+                {/* Drag handle */}
+                <span
+                  className="cursor-grab text-slate-600 hover:text-slate-400 text-[11px] flex-shrink-0 leading-none"
+                  aria-hidden="true"
+                  title="Drag to reorder"
+                >
+                  ⠿
+                </span>
+
+                {/* Index badge */}
                 <span
                   className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
                   style={{ backgroundColor: PROFILE_COLORS[profile] }}
                 >
                   {i + 1}
                 </span>
+
+                {/* Label */}
                 <span className="flex-1 text-[10px] font-mono text-slate-300 truncate">
                   {wp.label}
                 </span>
-                <button
-                  onClick={() => moveUp(i)}
-                  disabled={i === 0}
-                  className="text-[9px] text-slate-600 hover:text-slate-300 disabled:opacity-20 transition-colors"
-                  aria-label={`Move ${wp.label} up`}
-                >
-                  ↑
-                </button>
-                <button
-                  onClick={() => moveDown(i)}
-                  disabled={i === waypoints.length - 1}
-                  className="text-[9px] text-slate-600 hover:text-slate-300 disabled:opacity-20 transition-colors"
-                  aria-label={`Move ${wp.label} down`}
-                >
-                  ↓
-                </button>
+
+                {/* Remove */}
                 <button
                   onClick={() => removeWaypoint(wp.id)}
-                  className="text-slate-600 hover:text-red-400 transition-colors text-[9px]"
+                  className="text-slate-600 hover:text-red-400 transition-colors text-[9px] flex-shrink-0"
                   aria-label={`Remove ${wp.label}`}
                 >
                   ✕
@@ -280,7 +307,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             <button
               onClick={() => onAddingWaypointChange(true)}
               disabled={waypoints.length >= 25}
-              className="mt-0.5 w-full text-[10px] font-mono text-slate-500 hover:text-white border border-slate-700/60 hover:border-slate-500 rounded py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="mt-1 w-full text-[10px] font-mono text-slate-500 hover:text-white border border-slate-700/60 hover:border-slate-500 rounded py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="Add stop"
               data-testid="add-stop-btn"
             >
@@ -320,7 +347,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                 {formatDuration(route.total_duration_s)}
               </p>
 
-              <div className="flex flex-col gap-0.5 mt-1">
+              <div className="flex flex-col gap-0.5 mt-1 max-h-40 overflow-y-auto">
                 {route.legs.map((leg, i) => (
                   <div key={i}>
                     <button
@@ -342,7 +369,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                     </button>
                     {expandedLeg === i && (
                       <div
-                        className="ml-3 flex flex-col gap-0.5 mt-0.5 max-h-36 overflow-y-auto"
+                        className="ml-3 flex flex-col gap-0.5 mt-0.5"
                         data-testid={`leg-steps-${i}`}
                       >
                         {leg.steps.map((step, j) => (

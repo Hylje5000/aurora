@@ -118,20 +118,37 @@ describe("RoutePanel", () => {
     expect(screen.queryByTestId("waypoint-row-1")).not.toBeInTheDocument();
   });
 
-  it("moves a waypoint up", async () => {
+  it("reorders waypoints via drag and drop", async () => {
     const ref = createRef<RoutePanelHandle>();
     render(<RoutePanel ref={ref} {...makeProps()} />);
 
     act(() => {
       ref.current?.addWaypoint([24.94, 60.17]);
       ref.current?.addWaypoint([24.95, 60.18]);
+      ref.current?.addWaypoint([24.96, 60.19]);
     });
 
-    // Before: row 0 = Start, row 1 = Destination
-    fireEvent.click(screen.getByLabelText("Move Destination up"));
-    // After: row 0 = Start (was Destination), row 1 = Destination (was Start)
-    const rows = screen.getAllByTestId(/waypoint-row-/);
-    expect(rows).toHaveLength(2);
+    // Drag row 0 (Start) to row 2 (Destination position)
+    const row0 = screen.getByTestId("waypoint-row-0");
+    const row2 = screen.getByTestId("waypoint-row-2");
+
+    fireEvent.dragStart(row0, {
+      dataTransfer: { effectAllowed: "", setData: vi.fn() },
+    });
+    fireEvent.dragOver(row2, {
+      dataTransfer: { dropEffect: "" },
+    });
+    fireEvent.drop(row2, {
+      dataTransfer: { dropEffect: "" },
+    });
+    fireEvent.dragEnd(row0);
+
+    // After drop: original row 1 becomes Start, original row 2 becomes Stop 1, original row 0 becomes Destination
+    expect(screen.getByTestId("waypoint-row-0")).toBeInTheDocument();
+    expect(screen.getByTestId("waypoint-row-1")).toBeInTheDocument();
+    expect(screen.getByTestId("waypoint-row-2")).toBeInTheDocument();
+    // Labels relabelled: 3 rows still present
+    expect(screen.getAllByTestId(/waypoint-row-/).length).toBe(3);
   });
 
   it("clears all waypoints when Clear is clicked", async () => {

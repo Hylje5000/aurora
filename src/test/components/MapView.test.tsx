@@ -25,6 +25,8 @@ const {
   mockSetStyle,
   mockSetPaintProperty,
   mockGetZoom,
+  mockDragPanDisable,
+  mockDragPanEnable,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -63,6 +65,8 @@ const {
   const mockSetStyle = vi.fn();
   const mockSetPaintProperty = vi.fn();
   const mockGetZoom = vi.fn(() => 15);
+  const mockDragPanDisable = vi.fn();
+  const mockDragPanEnable = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -105,6 +109,7 @@ const {
     setStyle: mockSetStyle,
     setPaintProperty: mockSetPaintProperty,
     getZoom: mockGetZoom,
+    dragPan: { disable: mockDragPanDisable, enable: mockDragPanEnable },
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -132,6 +137,8 @@ const {
     mockSetStyle,
     mockSetPaintProperty,
     mockGetZoom,
+    mockDragPanDisable,
+    mockDragPanEnable,
     MockMap,
     MockNavigationControl,
     MockPopup,
@@ -286,6 +293,8 @@ describe("MapView", () => {
     mockMarkerRemove.mockClear();
     mockMarkerSetLngLat.mockClear();
     mockMarkerAddTo.mockClear();
+    mockDragPanDisable.mockClear();
+    mockDragPanEnable.mockClear();
     mockFetchOk();
   });
 
@@ -1101,25 +1110,40 @@ describe("MapView", () => {
     );
   });
 
-  it("sets cursor to crosshair when addingWaypoint=true", async () => {
-    const canvas = { style: { cursor: "" } };
+  it("sets cursor to crosshair and disables dragPan when addingWaypoint=true", async () => {
+    const canvas = {
+      style: { cursor: "" },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
     mockGetCanvas.mockReturnValue(canvas);
 
     render(<MapView addingWaypoint={true} />);
     await fireStyleLoad();
 
     expect(canvas.style.cursor).toBe("crosshair");
+    expect(mockDragPanDisable).toHaveBeenCalled();
+    expect(canvas.addEventListener).toHaveBeenCalledWith(
+      "mousemove",
+      expect.any(Function),
+    );
   });
 
-  it("resets cursor to empty string when addingWaypoint=false", async () => {
-    const canvas = { style: { cursor: "crosshair" } };
+  it("resets cursor and re-enables dragPan when addingWaypoint=false", async () => {
+    const canvas = {
+      style: { cursor: "crosshair" },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
     mockGetCanvas.mockReturnValue(canvas);
 
     const { rerender } = render(<MapView addingWaypoint={true} />);
     await fireStyleLoad();
+    mockDragPanEnable.mockClear();
 
     rerender(<MapView addingWaypoint={false} />);
     expect(canvas.style.cursor).toBe("");
+    expect(mockDragPanEnable).toHaveBeenCalled();
   });
 
   it("calls onWaypointClick with coords and skips elevation when addingWaypoint=true", async () => {
