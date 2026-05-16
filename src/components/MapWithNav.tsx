@@ -326,17 +326,11 @@ export default function MapWithNav() {
       />
       {selectedAreaId && (
         <div className="absolute left-4 top-10 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl">
-          {/* Area name header */}
-          <div className="px-3 pt-2.5 pb-1">
-            <span className="text-sm font-bold tracking-wide text-white">
+          {/* Area name + date picker merged into one compact row */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-700/40">
+            <span className="text-xs font-bold text-white flex-1 truncate">
               {AREAS_OF_INTEREST.find((a) => a.id === selectedAreaId)?.name ??
                 selectedAreaId}
-            </span>
-          </div>
-          {/* Date row */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40">
-            <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest flex-1">
-              Date
             </span>
             <DatePicker
               bare

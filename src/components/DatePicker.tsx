@@ -45,7 +45,7 @@ export default function DatePicker({
   }
 
   const selectClass =
-    "rounded border border-slate-700 bg-slate-800 px-2 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-slate-500";
+    "rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-slate-500";
 
   const inner = (
     <div className="flex items-center gap-1">

@@ -67,7 +67,7 @@ export default function WeatherWidget({
           : "rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-sm"
       }
     >
-      <div className="text-slate-400 mb-1 text-[10px] uppercase tracking-widest">
+      <div className="text-slate-400 mb-0.5 text-[10px] uppercase tracking-widest">
         Historical avg · {stats.sampleSize} yr
       </div>
       <div className="mb-0.5">
