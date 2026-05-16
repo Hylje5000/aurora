@@ -3,6 +3,7 @@ import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { LayerKey, LayerVisibility } from "@/lib/layers";
 import type { CustomLayer } from "@/lib/customLayers";
+import type { RouteHazard, RouteIntelligence } from "@/lib/routing";
 
 // Stub AreaNav — renders buttons that call onSelect
 vi.mock("@/components/AreaNav", () => ({
@@ -30,6 +31,10 @@ vi.mock("@/components/MapView", () => ({
     activeDrawingLayerId,
     onCancelDrawing,
     onInfoPanel,
+    addingWaypoint,
+    onWaypointClick,
+    routeHazards,
+    focusedHazard,
   }: {
     selectedAreaId: string | null;
     layerVisibility: LayerVisibility;
@@ -38,6 +43,10 @@ vi.mock("@/components/MapView", () => ({
     activeDrawingLayerId: string | null;
     onCancelDrawing: () => void;
     onInfoPanel?: (data: unknown) => void;
+    addingWaypoint?: boolean;
+    onWaypointClick?: (coords: [number, number]) => void;
+    routeHazards?: RouteHazard[];
+    focusedHazard?: RouteHazard | null;
   }) => (
     <div
       data-testid="map-view"
@@ -47,6 +56,9 @@ vi.mock("@/components/MapView", () => ({
       data-layer-count={String(customLayers?.length ?? 0)}
       data-enabled-count={String(enabledCustomLayerIds?.size ?? 0)}
       data-drawing-layer={activeDrawingLayerId ?? ""}
+      data-adding-waypoint={String(addingWaypoint ?? false)}
+      data-hazard-count={String(routeHazards?.length ?? 0)}
+      data-focused-hazard={focusedHazard?.id ?? ""}
     >
       <button onClick={onCancelDrawing}>CancelDrawing</button>
       <button
@@ -54,7 +66,55 @@ vi.mock("@/components/MapView", () => ({
       >
         Trigger InfoPanel
       </button>
+      <button onClick={() => onWaypointClick?.([24.94, 60.17])}>
+        SimulateWaypointClick
+      </button>
     </div>
+  ),
+}));
+
+const MOCK_INTEL: RouteIntelligence = {
+  hazards: [
+    {
+      id: "bridge-1-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit exceeded",
+      coordinates: [24.95, 60.18],
+      properties: { name: "Test Bridge", max_vehicle_mass_t: 16 },
+    },
+  ],
+  summary: { critical: 1, warning: 0, info: 0, passable: false },
+};
+
+// Stub RoutePanel — exposes onAddingWaypointChange, onHazardsChange, onHazardFocus via buttons
+vi.mock("@/components/RoutePanel", () => ({
+  default: vi.fn(
+    ({
+      onAddingWaypointChange,
+      onClose,
+      onHazardsChange,
+      onHazardFocus,
+    }: {
+      onAddingWaypointChange: (active: boolean) => void;
+      onClose: () => void;
+      onHazardsChange?: (intel: RouteIntelligence | null) => void;
+      onHazardFocus?: (hazard: RouteHazard) => void;
+    }) => (
+      <div data-testid="route-panel">
+        <button onClick={() => onAddingWaypointChange(true)}>
+          StartAddingWaypoint
+        </button>
+        <button onClick={onClose}>CloseRoutePanel</button>
+        <button onClick={() => onHazardsChange?.(MOCK_INTEL)}>
+          TriggerHazards
+        </button>
+        <button onClick={() => onHazardsChange?.(null)}>ClearHazards</button>
+        <button onClick={() => onHazardFocus?.(MOCK_INTEL.hazards[0])}>
+          FocusHazard
+        </button>
+      </div>
+    ),
   ),
 }));
 
@@ -484,5 +544,141 @@ describe("MapWithNav", () => {
       "12",
     );
     expect(screen.getByTestId("date-picker")).toHaveAttribute("data-day", "1");
+  });
+
+  // ── Route planning wiring tests ───────────────────────────────────────
+
+  it("renders the Route toggle button", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    expect(screen.getByTestId("route-toggle-btn")).toBeInTheDocument();
+  });
+
+  it("shows RoutePanel when Route button is clicked", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
+  });
+
+  it("hides RoutePanel when Route button is clicked again", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
+  });
+
+  it("sets addingWaypoint=true on MapView when RoutePanel starts waypoint adding", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-adding-waypoint",
+      "false",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "StartAddingWaypoint" }),
+    );
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-adding-waypoint",
+      "true",
+    );
+  });
+
+  it("resets addingWaypoint after a waypoint click from MapView", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    await userEvent.click(
+      screen.getByRole("button", { name: "StartAddingWaypoint" }),
+    );
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-adding-waypoint",
+      "true",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "SimulateWaypointClick" }),
+    );
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-adding-waypoint",
+      "false",
+    );
+  });
+
+  it("hides RoutePanel when CloseRoutePanel is triggered", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+    expect(screen.getByTestId("route-panel")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "CloseRoutePanel" }),
+    );
+    expect(screen.queryByTestId("route-panel")).not.toBeInTheDocument();
+  });
+
+  // ── Route intelligence wiring ─────────────────────────────────────────
+
+  it("passes routeHazards to MapView when RoutePanel fires onHazardsChange", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-hazard-count",
+      "0",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "TriggerHazards" }),
+    );
+
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-hazard-count",
+      "1",
+    );
+  });
+
+  it("clears routeHazards and focusedHazard when onHazardsChange(null) is called", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "TriggerHazards" }),
+    );
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-hazard-count",
+      "1",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "ClearHazards" }));
+
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-hazard-count",
+      "0",
+    );
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-focused-hazard",
+      "",
+    );
+  });
+
+  it("sets focusedHazard on MapView when onHazardFocus is called (popup shown on map, not InfoPanel)", async () => {
+    render(<MapWithNav />);
+    await act(async () => {});
+    await userEvent.click(screen.getByTestId("route-toggle-btn"));
+
+    await userEvent.click(screen.getByRole("button", { name: "FocusHazard" }));
+
+    expect(screen.getByTestId("map-view")).toHaveAttribute(
+      "data-focused-hazard",
+      "bridge-1-0",
+    );
+    // Hazard details are shown in a map popup, not the InfoPanel
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
   });
 });

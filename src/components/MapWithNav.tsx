@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import AreaNav from "./AreaNav";
 import MapView from "./MapView";
 import LayerPanel from "./LayerPanel";
@@ -8,12 +8,20 @@ import CustomLayerPanel from "./CustomLayerPanel";
 import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
 import DatePicker from "./DatePicker";
+import RoutePanel, { type RoutePanelHandle } from "./RoutePanel";
 import {
   DEFAULT_LAYER_VISIBILITY,
   type LayerKey,
   type LayerVisibility,
 } from "@/lib/layers";
 import type { CustomLayer } from "@/lib/customLayers";
+import type {
+  PlannedRoute,
+  RouteHazard,
+  RouteIntelligence,
+  RouteProfile,
+  Waypoint,
+} from "@/lib/routing";
 
 export default function MapWithNav() {
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -37,6 +45,19 @@ export default function MapWithNav() {
   const [infoPanelData, setInfoPanelData] = useState<InfoPanelData | null>(
     null,
   );
+
+  // Route planning state
+  const [routePanelOpen, setRoutePanelOpen] = useState(false);
+  const [plannedRoute, setPlannedRoute] = useState<PlannedRoute | null>(null);
+  const [routeProfile, setRouteProfile] = useState<RouteProfile>("driving");
+  const [routeWaypoints, setRouteWaypoints] = useState<Waypoint[]>([]);
+  const [addingWaypoint, setAddingWaypoint] = useState(false);
+  const routePanelRef = useRef<RoutePanelHandle | null>(null);
+
+  // Route intelligence state
+  const [routeIntelligence, setRouteIntelligence] =
+    useState<RouteIntelligence | null>(null);
+  const [focusedHazard, setFocusedHazard] = useState<RouteHazard | null>(null);
 
   // Fetch all custom layers on mount
   useEffect(() => {
@@ -82,6 +103,31 @@ export default function MapWithNav() {
     }
   }
 
+  function handleWaypointClick(coords: [number, number]) {
+    routePanelRef.current?.addWaypoint(coords);
+    setAddingWaypoint(false);
+  }
+
+  function handleRouteChange(
+    route: PlannedRoute | null,
+    profile: RouteProfile,
+    waypoints: Waypoint[],
+  ) {
+    setPlannedRoute(route);
+    setRouteProfile(profile);
+    setRouteWaypoints(waypoints);
+  }
+
+  function handleHazardsChange(intel: RouteIntelligence | null) {
+    setRouteIntelligence(intel);
+    if (!intel) setFocusedHazard(null);
+  }
+
+  function handleHazardFocus(hazard: RouteHazard) {
+    setFocusedHazard(hazard);
+    // Details shown in a map popup at the marker — no InfoPanel needed.
+  }
+
   async function handleDeleteLayer(id: string) {
     try {
       await fetch(`/api/custom-layers/${id}`, { method: "DELETE" });
@@ -102,6 +148,23 @@ export default function MapWithNav() {
   return (
     <div className="relative w-full h-full">
       <AreaNav selectedAreaId={selectedAreaId} onSelect={setSelectedAreaId} />
+
+      {/* Route toggle button */}
+      <button
+        onClick={() => setRoutePanelOpen((o) => !o)}
+        className={[
+          "absolute top-4 right-20 z-10 rounded px-3 py-1.5 text-sm font-semibold text-white transition-all",
+          "bg-black/60 backdrop-blur-sm hover:bg-black/80",
+          routePanelOpen
+            ? "border border-blue-400 shadow-[0_0_0_2px_#60a5fa]"
+            : "border border-white/30",
+        ].join(" ")}
+        aria-label="Toggle route planning panel"
+        data-testid="route-toggle-btn"
+      >
+        Route
+      </button>
+
       <MapView
         selectedAreaId={selectedAreaId}
         layerVisibility={layerVisibility}
@@ -111,6 +174,13 @@ export default function MapWithNav() {
         onCancelDrawing={() => setActiveDrawingLayerId(null)}
         onInfoPanel={setInfoPanelData}
         infoPanelOpen={infoPanelData !== null}
+        plannedRoute={plannedRoute}
+        routeProfile={routeProfile}
+        routeWaypoints={routeWaypoints}
+        addingWaypoint={addingWaypoint}
+        onWaypointClick={handleWaypointClick}
+        routeHazards={routeIntelligence?.hazards ?? []}
+        focusedHazard={focusedHazard}
       />
       <LayerPanel visibility={layerVisibility} onToggle={handleToggle} />
       <CustomLayerPanel
@@ -122,7 +192,26 @@ export default function MapWithNav() {
         onToggleLayer={handleToggleLayer}
         onSetActiveDrawingLayer={setActiveDrawingLayerId}
       />
-      <InfoPanel data={infoPanelData} onClose={() => setInfoPanelData(null)} />
+      {routePanelOpen && (
+        <RoutePanel
+          ref={routePanelRef}
+          onAddingWaypointChange={setAddingWaypoint}
+          onRouteChange={handleRouteChange}
+          onHazardsChange={handleHazardsChange}
+          onHazardFocus={handleHazardFocus}
+          onClose={() => {
+            setRoutePanelOpen(false);
+            setAddingWaypoint(false);
+          }}
+        />
+      )}
+      <InfoPanel
+        data={infoPanelData}
+        onClose={() => {
+          setInfoPanelData(null);
+          setFocusedHazard(null);
+        }}
+      />
       {selectedAreaId && (
         <div className="absolute left-4 top-16 z-10 flex items-start gap-2">
           <WeatherWidget

@@ -25,6 +25,9 @@ const {
   mockSetStyle,
   mockSetPaintProperty,
   mockGetZoom,
+  mockDragPanDisable,
+  mockDragPanEnable,
+  mockFlyTo,
   MockMap,
   MockNavigationControl,
   MockPopup,
@@ -63,6 +66,9 @@ const {
   const mockSetStyle = vi.fn();
   const mockSetPaintProperty = vi.fn();
   const mockGetZoom = vi.fn(() => 15);
+  const mockDragPanDisable = vi.fn();
+  const mockDragPanEnable = vi.fn();
+  const mockFlyTo = vi.fn();
 
   const mockSetLngLat = vi.fn();
   const mockSetHTML = vi.fn();
@@ -105,6 +111,8 @@ const {
     setStyle: mockSetStyle,
     setPaintProperty: mockSetPaintProperty,
     getZoom: mockGetZoom,
+    dragPan: { disable: mockDragPanDisable, enable: mockDragPanEnable },
+    flyTo: mockFlyTo,
   }));
   const MockNavigationControl = vi.fn();
   return {
@@ -132,6 +140,9 @@ const {
     mockSetStyle,
     mockSetPaintProperty,
     mockGetZoom,
+    mockDragPanDisable,
+    mockDragPanEnable,
+    mockFlyTo,
     MockMap,
     MockNavigationControl,
     MockPopup,
@@ -195,6 +206,7 @@ vi.mock("@/components/ElectionPieChart", () => ({
 
 import MapView from "@/components/MapView";
 import type { CustomLayer } from "@/lib/customLayers";
+import type { PlannedRoute, RouteHazard, Waypoint } from "@/lib/routing";
 
 const infraOn = {
   satellite: false,
@@ -285,6 +297,9 @@ describe("MapView", () => {
     mockMarkerRemove.mockClear();
     mockMarkerSetLngLat.mockClear();
     mockMarkerAddTo.mockClear();
+    mockDragPanDisable.mockClear();
+    mockDragPanEnable.mockClear();
+    mockFlyTo.mockClear();
     mockFetchOk();
   });
 
@@ -453,6 +468,7 @@ describe("MapView", () => {
     const { rerender } = render(<MapView />);
     await fireStyleLoad();
     mockSetData.mockClear();
+    mockGetSource.mockClear();
 
     rerender(
       <MapView
@@ -463,10 +479,18 @@ describe("MapView", () => {
       />,
     );
 
-    const lastCall =
-      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
-    expect(lastCall.features).toHaveLength(1);
-    expect(lastCall.features[0].properties.radio).toBe("GSM");
+    // Find the setData call that was made for the cell-towers-source
+    const sourceCalls = mockGetSource.mock.calls as unknown as string[][];
+    const towerSourceCallIndex = sourceCalls.findIndex(
+      (c) => c[0] === "cell-towers-source",
+    );
+    expect(towerSourceCallIndex).toBeGreaterThanOrEqual(0);
+    const setDataCalls = mockSetData.mock.calls as unknown as {
+      features: { properties: { radio: string } }[];
+    }[][];
+    const towerSetDataCall = setDataCalls[towerSourceCallIndex];
+    expect(towerSetDataCall[0].features).toHaveLength(1);
+    expect(towerSetDataCall[0].features[0].properties.radio).toBe("GSM");
   });
 
   it("registers milsymbol images for cell tower types and bridge icons via map.addImage", async () => {
@@ -1083,5 +1107,309 @@ describe("MapView", () => {
     expect(global.fetch).not.toHaveBeenCalledWith(
       expect.stringContaining("/api/elevation"),
     );
+  });
+
+  // ── Route planning tests ──────────────────────────────────────────────
+
+  it("adds route-source and route-line layer after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "route-source",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-line", type: "line", slot: "top" }),
+    );
+  });
+
+  it("sets cursor to crosshair and disables dragPan when addingWaypoint=true", async () => {
+    const canvas = {
+      style: { cursor: "" },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    mockGetCanvas.mockReturnValue(canvas);
+
+    render(<MapView addingWaypoint={true} />);
+    await fireStyleLoad();
+
+    expect(canvas.style.cursor).toBe("crosshair");
+    expect(mockDragPanDisable).toHaveBeenCalled();
+    expect(canvas.addEventListener).toHaveBeenCalledWith(
+      "mousemove",
+      expect.any(Function),
+    );
+  });
+
+  it("resets cursor and re-enables dragPan when addingWaypoint=false", async () => {
+    const canvas = {
+      style: { cursor: "crosshair" },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    mockGetCanvas.mockReturnValue(canvas);
+
+    const { rerender } = render(<MapView addingWaypoint={true} />);
+    await fireStyleLoad();
+    mockDragPanEnable.mockClear();
+
+    rerender(<MapView addingWaypoint={false} />);
+    expect(canvas.style.cursor).toBe("");
+    expect(mockDragPanEnable).toHaveBeenCalled();
+  });
+
+  it("calls onWaypointClick with coords and skips elevation when addingWaypoint=true", async () => {
+    const onWaypointClick = vi.fn();
+    render(<MapView addingWaypoint={true} onWaypointClick={onWaypointClick} />);
+    await fireStyleLoad();
+    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+
+    const handler = findGeneralClickHandler()!;
+    await act(async () => {
+      await handler({ lngLat: { lng: 22.5, lat: 60.3 } });
+    });
+
+    expect(onWaypointClick).toHaveBeenCalledWith([22.5, 60.3]);
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/elevation"),
+    );
+  });
+
+  it("updates route-source data when plannedRoute prop changes", async () => {
+    const mockRoute: PlannedRoute = {
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [24.94, 60.17],
+          [25.01, 60.23],
+        ],
+      },
+      total_distance_m: 5000,
+      total_duration_s: 300,
+      legs: [],
+    };
+
+    const { rerender } = render(<MapView plannedRoute={null} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView plannedRoute={mockRoute} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("route-source");
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ geometry: mockRoute.geometry }),
+    );
+  });
+
+  it("clears route-source when plannedRoute becomes null", async () => {
+    const mockRoute: PlannedRoute = {
+      geometry: { type: "LineString", coordinates: [[24.94, 60.17]] },
+      total_distance_m: 1000,
+      total_duration_s: 60,
+      legs: [],
+    };
+
+    const { rerender } = render(<MapView plannedRoute={mockRoute} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView plannedRoute={null} />);
+
+    expect(mockSetData).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "FeatureCollection", features: [] }),
+    );
+  });
+
+  it("updates route-line color when routeProfile changes", async () => {
+    const { rerender } = render(<MapView routeProfile="driving" />);
+    await fireStyleLoad();
+    mockSetPaintProperty.mockClear();
+
+    rerender(<MapView routeProfile="walking" />);
+
+    expect(mockSetPaintProperty).toHaveBeenCalledWith(
+      "route-line",
+      "line-color",
+      "#22c55e",
+    );
+  });
+
+  it("creates a Marker for each waypoint in routeWaypoints", async () => {
+    const waypoints: Waypoint[] = [
+      { id: "w1", label: "Start", coordinates: [24.94, 60.17] },
+      { id: "w2", label: "Destination", coordinates: [25.01, 60.23] },
+    ];
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView routeWaypoints={[]} />);
+    await fireStyleLoad();
+    MockMarker.mockClear();
+
+    rerender(<MapView routeWaypoints={waypoints} />);
+
+    expect(MockMarker).toHaveBeenCalledTimes(2);
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([24.94, 60.17]);
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([25.01, 60.23]);
+  });
+
+  it("removes old waypoint markers when routeWaypoints changes", async () => {
+    const waypoints: Waypoint[] = [
+      { id: "w1", label: "Start", coordinates: [24.94, 60.17] },
+    ];
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView routeWaypoints={waypoints} />);
+    await fireStyleLoad();
+    mockMarkerRemove.mockClear();
+
+    rerender(<MapView routeWaypoints={[]} />);
+
+    expect(mockMarkerRemove).toHaveBeenCalled();
+  });
+
+  // ── Route hazard tests ────────────────────────────────────────────────
+
+  it("adds route-hazards-source and three circle layers after style.load", async () => {
+    render(<MapView />);
+    await fireStyleLoad();
+
+    expect(mockAddSource).toHaveBeenCalledWith(
+      "route-hazards-source",
+      expect.objectContaining({ type: "geojson" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-hazards-critical", type: "circle" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-hazards-warning", type: "circle" }),
+    );
+    expect(mockAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "route-hazards-info", type: "circle" }),
+    );
+  });
+
+  it("calls setData on route-hazards-source when routeHazards prop changes", async () => {
+    const hazards: RouteHazard[] = [
+      {
+        id: "bridge-1-0",
+        type: "bridge",
+        severity: "critical",
+        message: "Bridge vehicle limit exceeded",
+        coordinates: [24.95, 60.18],
+        properties: {},
+      },
+    ];
+
+    const { rerender } = render(<MapView routeHazards={[]} />);
+    await fireStyleLoad();
+    mockSetData.mockClear();
+
+    rerender(<MapView routeHazards={hazards} />);
+
+    expect(mockGetSource).toHaveBeenCalledWith("route-hazards-source");
+    const lastCall =
+      mockSetData.mock.calls[mockSetData.mock.calls.length - 1][0];
+    expect(lastCall.type).toBe("FeatureCollection");
+    expect(lastCall.features).toHaveLength(1);
+    expect(lastCall.features[0].properties.severity).toBe("critical");
+  });
+
+  it("calls flyTo when focusedHazard is set", async () => {
+    const hazard: RouteHazard = {
+      id: "road-1-0",
+      type: "road",
+      severity: "warning",
+      message: "Recurring road damage",
+      coordinates: [24.94, 60.17],
+      properties: {},
+    };
+
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+
+    rerender(<MapView focusedHazard={hazard} />);
+
+    expect(mockFlyTo).toHaveBeenCalledWith(
+      expect.objectContaining({ center: [24.94, 60.17], zoom: 15 }),
+    );
+  });
+
+  it("places a Marker at the focused hazard coordinates", async () => {
+    const hazard: RouteHazard = {
+      id: "bridge-2-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit exceeded",
+      coordinates: [25.0, 60.2],
+      properties: {},
+    };
+
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+    MockMarker.mockClear();
+
+    rerender(<MapView focusedHazard={hazard} />);
+
+    expect(MockMarker).toHaveBeenCalledWith(
+      expect.objectContaining({ color: "#ef4444" }),
+    );
+    expect(mockMarkerSetLngLat).toHaveBeenCalledWith([25.0, 60.2]);
+  });
+
+  it("opens a Popup at the focused hazard coordinates", async () => {
+    const hazard: RouteHazard = {
+      id: "bridge-2-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit exceeded",
+      coordinates: [25.0, 60.2],
+      properties: { name: "Test Bridge", max_vehicle_mass_t: 16 },
+    };
+
+    MockPopup.mockClear();
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+    MockPopup.mockClear();
+
+    rerender(<MapView focusedHazard={hazard} />);
+
+    expect(MockPopup).toHaveBeenCalled();
+    expect(mockSetLngLat).toHaveBeenCalledWith([25.0, 60.2]);
+    expect(mockSetHTML).toHaveBeenCalledWith(
+      expect.stringContaining("Bridge hazard"),
+    );
+  });
+
+  it("removes previous hazard focus marker and popup when focusedHazard changes", async () => {
+    const hazard1: RouteHazard = {
+      id: "road-1-0",
+      type: "road",
+      severity: "warning",
+      message: "Damage",
+      coordinates: [24.94, 60.17],
+      properties: {},
+    };
+    const hazard2: RouteHazard = {
+      id: "bridge-1-0",
+      type: "bridge",
+      severity: "critical",
+      message: "Bridge limit",
+      coordinates: [25.0, 60.2],
+      properties: {},
+    };
+
+    MockMarker.mockClear();
+    const { rerender } = render(<MapView focusedHazard={null} />);
+    await fireStyleLoad();
+
+    rerender(<MapView focusedHazard={hazard1} />);
+    mockMarkerRemove.mockClear();
+    mockPopupRemove.mockClear();
+
+    rerender(<MapView focusedHazard={hazard2} />);
+
+    expect(mockMarkerRemove).toHaveBeenCalled();
+    expect(mockPopupRemove).toHaveBeenCalled();
   });
 });
