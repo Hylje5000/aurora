@@ -123,20 +123,21 @@ src/
 ### Database Schema (run `.local/setup_custom_layers.sql` to create)
 
 Two PostGIS tables:
+
 - **`custom_layers`**: `id UUID`, `name TEXT`, `description TEXT`, `color TEXT`, `created_at`, `updated_at`. One row per user-created named layer.
 - **`custom_features`**: `id UUID`, `layer_id UUID` (FK → cascade), `name TEXT`, `description TEXT`, `feature_type TEXT` (`Point|LineString|Polygon|Rectangle`), `geom GEOMETRY(Geometry,4326)`, `color TEXT`, `properties JSONB`, `created_at`, `updated_at`. GIST index on `geom`. The `properties` JSONB column is reserved for future military symbol data (SIDC, milsymbol options) without schema migration.
 
 ### API Routes (`/api/custom-layers`)
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/custom-layers` | List all layers |
-| POST | `/api/custom-layers` | Create a layer |
-| DELETE | `/api/custom-layers/[id]` | Delete layer + cascade features |
-| GET | `/api/custom-layers/[id]/features?bbox=...` | Bbox-scoped feature fetch |
-| POST | `/api/custom-layers/[id]/features` | Create a feature (ST_GeomFromGeoJSON) |
-| PUT | `/api/custom-layers/[id]/features/[fid]` | Update name/description/color |
-| DELETE | `/api/custom-layers/[id]/features/[fid]` | Delete a single feature |
+| Method | Path                                        | Purpose                               |
+| ------ | ------------------------------------------- | ------------------------------------- |
+| GET    | `/api/custom-layers`                        | List all layers                       |
+| POST   | `/api/custom-layers`                        | Create a layer                        |
+| DELETE | `/api/custom-layers/[id]`                   | Delete layer + cascade features       |
+| GET    | `/api/custom-layers/[id]/features?bbox=...` | Bbox-scoped feature fetch             |
+| POST   | `/api/custom-layers/[id]/features`          | Create a feature (ST_GeomFromGeoJSON) |
+| PUT    | `/api/custom-layers/[id]/features/[fid]`    | Update name/description/color         |
+| DELETE | `/api/custom-layers/[id]/features/[fid]`    | Delete a single feature               |
 
 All routes degrade gracefully (empty response / 503) when `DATABASE_URL` is absent.
 

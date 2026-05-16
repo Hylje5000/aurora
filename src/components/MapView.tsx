@@ -163,7 +163,7 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "fill-color": ["get", "color"],
-      "fill-opacity": 0.3,
+      "fill-opacity": 0.5,
     },
   });
 
@@ -179,7 +179,7 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "line-color": ["get", "color"],
-      "line-width": 2,
+      "line-width": 4,
     },
   });
 
@@ -191,11 +191,58 @@ function addCustomLayerSourcesToMap(
     layout: { visibility: vis },
     paint: {
       "circle-color": ["get", "color"],
-      "circle-radius": 6,
+      "circle-radius": 10,
       "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1.5,
+      "circle-stroke-width": 2.5,
     },
   });
+}
+
+function registerCustomLayerClickHandlers(map: mapboxgl.Map, layerId: string) {
+  const sourceId = `custom-layer-${layerId}`;
+
+  for (const suffix of ["-fill", "-line", "-circle"]) {
+    const fullId = `${sourceId}${suffix}`;
+
+    map.on("click", fullId, (e) => {
+      const feature = e.features?.[0];
+      if (!feature?.properties) return;
+      const { name, description } = feature.properties as {
+        name?: string;
+        description?: string;
+      };
+
+      new mapboxgl.Popup({ className: "aurora-popup" })
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<div style="
+            background:#0f172a;
+            color:#e2e8f0;
+            border:1px solid #334155;
+            border-radius:6px;
+            padding:10px 14px;
+            font-family:monospace;
+            font-size:12px;
+            line-height:1.8;
+            min-width:140px;
+            max-width:260px;
+            word-break:break-word;
+            touch-action:none;
+          ">
+            <div style="font-size:13px;font-weight:700;color:#fff;${description ? "margin-bottom:6px;" : ""}letter-spacing:0.04em">${name ?? "Unnamed"}</div>
+            ${description ? `<div style="color:#94a3b8;font-size:11px;line-height:1.5">${description}</div>` : ""}
+          </div>`,
+        )
+        .addTo(map);
+    });
+
+    map.on("mouseenter", fullId, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", fullId, () => {
+      map.getCanvas().style.cursor = "";
+    });
+  }
 }
 
 function removeCustomLayerFromMap(
@@ -467,6 +514,7 @@ export default function MapView({
                 font-size:12px;
                 line-height:1.8;
                 min-width:160px;
+                touch-action:none;
               ">
                 <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;letter-spacing:0.05em">${radio}</div>
                 <div><span style="color:#64748b">AOI</span>&nbsp;&nbsp;&nbsp;&nbsp;${aoi_id}</div>
@@ -510,6 +558,10 @@ export default function MapView({
           enabledCustomLayerIdsRef.current.has(layer.id),
           registeredCustomLayerIdsRef.current,
         );
+        registerCustomLayerClickHandlers(map, layer.id);
+        if (enabledCustomLayerIdsRef.current.has(layer.id)) {
+          void fetchCustomLayerFeatures(map, layer.id);
+        }
       }
 
       // ── Terrain & intelligence layers ──────────────────────────────────
@@ -533,11 +585,11 @@ export default function MapView({
         slot: "bottom",
         layout: { visibility: vis.hillshade ? "visible" : "none" },
         paint: {
-          "hillshade-exaggeration": 0.7,
+          "hillshade-exaggeration": 0.3,
           "hillshade-illumination-direction": 335,
-          "hillshade-shadow-color": "#0d1520",
-          "hillshade-highlight-color": "#3a6080",
-          "hillshade-accent-color": "#000000",
+          "hillshade-shadow-color": "#253545",
+          "hillshade-highlight-color": "#7aaabf",
+          "hillshade-accent-color": "#1a2a38",
         },
       });
 
@@ -553,15 +605,15 @@ export default function MapView({
             "match",
             ["get", "class"],
             "wood",
-            "rgba(20,83,45,0.55)",
+            "rgba(50,180,90,0.38)",
             "scrub",
-            "rgba(54,83,20,0.35)",
+            "rgba(110,170,50,0.28)",
             "grass",
-            "rgba(74,108,42,0.22)",
+            "rgba(130,200,70,0.20)",
             "crop",
-            "rgba(74,108,42,0.22)",
+            "rgba(160,210,80,0.20)",
             "snow",
-            "rgba(180,210,255,0.3)",
+            "rgba(210,235,255,0.30)",
             "rgba(0,0,0,0)",
           ],
         },
@@ -576,8 +628,8 @@ export default function MapView({
         filter: ["!=", ["get", "index"], 5],
         layout: { visibility: vis.contours ? "visible" : "none" },
         paint: {
-          "line-color": "rgba(100,160,120,0.45)",
-          "line-width": 0.5,
+          "line-color": "rgba(180,255,200,0.80)",
+          "line-width": 0.8,
         },
       });
 
@@ -594,8 +646,8 @@ export default function MapView({
         ],
         layout: { visibility: vis.contours ? "visible" : "none" },
         paint: {
-          "line-color": "rgba(130,200,150,0.75)",
-          "line-width": 1.2,
+          "line-color": "rgba(210,255,220,1.0)",
+          "line-width": 2,
         },
       });
 
@@ -618,9 +670,9 @@ export default function MapView({
           "text-font": ["DIN Pro Regular", "Arial Unicode MS Regular"],
         },
         paint: {
-          "text-color": "#8acd9a",
-          "text-halo-color": "rgba(0,0,0,0.6)",
-          "text-halo-width": 1.5,
+          "text-color": "#ccffdd",
+          "text-halo-color": "rgba(0,0,0,0.85)",
+          "text-halo-width": 2.5,
         },
       });
 
@@ -718,12 +770,19 @@ export default function MapView({
     const currentIds = new Set(customLayers.map((l) => l.id));
 
     for (const layer of customLayers) {
+      const isNew = !registeredCustomLayerIdsRef.current.has(layer.id);
       addCustomLayerSourcesToMap(
         map,
         layer.id,
         enabledCustomLayerIdsRef.current.has(layer.id),
         registeredCustomLayerIdsRef.current,
       );
+      if (isNew) {
+        registerCustomLayerClickHandlers(map, layer.id);
+        if (enabledCustomLayerIdsRef.current.has(layer.id)) {
+          void fetchCustomLayerFeatures(map, layer.id);
+        }
+      }
     }
 
     for (const id of [...registeredCustomLayerIdsRef.current]) {

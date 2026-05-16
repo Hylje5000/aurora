@@ -29,7 +29,10 @@ export default function MapWithNav() {
   useEffect(() => {
     fetch("/api/custom-layers")
       .then((r) => (r.ok ? r.json() : []))
-      .then((layers: CustomLayer[]) => setCustomLayers(layers))
+      .then((layers: CustomLayer[]) => {
+        setCustomLayers(layers);
+        setEnabledCustomLayerIds(new Set(layers.map((l: CustomLayer) => l.id)));
+      })
       .catch(() => {});
   }, []);
 
@@ -59,6 +62,7 @@ export default function MapWithNav() {
       if (res.ok) {
         const layer = (await res.json()) as CustomLayer;
         setCustomLayers((prev) => [...prev, layer]);
+        setEnabledCustomLayerIds((prev) => new Set([...prev, layer.id]));
       }
     } catch {
       // graceful degradation — no DB

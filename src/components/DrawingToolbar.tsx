@@ -60,7 +60,7 @@ export default function DrawingToolbar({
 }: DrawingToolbarProps) {
   return (
     <div
-      className="absolute top-4 right-4 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none"
+      className="absolute top-4 right-4 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
       data-testid="drawing-toolbar"
     >
       {/* Header */}

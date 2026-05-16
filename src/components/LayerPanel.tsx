@@ -49,7 +49,7 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="absolute left-4 bottom-10 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none">
+    <div className="absolute left-4 bottom-10 z-10 w-48 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none">
       {/* Header */}
       <button
         onClick={() => setOpen((o) => !o)}

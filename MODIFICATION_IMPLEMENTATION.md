@@ -36,6 +36,7 @@
   - `DEFAULT_LAYER_COLOUR` constant
 
 **Phase 1 wrap-up:**
+
 - [ ] Write unit tests for `src/lib/customLayers.ts` (palette completeness, type guards if any).
 - [ ] Run `next lint --fix`.
 - [ ] Run `tsc --noEmit` and fix any type errors.
@@ -59,6 +60,7 @@
 - [ ] After adding any TODOs or incomplete items, add new tasks here.
 
 **Phase 2 wrap-up:**
+
 - [ ] Write unit tests for all four route files (mock `@/lib/db`).
 - [ ] Run `next lint --fix`.
 - [ ] Run `tsc --noEmit` and fix any type errors.
@@ -80,6 +82,7 @@
 - [ ] After adding any TODOs or incomplete items, add new tasks here.
 
 **Phase 3 wrap-up:**
+
 - [ ] Write unit tests for `FeatureDialog`, `DrawingToolbar`, `CustomLayerPanel` (mock callbacks, check render).
 - [ ] Run `next lint --fix`.
 - [ ] Run `tsc --noEmit` and fix any type errors.
@@ -109,6 +112,7 @@
 - [ ] After adding any TODOs or incomplete items, add new tasks here.
 
 **Phase 4 wrap-up:**
+
 - [ ] Update/extend `MapView` tests to cover: Draw control init, custom layer source registration, `draw.create` flow, `draw.delete` flow, moveend re-fetch for custom layers.
 - [ ] Run `next lint --fix`.
 - [ ] Run `tsc --noEmit` and fix any type errors.
@@ -137,6 +141,7 @@
 - [ ] After adding any TODOs or incomplete items, add new tasks here.
 
 **Phase 5 wrap-up:**
+
 - [ ] Update/extend `MapWithNav` tests to cover new state wiring.
 - [ ] Run `next lint --fix`.
 - [ ] Run `tsc --noEmit` and fix any type errors.

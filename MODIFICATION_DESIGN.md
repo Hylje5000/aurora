@@ -29,16 +29,17 @@ Add a collaborative drawing system to the Aurora IPB map. Users can create named
 
 ## Alternatives Considered
 
-| Option | Pros | Cons | Decision |
-|--------|------|------|----------|
-| `@mapbox/mapbox-gl-draw` | Official, well-maintained, TypeScript types, integrates directly with Mapbox map object | Rectangle not built-in; must add custom mode | **Selected** — most natural fit |
-| `react-map-gl-draw` (nebula.gl) | React-native API | Requires `react-map-gl` wrapper around the entire map; would require large refactor | Rejected |
-| Custom canvas drawing | Full control | Very large implementation effort | Rejected |
-| `leaflet-draw` | Simple API | Not compatible with Mapbox GL JS | Rejected |
+| Option                          | Pros                                                                                    | Cons                                                                                | Decision                        |
+| ------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------- |
+| `@mapbox/mapbox-gl-draw`        | Official, well-maintained, TypeScript types, integrates directly with Mapbox map object | Rectangle not built-in; must add custom mode                                        | **Selected** — most natural fit |
+| `react-map-gl-draw` (nebula.gl) | React-native API                                                                        | Requires `react-map-gl` wrapper around the entire map; would require large refactor | Rejected                        |
+| Custom canvas drawing           | Full control                                                                            | Very large implementation effort                                                    | Rejected                        |
+| `leaflet-draw`                  | Simple API                                                                              | Not compatible with Mapbox GL JS                                                    | Rejected                        |
 
 ### Rectangle mode
 
 `@mapbox/mapbox-gl-draw` has no built-in rectangle mode. Options:
+
 - **`mapbox-gl-draw-rectangle-mode`** npm package — minimal, well-known community plugin.
 - Build a custom mode from scratch — unnecessary complexity.
 
@@ -89,15 +90,15 @@ The `properties` column is intentionally open-ended. When military symbols are a
 
 All routes live under `/api/custom-layers`.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/api/custom-layers` | List all layers (no features) |
-| `POST` | `/api/custom-layers` | Create a layer |
-| `DELETE` | `/api/custom-layers/[id]` | Delete a layer (cascades features) |
-| `GET` | `/api/custom-layers/[id]/features` | Fetch features by bbox `?bbox=minLng,minLat,maxLng,maxLat` |
-| `POST` | `/api/custom-layers/[id]/features` | Add a feature |
-| `PUT` | `/api/custom-layers/[id]/features/[fid]` | Update feature name/description/color/geometry |
-| `DELETE` | `/api/custom-layers/[id]/features/[fid]` | Delete a single feature |
+| Method   | Path                                     | Purpose                                                    |
+| -------- | ---------------------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/api/custom-layers`                     | List all layers (no features)                              |
+| `POST`   | `/api/custom-layers`                     | Create a layer                                             |
+| `DELETE` | `/api/custom-layers/[id]`                | Delete a layer (cascades features)                         |
+| `GET`    | `/api/custom-layers/[id]/features`       | Fetch features by bbox `?bbox=minLng,minLat,maxLng,maxLat` |
+| `POST`   | `/api/custom-layers/[id]/features`       | Add a feature                                              |
+| `PUT`    | `/api/custom-layers/[id]/features/[fid]` | Update feature name/description/color/geometry             |
+| `DELETE` | `/api/custom-layers/[id]/features/[fid]` | Delete a single feature                                    |
 
 ### GeoJSON Feature response shape
 
@@ -105,7 +106,9 @@ All routes live under `/api/custom-layers`.
 {
   "type": "Feature",
   "id": "<uuid>",
-  "geometry": { /* GeoJSON geometry */ },
+  "geometry": {
+    /* GeoJSON geometry */
+  },
   "properties": {
     "id": "<uuid>",
     "layer_id": "<uuid>",
@@ -113,9 +116,9 @@ All routes live under `/api/custom-layers`.
     "description": "",
     "feature_type": "Point",
     "color": "#ef4444",
-    "created_at": "2026-05-16T10:00:00Z"
+    "created_at": "2026-05-16T10:00:00Z",
     // future: "sidc": "SFGPUUSR-------", "milsymbol": {...}
-  }
+  },
 }
 ```
 
@@ -166,6 +169,7 @@ src/
 3. Map events `draw.create`, `draw.delete`, `draw.update`, `draw.selectionchange` are registered on the map object.
 
 `MapWithNav` will own:
+
 - `customLayers` state: `CustomLayer[]`
 - `enabledCustomLayerIds` state: `Set<string>` — layer IDs currently toggled on
 - `activeDrawingLayerId` state: `string | null`
@@ -242,20 +246,20 @@ graph TD
 
 ## File-by-File Change Summary
 
-| File | Change |
-|------|--------|
-| `src/lib/customLayers.ts` | TypeScript types: `CustomLayer`, `CustomFeature`, `DrawingTool`, `COLOUR_PALETTE` |
-| `src/app/api/custom-layers/route.ts` | GET list + POST create |
-| `src/app/api/custom-layers/[id]/route.ts` | DELETE layer |
-| `src/app/api/custom-layers/[id]/features/route.ts` | GET bbox features + POST create feature |
-| `src/app/api/custom-layers/[id]/features/[fid]/route.ts` | PUT update + DELETE feature |
-| `src/components/CustomLayerPanel.tsx` | New: layer list UI |
-| `src/components/DrawingToolbar.tsx` | New: tool/colour selector |
-| `src/components/FeatureDialog.tsx` | New: name/description modal |
-| `src/components/MapView.tsx` | Add Draw control, per-layer sources/layers, moveend for custom layers |
-| `src/components/MapWithNav.tsx` | Add custom layer state + wiring |
-| `.local/setup_custom_layers.sql` | PostgreSQL setup script |
-| `src/test/...` | New tests for all above |
+| File                                                     | Change                                                                            |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `src/lib/customLayers.ts`                                | TypeScript types: `CustomLayer`, `CustomFeature`, `DrawingTool`, `COLOUR_PALETTE` |
+| `src/app/api/custom-layers/route.ts`                     | GET list + POST create                                                            |
+| `src/app/api/custom-layers/[id]/route.ts`                | DELETE layer                                                                      |
+| `src/app/api/custom-layers/[id]/features/route.ts`       | GET bbox features + POST create feature                                           |
+| `src/app/api/custom-layers/[id]/features/[fid]/route.ts` | PUT update + DELETE feature                                                       |
+| `src/components/CustomLayerPanel.tsx`                    | New: layer list UI                                                                |
+| `src/components/DrawingToolbar.tsx`                      | New: tool/colour selector                                                         |
+| `src/components/FeatureDialog.tsx`                       | New: name/description modal                                                       |
+| `src/components/MapView.tsx`                             | Add Draw control, per-layer sources/layers, moveend for custom layers             |
+| `src/components/MapWithNav.tsx`                          | Add custom layer state + wiring                                                   |
+| `.local/setup_custom_layers.sql`                         | PostgreSQL setup script                                                           |
+| `src/test/...`                                           | New tests for all above                                                           |
 
 ---
 
@@ -274,7 +278,7 @@ graph TD
 
 - [mapbox-gl-draw API](https://github.com/mapbox/mapbox-gl-draw/blob/main/docs/API.md)
 - [mapbox-gl-draw npm](https://www.npmjs.com/package/@mapbox/mapbox-gl-draw)
-- [@types/mapbox__mapbox-gl-draw](https://www.npmjs.com/package/@types/mapbox__mapbox-gl-draw)
+- [@types/mapbox\_\_mapbox-gl-draw](https://www.npmjs.com/package/@types/mapbox__mapbox-gl-draw)
 - [mapbox-gl-draw-rectangle-mode](https://www.npmjs.com/package/mapbox-gl-draw-rectangle-mode)
 - [PostGIS ST_Intersects](https://postgis.net/docs/ST_Intersects.html)
 - [Mapbox GL JS GeoJSON source](https://docs.mapbox.com/mapbox-gl-js/style-spec/sources/#geojson)

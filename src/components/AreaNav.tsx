@@ -9,7 +9,7 @@ interface AreaNavProps {
 
 export default function AreaNav({ selectedAreaId, onSelect }: AreaNavProps) {
   return (
-    <div className="absolute top-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+    <div className="absolute top-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 touch-none">
       {AREAS_OF_INTEREST.map((area) => {
         const isActive = selectedAreaId === area.id;
         return (

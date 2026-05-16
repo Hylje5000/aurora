@@ -48,7 +48,7 @@ export default function CustomLayerPanel({
 
   return (
     <div
-      className="absolute right-4 bottom-10 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none"
+      className="absolute right-4 bottom-10 z-10 w-52 rounded-lg border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl select-none touch-none"
       data-testid="custom-layer-panel"
     >
       {/* Header */}

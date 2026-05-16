@@ -23,10 +23,44 @@ body {
   padding: 0;
   box-shadow: none;
   border-radius: 0;
+  touch-action: none;
 }
 
+/* Tip arrow — all anchor directions, colour matches the inner div background */
 .aurora-popup .mapboxgl-popup-tip {
-  border-top-color: #334155;
+  border-color: transparent;
+}
+.aurora-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip,
+.aurora-popup.mapboxgl-popup-anchor-bottom-left .mapboxgl-popup-tip,
+.aurora-popup.mapboxgl-popup-anchor-bottom-right .mapboxgl-popup-tip {
+  border-top-color: #0f172a;
+}
+.aurora-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip,
+.aurora-popup.mapboxgl-popup-anchor-top-left .mapboxgl-popup-tip,
+.aurora-popup.mapboxgl-popup-anchor-top-right .mapboxgl-popup-tip {
+  border-bottom-color: #0f172a;
+}
+.aurora-popup.mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+  border-right-color: #0f172a;
+}
+.aurora-popup.mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+  border-left-color: #0f172a;
+}
+
+/* Close button — dark theme, no white flash on hover */
+.aurora-popup .mapboxgl-popup-close-button {
+  color: #64748b;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 0 6px 0 0;
+  top: 0;
+  right: 0;
+}
+.aurora-popup .mapboxgl-popup-close-button:hover {
+  background: #1e293b;
+  color: #e2e8f0;
 }
 
 /* Dark Mapbox NavigationControl */
