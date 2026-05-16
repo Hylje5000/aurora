@@ -324,6 +324,7 @@ describe("MapView", () => {
     render(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -355,6 +356,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -381,6 +383,7 @@ describe("MapView", () => {
 
   it("shows cluster layers when at least one cell type is toggled on", async () => {
     const allOff = {
+      satellite: false,
       terrain3d: false,
       hillshade: true,
       contours: true,
@@ -417,6 +420,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -444,6 +448,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -464,6 +469,7 @@ describe("MapView", () => {
   it("restores full data when all cell types are re-enabled", async () => {
     mockFetchWithTowers(["GSM", "UMTS", "LTE", "CDMA"]);
     const allOff = {
+      satellite: false,
       terrain3d: false,
       hillshade: true,
       contours: true,
@@ -760,6 +766,7 @@ describe("MapView", () => {
     render(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: true,
           hillshade: true,
           contours: true,
@@ -785,6 +792,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: false,
           contours: true,
@@ -812,6 +820,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: true,
           contours: false,
@@ -845,6 +854,7 @@ describe("MapView", () => {
     const { rerender } = render(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: true,
           hillshade: true,
           contours: true,
@@ -862,6 +872,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: false,
           hillshade: true,
           contours: true,
@@ -885,6 +896,7 @@ describe("MapView", () => {
     rerender(
       <MapView
         layerVisibility={{
+          satellite: false,
           terrain3d: true,
           hillshade: true,
           contours: true,

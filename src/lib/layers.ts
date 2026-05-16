@@ -1,4 +1,5 @@
 export type LayerKey =
+  | "satellite"
   | "terrain3d"
   | "hillshade"
   | "contours"
@@ -9,6 +10,7 @@ export type LayerKey =
   | "cellCDMA";
 
 export interface LayerVisibility extends Record<LayerKey, boolean> {
+  satellite: boolean;
   terrain3d: boolean;
   hillshade: boolean;
   contours: boolean;
@@ -20,6 +22,7 @@ export interface LayerVisibility extends Record<LayerKey, boolean> {
 }
 
 export const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
+  satellite: false,
   terrain3d: false,
   hillshade: true,
   contours: true,
@@ -32,7 +35,9 @@ export const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
 
 // Maps each toggle key to the Mapbox layer IDs it controls.
 // terrain3d has no layer IDs — it's controlled via map.setTerrain().
+// satellite has no layer IDs — it's controlled via map.setStyle().
 export const LAYER_GROUPS: Record<LayerKey, string[]> = {
+  satellite: [],
   terrain3d: [],
   hillshade: ["hillshading"],
   contours: ["contours-minor", "contours-major", "contours-labels"],

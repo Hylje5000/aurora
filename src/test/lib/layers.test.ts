@@ -6,6 +6,7 @@ import {
 } from "@/lib/layers";
 
 const ALL_KEYS: LayerKey[] = [
+  "satellite",
   "terrain3d",
   "hillshade",
   "contours",
@@ -21,6 +22,10 @@ describe("DEFAULT_LAYER_VISIBILITY", () => {
     for (const key of ALL_KEYS) {
       expect(key in DEFAULT_LAYER_VISIBILITY).toBe(true);
     }
+  });
+
+  it("has satellite off by default", () => {
+    expect(DEFAULT_LAYER_VISIBILITY.satellite).toBe(false);
   });
 
   it("has terrain3d off by default", () => {
@@ -46,6 +51,10 @@ describe("LAYER_GROUPS", () => {
     for (const key of ALL_KEYS) {
       expect(key in LAYER_GROUPS).toBe(true);
     }
+  });
+
+  it("satellite maps to no layer IDs (uses setStyle instead)", () => {
+    expect(LAYER_GROUPS.satellite).toEqual([]);
   });
 
   it("terrain3d maps to no layer IDs (uses setTerrain instead)", () => {

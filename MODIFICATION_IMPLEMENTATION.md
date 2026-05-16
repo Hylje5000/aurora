@@ -1,67 +1,59 @@
-# Modification Implementation Plan: Cell Tower Friendly Color
+# Implementation Plan: Satellite Style Toggle
 
-## Phase 1: Pre-checks
-
-- [ ] Run all tests to ensure the project is in a good state before starting modifications.
-- [ ] Create/modify unit tests for testing the code added or modified in this phase.
-- [ ] Run `eslint --fix .` to auto-fix lint issues.
-- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
-- [ ] Run `npm test` and make sure **all tests pass**. A non-zero exit is a hard blocker.
-- [ ] Run `prettier --write .` to make sure formatting is correct.
-- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
-- [ ] Use `git diff` to verify the changes, and create a suitable commit message for any changes.
-- [ ] Wait for approval before committing.
-- [ ] After committing the change, verify changes in the browser if the dev server is running.
-
-## Phase 2: Modify Cell Tower Colors
-
-- [ ] Open `src/components/MapView.tsx`.
-- [ ] Find the `towerLayers` configuration array (around line 452).
-- [ ] Change the `color` property for `GSM`, `UMTS`, `LTE`, and `CDMA` radio types from their custom colors to `#3b82f6` (friendly Blue).
-- [ ] Create/modify unit tests for testing the code added or modified in this phase (update `src/components/MapView.test.tsx` if any color assertions exist).
-- [ ] Run `eslint --fix .` to auto-fix lint issues.
-- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
-- [ ] Run `npm test` and make sure **all tests pass**. A non-zero exit is a hard blocker.
-- [ ] Run `prettier --write .` to make sure formatting is correct.
-- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
-- [ ] Use `git diff` to verify the changes, and create a suitable commit message for any changes.
-- [ ] Wait for approval before committing.
-- [ ] After committing the change, verify changes in the browser if the dev server is running.
-
-## Phase 3: Final Verification and Documentation
-
-- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal.
-- [ ] Update any `README.md` or `CLAUDE.md` file if it references the old colors.
-- [ ] Ask the user to inspect the package (and running app, if any).
-- [ ] Create/modify unit tests for testing the code added or modified in this phase (Not applicable for this documentation phase).
-- [ ] Run `eslint --fix .` to auto-fix lint issues.
-- [ ] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
-- [ ] Run `npm test` and make sure **all tests pass**. A non-zero exit is a hard blocker.
-- [ ] Run `prettier --write .` to make sure formatting is correct.
-- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
-- [ ] Use `git diff` to verify the changes, and create a suitable commit message for any changes.
-- [ ] Wait for approval before committing.
-- [ ] After committing the change, verify changes in the browser if the dev server is running.
-
----
+This plan outlines the steps to implement a global satellite style toggle in the Aurora IPB application.
 
 ## Journal
 
-**[Phase 1]**
+| Date       | Phase   | Notes         |
+| ---------- | ------- | ------------- |
+| 2026-05-16 | Initial | Plan created.                                                                                                            |
+| 2026-05-16 | Phase 1 | Updated `src/lib/layers.ts` and `src/test/lib/layers.test.ts`. Fixed broken tests in `MapView.test.tsx`. All tests passing. |
 
-- Ran `npm test && npx eslint --fix . && npx tsc --noEmit && npx prettier --write .`
-- All 237 tests passed.
-- Linters, type checks, and formatters executed successfully with no errors.
-- Pre-checks complete.
+## Phase 1: Preparation & Initial State
 
-**[Phase 2]**
-- Modified `src/components/MapView.tsx` to set cell tower radio colors to `#3b82f6` (friendly Blue).
-- Modified `src/components/LayerPanel.tsx` to update the corresponding UI dot colors to `#3b82f6`.
-- Ran `npm test && npx eslint --fix . && npx tsc --noEmit && npx prettier --write .`. All checks and 237 tests passed.
-- Verified changes with `git diff`.
-- Awaiting approval to commit.
+- [x] Run all tests to ensure the project is in a good state before starting modifications.
+- [x] Modify `src/lib/layers.ts` to add `satellite` to `LayerKey` and `LayerVisibility`.
+- [x] Update `DEFAULT_LAYER_VISIBILITY` in `src/lib/layers.ts` to include `satellite: false`.
+- [x] Update `LAYER_GROUPS` in `src/lib/layers.ts` to include `satellite: []`.
+- [x] Create/modify unit tests for testing the code added or modified in this phase.
+- [x] Run `next lint --fix` (or `eslint --fix`) to auto-fix lint issues.
+- [x] Run `tsc --noEmit` one more time and fix any TypeScript type errors.
+- [x] Run `npm test` and make sure **all tests pass**.
+- [x] Run `prettier --write .` to make sure formatting is correct.
+- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file with the current state (Journal).
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
+- [ ] Wait for approval before committing.
 
-**[Phase 3]**
-- Ran `npm run test:coverage`. Coverage report generated successfully (93.5% Stmts, 88.66% Branch).
-- Updated `CLAUDE.md` to reflect the change to friendly blue (`#3b82f6`) for cell towers.
-- Implementation complete!
+## Phase 2: LayerPanel UI
+
+- [ ] Modify `src/components/LayerPanel.tsx` to add the "Basemap" section and "Satellite View" toggle.
+- [ ] Create/modify unit tests for `LayerPanel.tsx`.
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit`.
+- [ ] Run `npm test`.
+- [ ] Run `prettier --write .`.
+- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
+- [ ] Wait for approval before committing.
+
+## Phase 3: MapView Refactoring & Style Logic
+
+- [ ] Refactor `src/components/MapView.tsx` to handle style transitions.
+  - [ ] Move initialization logic into reusable functions that can be called on `style.load`.
+  - [ ] Add `useEffect` to trigger `map.setStyle()` when `layerVisibility.satellite` changes.
+  - [ ] Ensure all custom sources, layers, icons, and event listeners are re-registered after style change.
+- [ ] Create/modify unit tests for `MapView.tsx` (mocking `setStyle` and style load events).
+- [ ] Run `next lint --fix`.
+- [ ] Run `tsc --noEmit`.
+- [ ] Run `npm test`.
+- [ ] Run `prettier --write .`.
+- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
+- [ ] Use `git diff` to verify the changes, and create a suitable commit message.
+- [ ] Wait for approval before committing.
+
+## Phase 4: Final Validation
+
+- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal.
+- [ ] Update `README.md` if necessary.
+- [ ] Ask the user to inspect the package and running app.
+- [ ] Final project cleanup and documentation update.

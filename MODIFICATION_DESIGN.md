@@ -1,52 +1,100 @@
-# Modification Design: Update Cell Tower Colors to Friendly (Blue)
+# Design Document: Satellite Style Toggle
 
 ## Overview
 
-The goal of this modification is to update the NATO military symbology color used for cell towers in the Next.js application. Currently, the cell towers are color-coded based on their radio type (GSM, UMTS, LTE, CDMA) using various colors (yellow, orange, green, purple). According to military symbol conventions, these ground signal radio units should be rendered as "friendly" entities, which are conventionally represented with a blue color (`#3b82f6`).
+This modification adds a global style toggle to the Aurora IPB application, allowing users to switch between the "Mapbox Standard" (Military/Night) basemap and "Mapbox Satellite Streets". This provides analysts with high-resolution imagery while maintaining all tactical overlays, terrain features, and drawing capabilities.
 
-## Analysis of the Problem
+## Detailed Analysis
 
-The application renders cell towers on a Mapbox GL JS map inside `src/components/MapView.tsx`.
-When the map style loads, it initializes the cell tower layers for each radio type and generates the corresponding NATO symbols using `createMilsymbolImage`.
+The application currently uses `mapbox://styles/mapbox/standard` with a night preset as its primary basemap. While excellent for data visualization, certain intelligence tasks require actual satellite imagery.
 
-Currently, the `towerLayers` configuration defines colors for each radio type:
+### Goals
 
-- GSM: `#fde047` (Yellow)
-- UMTS: `#fb923c` (Orange)
-- LTE: `#4ade80` (Green)
-- CDMA: `#c4b5fd` (Purple)
+- Provide a clear UI toggle to switch to satellite view.
+- Maintain all custom layers (Cell Towers, AOIs, Drawing Layers).
+- Maintain 3D terrain and contour features in satellite mode.
+- Ensure the transition is smooth and doesn't lose application state (e.g., active drawing, selected AOI).
 
-The SIDC (Symbol Identification Code) used is `SFGPUUSR-------` (Friendly Ground Signal Radio Unit). However, the `fillColor` parameter passed to `milsymbol` overrides the default friendly color with the custom colors listed above.
+### Challenges
+
+- **Style Switching**: Changing styles in Mapbox GL JS removes all added sources and layers. These must be re-added after the new style loads.
+- **Event Listeners**: Layer-specific event listeners (clicks, mouseenters) must be re-attached to the new style's layers.
+- **State Sync**: The `LayerPanel` needs to reflect the current style choice, and other toggles (Terrain 3D, Hillshade) should ideally persist across styles.
 
 ## Alternatives Considered
 
-- **Change the SIDC:** The SIDC already uses 'F' for friendly (`SF...`). The issue is purely the overridden `fillColor`.
-- **Remove `fillColor` entirely:** We could omit the `fillColor` parameter when calling `createMilsymbolImage`, which would allow `milsymbol` to use its default color for friendly units. However, to maintain visual consistency with the app's established UI palette (e.g., `#3b82f6` used for Blue), it is safer and more explicit to pass `#3b82f6` to all radio types.
+1. **Satellite Overlay Layer**: Adding a raster layer at the bottom of the Standard style.
+   - _Pros_: Faster transition (no style reload).
+   - _Cons_: Standard style basemap ground layers might obscure the satellite imagery or create a messy blend. Standard style doesn't easily allow "hiding" its entire ground layer through config.
+2. **Global Style Toggle (Chosen)**: Using `map.setStyle()`.
+   - _Pros_: Provides the full, clean "Satellite Streets" experience including high-res imagery and properly integrated labels.
+   - _Cons_: Slightly slower transition; requires robust re-initialization of custom layers.
 
 ## Detailed Design
 
-1. Modify `src/components/MapView.tsx`.
-2. Locate the `towerLayers` configuration array inside the `style.load` event handler.
-3. Update the `color` property for all radio types (GSM, UMTS, LTE, CDMA) to the standard friendly blue: `#3b82f6`.
+### 1. Schema & Types
+
+- Update `LayerKey` and `LayerVisibility` in `src/lib/layers.ts` to include `satellite`.
+- `DEFAULT_LAYER_VISIBILITY` will have `satellite: false`.
+
+### 2. MapView Refactoring
+
+The logic inside the `style.load` callback in `MapView.tsx` needs to be idempotent and re-runnable.
+
+- Move one-time initializations (Draw control, Navigation control, global `draw` events) out of any style-specific logic.
+- The `style.load` listener will handle:
+  - Setting config properties (if standard style).
+  - Adding AOI sources/layers.
+  - Adding Cell Tower sources/layers/icons.
+  - Adding Custom Drawing Layer sources/layers.
+  - Adding Terrain (DEM) and Contour sources/layers.
+  - Re-applying current `layerVisibility` to the new layers.
+  - Re-attaching click/hover handlers to the new layers.
+
+### 3. UI Implementation
+
+- Update `LayerPanel.tsx` to include a new "Basemap" section at the top.
+- Add a "Satellite View" row with a toggle.
+
+### 4. Style Logic in MapView
+
+```typescript
+useEffect(() => {
+  const map = mapRef.current;
+  if (!map) return;
+
+  const targetStyle = layerVisibility.satellite
+    ? "mapbox://styles/mapbox/satellite-streets-v12"
+    : "mapbox://styles/mapbox/standard";
+
+  if (map.getStyle()?.url !== targetStyle) {
+    map.setStyle(targetStyle);
+  }
+}, [layerVisibility.satellite]);
+```
+
+### Diagram (Mermaid)
 
 ```mermaid
-flowchart TD
-    A[Cell Tower Features] --> B{Mapbox GeoJSON Source}
-    B --> C[cell-towers-gsm]
-    B --> D[cell-towers-umts]
-    B --> E[cell-towers-lte]
-    B --> F[cell-towers-cdma]
-    C --> G[Render with #3b82f6 / Blue]
-    D --> G
-    E --> G
-    F --> G
+graph TD
+    User([User]) -->|Toggles Satellite| LP[LayerPanel]
+    LP -->|onToggle| MWN[MapWithNav]
+    MWN -->|layerVisibility State| MV[MapView]
+    MV -->|Effect: satellite changed| MapJS[Mapbox GL JS]
+    MapJS -->|setStyle| StyleReload{Style Load Event}
+    StyleReload -->|Re-add| AOI[AOI Layers]
+    StyleReload -->|Re-add| CT[Cell Tower Layers]
+    StyleReload -->|Re-add| DL[Drawing Layers]
+    StyleReload -->|Re-add| TER[Terrain & Contours]
+    StyleReload -->|Sync| VIS[Apply Visibility State]
 ```
 
 ## Summary
 
-By changing the `color` property in the `towerLayers` definition in `src/components/MapView.tsx` to `#3b82f6`, all cell tower markers will correctly display as friendly blue units, aligning with NATO APP-6 military symbol conventions.
+The modification involves adding a `satellite` flag to the layer visibility state and refactoring the `MapView` component to handle style transitions gracefully. By leveraging Mapbox's `style.load` event, we ensure that all custom data layers are preserved regardless of the underlying basemap style.
 
 ## References
 
-- Internal `src/lib/milsymbolData.ts` indicating `{ label: "Friend", code: "F", color: "#3b82f6" }`.
-- Military Symbology conventions for SIDC "F" (Friendly).
+- [Mapbox GL JS API Reference: setStyle](https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setstyle)
+- [Mapbox Standard Style config](https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setconfigproperty)
+- [Managing layers after style switch](https://docs.mapbox.com/mapbox-gl-js/example/setstyle/)
