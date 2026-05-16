@@ -71,6 +71,14 @@ export default function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
       {/* Layer rows */}
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-1.5">
+          <SectionHeading label="Basemap" />
+          <LayerRow
+            label="Satellite View"
+            dotColor="#1e293b"
+            checked={visibility.satellite}
+            onToggle={() => onToggle("satellite")}
+          />
+
           <SectionHeading label="Terrain" />
           <LayerRow
             label="3D Terrain"

@@ -10,8 +10,9 @@ const defaultProps = {
 };
 
 describe("LayerPanel", () => {
-  it("renders all layer toggle rows including COMMS section", () => {
+  it("renders all layer toggle rows including Basemap section", () => {
     render(<LayerPanel {...defaultProps} />);
+    expect(screen.getByLabelText(/Satellite View/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/3D Terrain/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Hillshade/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Contour Lines/i)).toBeInTheDocument();
@@ -29,7 +30,8 @@ describe("LayerPanel", () => {
 
   it("reflects checked state from visibility prop", () => {
     render(<LayerPanel {...defaultProps} />);
-    // terrain3d is false by default
+    // satellite and terrain3d are false by default
+    expect(screen.getByLabelText(/Satellite View/i)).not.toBeChecked();
     expect(screen.getByLabelText(/3D Terrain/i)).not.toBeChecked();
     // others are true by default
     expect(screen.getByLabelText(/Hillshade/i)).toBeChecked();
@@ -39,6 +41,15 @@ describe("LayerPanel", () => {
     expect(screen.getByLabelText(/UMTS/i)).toBeChecked();
     expect(screen.getByLabelText(/LTE/i)).toBeChecked();
     expect(screen.getByLabelText(/CDMA/i)).toBeChecked();
+  });
+
+  it("calls onToggle with 'satellite' when Satellite View checkbox is clicked", async () => {
+    const onToggle = vi.fn();
+    render(
+      <LayerPanel visibility={DEFAULT_LAYER_VISIBILITY} onToggle={onToggle} />,
+    );
+    await userEvent.click(screen.getByLabelText(/Satellite View/i));
+    expect(onToggle).toHaveBeenCalledWith("satellite");
   });
 
   it("calls onToggle with 'terrain3d' when 3D Terrain checkbox is clicked", async () => {

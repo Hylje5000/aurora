@@ -4,10 +4,11 @@ This plan outlines the steps to implement a global satellite style toggle in the
 
 ## Journal
 
-| Date       | Phase   | Notes         |
-| ---------- | ------- | ------------- |
-| 2026-05-16 | Initial | Plan created.                                                                                                            |
+| Date       | Phase   | Notes                                                                                                                       |
+| ---------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 2026-05-16 | Initial | Plan created.                                                                                                               |
 | 2026-05-16 | Phase 1 | Updated `src/lib/layers.ts` and `src/test/lib/layers.test.ts`. Fixed broken tests in `MapView.test.tsx`. All tests passing. |
+| 2026-05-16 | Phase 2 | Added "Basemap" section and "Satellite View" toggle to `LayerPanel.tsx`. Updated `LayerPanel.test.tsx`. All tests passing. |
 
 ## Phase 1: Preparation & Initial State
 
@@ -26,13 +27,13 @@ This plan outlines the steps to implement a global satellite style toggle in the
 
 ## Phase 2: LayerPanel UI
 
-- [ ] Modify `src/components/LayerPanel.tsx` to add the "Basemap" section and "Satellite View" toggle.
-- [ ] Create/modify unit tests for `LayerPanel.tsx`.
-- [ ] Run `next lint --fix`.
-- [ ] Run `tsc --noEmit`.
-- [ ] Run `npm test`.
-- [ ] Run `prettier --write .`.
-- [ ] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
+- [x] Modify `src/components/LayerPanel.tsx` to add the "Basemap" section and "Satellite View" toggle.
+- [x] Create/modify unit tests for `LayerPanel.tsx`.
+- [x] Run `next lint --fix`.
+- [x] Run `tsc --noEmit`.
+- [x] Run `npm test`.
+- [x] Run `prettier --write .`.
+- [x] Update the `MODIFICATION_IMPLEMENTATION.md` file (Journal).
 - [ ] Use `git diff` to verify the changes, and create a suitable commit message.
 - [ ] Wait for approval before committing.
 
