@@ -1,0 +1,7 @@
+geopandas>=0.14
+psycopg2-binary>=2.9
+shapely>=2.0
+python-dotenv>=1.0
+pyproj>=3.6
+pandas>=2.0
+tqdm>=4.0
