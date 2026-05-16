@@ -8,7 +8,23 @@
 
 ## Journal
 
-_Updated after each phase._
+### Phase 0 — 2026-05-16
+Baseline: `openai` package was not installed locally (`node_modules/openai` missing despite being in `package.json`). Ran `npm install` to fix. All 331 tests then passed. Pre-existing, unrelated to route planning work.
+
+### Phase 1 — 2026-05-16
+Created `src/lib/routing.ts` and `POST /api/route-plan/route.ts`. One test expectation bug found: `formatDuration(3599)` rounds to 60 min which formats as "1 h" (not "60 min") — fixed test. All 354 tests pass. `route-plan/route.ts` at 100% coverage.
+
+### Phase 2 — 2026-05-16
+Created `RoutePanel` with `forwardRef`/`useImperativeHandle`. Key lesson: debounce tests require `vi.advanceTimersByTimeAsync(400)` (not the sync variant) inside `act()` — the sync version fires the timeout but doesn't flush the async microtask queue inside the callback. All 371 tests pass.
+
+### Phase 3 — 2026-05-16
+Added route source/layer and waypoint markers to `MapView`. Intercepting the elevation click via `addingWaypointRef` works cleanly — no new event listener needed. All 380 tests pass.
+
+### Phase 4 — 2026-05-16
+Wired `MapWithNav`. Route button at `absolute top-4 right-20 z-10`. `routePanelRef` (RoutePanelHandle) used to push waypoints imperatively. All 386 tests pass.
+
+### Phase 5 — 2026-05-16
+Coverage run: `routing.ts` 100%, `route-plan/route.ts` 100%, `RoutePanel.tsx` ~97%, `MapView.tsx` ~86%, `MapWithNav.tsx` ~93%. CLAUDE.md updated.
 
 ---
 
