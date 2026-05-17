@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { type LayerKey, type LayerVisibility } from "@/lib/layers";
 import {
   CustomLayerSection,
@@ -71,12 +72,11 @@ export default function LayerPanel({
         <span className="text-[10px] font-mono tracking-widest uppercase">
           Layers
         </span>
-        <span
-          className="text-[10px] transition-transform duration-200"
-          style={{ transform: open ? "rotate(0deg)" : "rotate(180deg)" }}
-        >
-          ▲
-        </span>
+        {open ? (
+          <ChevronUp className="w-3.5 h-3.5" />
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5" />
+        )}
       </button>
 
       {/* Layer rows */}

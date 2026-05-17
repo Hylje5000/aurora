@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { ChevronRight, ChevronDown, X } from "lucide-react";
 
 export interface InfoPanelData {
   title: string;
@@ -48,16 +49,20 @@ export default function InfoPanel({
         <button
           onClick={toggleCollapsed}
           aria-label={collapsed ? "expand info panel" : "collapse info panel"}
-          className="shrink-0 text-slate-400 hover:text-white text-[10px]"
+          className="shrink-0 text-slate-400 hover:text-white"
         >
-          {collapsed ? "▸" : "▾"}
+          {collapsed ? (
+            <ChevronRight className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5" />
+          )}
         </button>
         <button
           onClick={onClose}
           aria-label="close info panel"
           className="shrink-0 text-slate-400 hover:text-white"
         >
-          ×
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 

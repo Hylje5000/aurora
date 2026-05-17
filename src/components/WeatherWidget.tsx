@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import type { WeatherStats } from "@/app/api/weather/route";
 
 interface WeatherWidgetProps {
@@ -75,8 +76,9 @@ export default function WeatherWidget({
           {fmt(stats.avgTemp)}°C ± {fmt(stats.tempSpread)}°
         </span>
         {"  "}
-        <span className="text-slate-400">
-          ↑{fmt(stats.maxTemp)}° ↓{fmt(stats.minTemp)}°
+        <span className="inline-flex items-center gap-0.5 text-slate-400">
+          <ArrowUp className="w-3 h-3" />{fmt(stats.maxTemp)}°
+          <ArrowDown className="w-3 h-3 ml-1" />{fmt(stats.minTemp)}°
         </span>
       </div>
       <div>

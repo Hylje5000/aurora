@@ -1,12 +1,23 @@
 "use client";
 
-import {
+import React, {
   forwardRef,
   useImperativeHandle,
   useState,
   useEffect,
   useRef,
 } from "react";
+import {
+  Car,
+  PersonStanding,
+  Bike,
+  FileText,
+  Check,
+  X,
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+} from "lucide-react";
 import {
   type RouteProfile,
   type Waypoint,
@@ -47,10 +58,10 @@ interface RoutePanelProps {
 
 const PROFILES: RouteProfile[] = ["driving", "walking", "cycling"];
 
-const PROFILE_ICONS: Record<RouteProfile, string> = {
-  driving: "🚗",
-  walking: "🚶",
-  cycling: "🚴",
+const PROFILE_ICONS: Record<RouteProfile, React.ReactNode> = {
+  driving: <Car className="w-3.5 h-3.5" />,
+  walking: <PersonStanding className="w-3.5 h-3.5" />,
+  cycling: <Bike className="w-3.5 h-3.5" />,
 };
 
 const SEVERITY_COLOR: Record<RouteHazard["severity"], string> = {
@@ -105,10 +116,8 @@ function StatusItem({
     running: (
       <div className="w-2.5 h-2.5 rounded-full border border-blue-500 border-t-transparent animate-spin" />
     ),
-    complete: (
-      <span className="text-emerald-500 text-[10px] leading-none">✓</span>
-    ),
-    error: <span className="text-red-500 text-[10px] leading-none">✕</span>,
+    complete: <Check className="w-2.5 h-2.5 text-emerald-500" />,
+    error: <X className="w-2.5 h-2.5 text-red-500" />,
   }[status];
 
   const textColor = {
@@ -540,16 +549,20 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
             aria-label={
               panelExpanded ? "collapse route panel" : "expand route panel"
             }
-            className="text-slate-600 hover:text-white transition-colors text-[10px]"
+            className="text-slate-600 hover:text-white transition-colors"
           >
-            {panelExpanded ? "▾" : "▸"}
+            {panelExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            )}
           </button>
           <button
             onClick={onClose}
-            className="text-slate-600 hover:text-white transition-colors text-xs"
+            className="text-slate-600 hover:text-white transition-colors"
             aria-label="Close route panel"
           >
-            ✕
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -568,7 +581,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   title={profileLabel(p)}
                   aria-label={profileLabel(p)}
                   aria-pressed={profile === p}
-                  className={`flex-1 text-sm rounded py-0.5 transition-colors border ${
+                  className={`flex-1 flex items-center justify-center rounded py-0.5 transition-colors border ${
                     profile === p
                       ? "bg-slate-700 text-white"
                       : "border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-500"
@@ -679,11 +692,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   data-testid={`waypoint-row-${i}`}
                 >
                   <span
-                    className="cursor-grab text-slate-600 hover:text-slate-400 text-[11px] flex-shrink-0 leading-none"
+                    className="cursor-grab text-slate-600 hover:text-slate-400 flex-shrink-0"
                     aria-hidden="true"
                     title="Drag to reorder"
                   >
-                    ⠿
+                    <GripVertical className="w-3 h-3" />
                   </span>
                   <span
                     className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white"
@@ -696,10 +709,10 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                   </span>
                   <button
                     onClick={() => removeWaypoint(wp.id)}
-                    className="text-slate-600 hover:text-red-400 transition-colors text-[9px] flex-shrink-0"
+                    className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0"
                     aria-label={`Remove ${wp.label}`}
                   >
-                    ✕
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               ))}
@@ -765,9 +778,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                               aria-label={`Toggle leg ${i + 1} steps`}
                               data-testid={`leg-toggle-${i}`}
                             >
-                              <span className="text-[8px]">
-                                {expandedLeg === i ? "▼" : "▶"}
-                              </span>
+                              {expandedLeg === i ? (
+                                <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                              ) : (
+                                <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                              )}
                               <span>
                                 Leg {i + 1} — {formatDistance(leg.distance_m)} /{" "}
                                 {formatDuration(leg.duration_s)}
@@ -808,10 +823,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                       {/* Summary line */}
                       {intelligence.summary.passable ? (
                         <p
-                          className="text-[10px] font-mono font-semibold text-green-400"
+                          className="flex items-center gap-1 text-[10px] font-mono font-semibold text-green-400"
                           data-testid="assessment-passable"
                         >
-                          ✓ Route passable ({vehicle.label})
+                          <Check className="w-3 h-3 flex-shrink-0" />
+                          Route passable ({vehicle.label})
                           {intelligence.summary.warning > 0 ||
                           intelligence.summary.info > 0
                             ? ` · ${intelligence.summary.warning + intelligence.summary.info} notice${intelligence.summary.warning + intelligence.summary.info > 1 ? "s" : ""}`
@@ -819,10 +835,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                         </p>
                       ) : (
                         <p
-                          className="text-[10px] font-mono font-semibold text-red-400"
+                          className="flex items-center gap-1 text-[10px] font-mono font-semibold text-red-400"
                           data-testid="assessment-impassable"
                         >
-                          ✗ IMPASSABLE — {intelligence.summary.critical}{" "}
+                          <X className="w-3 h-3 flex-shrink-0" />
+                          IMPASSABLE — {intelligence.summary.critical}{" "}
                           critical hazard
                           {intelligence.summary.critical > 1 ? "s" : ""}
                         </p>
@@ -873,10 +890,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                           <div className="mt-0.5">
                             {intelligence.coverage.covered_pct === 100 ? (
                               <p
-                                className="text-[10px] font-mono font-semibold text-green-400"
+                                className="flex items-center gap-1 text-[10px] font-mono font-semibold text-green-400"
                                 data-testid="coverage-full"
                               >
-                                ✓ Full cellular coverage
+                                <Check className="w-3 h-3 flex-shrink-0" />
+                                Full cellular coverage
                               </p>
                             ) : (
                               <>
@@ -913,10 +931,11 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                           </div>
                         ) : (
                           <p
-                            className="text-[10px] font-mono font-semibold text-red-400"
+                            className="flex items-center gap-1 text-[10px] font-mono font-semibold text-red-400"
                             data-testid="coverage-unavailable"
                           >
-                            ✗ No cellular coverage
+                            <X className="w-3 h-3 flex-shrink-0" />
+                            No cellular coverage
                           </p>
                         )}
                       </div>
@@ -956,7 +975,7 @@ export const RoutePanel = forwardRef<RoutePanelHandle, RoutePanelProps>(
                           data-testid="export-pdf-btn"
                           title="Export Tactical Report (PDF)"
                         >
-                          <span>📄</span>
+                          <FileText className="w-3 h-3" />
                           <span>Export</span>
                         </button>
                       )}

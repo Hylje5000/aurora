@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X, ChevronUp, ChevronDown } from "lucide-react";
 import { COLOUR_PALETTE, DEFAULT_LAYER_COLOUR } from "@/lib/customLayers";
 import type { CustomLayer, ColourOption } from "@/lib/customLayers";
 
@@ -99,11 +100,11 @@ export function CustomLayerSection({
                   confirmDeleteId === layer.id ? null : layer.id,
                 )
               }
-              className="text-slate-600 hover:text-red-400 transition-colors text-xs"
+              className="text-slate-600 hover:text-red-400 transition-colors"
               aria-label={`Delete layer ${layer.name}`}
               data-testid={`layer-delete-${layer.id}`}
             >
-              ✕
+              <X className="w-3.5 h-3.5" />
             </button>
 
             {/* Visibility toggle — right side, matching regular layer rows */}
@@ -230,12 +231,11 @@ export default function CustomLayerPanel(props: CustomLayerPanelProps) {
         <span className="text-[10px] font-mono tracking-widest uppercase">
           Custom Layers
         </span>
-        <span
-          className="text-[10px] transition-transform duration-200"
-          style={{ transform: open ? "rotate(0deg)" : "rotate(180deg)" }}
-        >
-          ▲
-        </span>
+        {open ? (
+          <ChevronUp className="w-3.5 h-3.5" />
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5" />
+        )}
       </button>
 
       {open && (

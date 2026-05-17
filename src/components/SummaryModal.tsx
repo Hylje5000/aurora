@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface SummaryModalProps {
@@ -54,7 +55,7 @@ export default function SummaryModal({
             className="text-slate-500 hover:text-white transition-colors p-1"
             aria-label="Close summary modal"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 

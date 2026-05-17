@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { COLOUR_PALETTE } from "@/lib/customLayers";
 import type { DrawingTool, ColourOption } from "@/lib/customLayers";
 
@@ -70,11 +71,11 @@ export default function DrawingToolbar({
         </span>
         <button
           onClick={onCancel}
-          className="text-[10px] font-mono text-slate-500 hover:text-white transition-colors"
+          className="text-slate-500 hover:text-white transition-colors"
           aria-label="Cancel drawing"
           data-testid="drawing-toolbar-cancel"
         >
-          ✕
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
