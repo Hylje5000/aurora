@@ -22,7 +22,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Aurora Operational Planning",
-  description: "Aurora Operational Planning",
+  description: "Aurora - Operational Planning",
 };
 
 export default function RootLayout({
