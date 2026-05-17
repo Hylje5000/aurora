@@ -1,110 +1,235 @@
-# Modification Implementation: UI Compaction
+# Modification Implementation: Unified Bottom-Center Map Toolbar
 
 ## Journal
 
-- **2026-05-17**: Initialized implementation plan.
+- **2026-05-17**: Initialized implementation plan for bottom-center map toolbar.
+
+---
+
+## Overview
+
+Add a unified `MapToolbar` at the bottom-center of the screen with Grab / Click / Measure Distance / Measure Area modes. When a custom drawing layer is active, draw tools (Point / Line / Polygon / Rectangle + colour palette + Delete Selected + Cancel) are appended. The existing `DrawingToolbar` is kept for test compatibility but no longer rendered.
 
 ---
 
 ## Phase 0 — Baseline health check
 
-- [ ] Run `npm test` to confirm the suite is green before any changes. A non-zero exit is a hard blocker.
+- [ ] Run all tests to confirm the project is in a good state before starting:
+  ```
+  npm test
+  ```
+- [ ] Record the pass/fail count in the Journal.
 
 ---
 
-## Phase 1 — LayerPanel: single Cell Towers toggle + max-height scroll
+## Phase 1 — New `mapTool` module
+
+**Goal:** Create `src/lib/mapTool.ts` with the `MapTool` type and `MeasurementState` interface.
 
 ### Tasks
 
-- [ ] In `src/lib/layers.ts`: no changes needed (individual cell keys remain).
-- [ ] In `src/components/LayerPanel.tsx`:
-  - Add `onToggleComms: () => void` to `LayerPanelProps`.
-  - Replace the four COMMS rows (GSM, UMTS, LTE, CDMA) with a single "Cell Towers" row whose `checked` state is `visibility.cellGSM || visibility.cellUMTS || visibility.cellLTE || visibility.cellCDMA` and `onToggle` calls `onToggleComms()`.
-  - Keep the "Coverage Circles" row unchanged.
-  - Add `max-h-[calc(100vh-10rem)] overflow-y-auto` to the content `<div>`.
-  - Reduce row gap `gap-1.5` → `gap-1`, bottom padding `pb-3` → `pb-2`, header padding `py-2` → `py-1.5`.
+- [ ] Create `src/lib/mapTool.ts`:
+  - Export `MapTool = 'grab' | 'click' | 'measure-distance' | 'measure-area'`
+  - Export `DEFAULT_MAP_TOOL: MapTool = 'grab'`
+  - Export `MeasurementState { distance_km?: number; area_km2?: number }`
+- [ ] Create `src/test/lib/mapTool.test.ts`:
+  - Test that `DEFAULT_MAP_TOOL === 'grab'`
+  - Test that `MapTool` union values are the expected four strings (type-level, check via an array)
+  - Test `MeasurementState` shape (optional fields)
+- [ ] Run `next lint --fix` and `tsc --noEmit`.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read this file and update if needed.
+- [ ] Update Journal with actions taken, learnings, surprises, deviations.
+- [ ] Present `git diff` summary to user for approval.
+- [ ] Wait for user approval before committing or moving on.
+
+---
+
+## Phase 2 — `MapToolbar` component
+
+**Goal:** Build the new `src/components/MapToolbar.tsx` presentational component.
+
+### Tasks
+
+- [ ] Create `src/components/MapToolbar.tsx`:
+  - Props: `activeTool`, `onToolChange`, `measurement`, `activeDrawingLayerId`, `activeDrawingLayerName`, `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`, `onDrawToolChange`, `onDrawColourChange`, `onDeleteSelected`, `onCancelDrawing`
+  - Layout: `absolute bottom-4 left-1/2 -translate-x-1/2 z-10` pill-shaped dark panel
+  - Standard tools section: Grab (✋), Click (👆), Measure Distance (📏), Measure Area (⬡)
+  - Measurement badge: shows e.g. "3.2 km" or "1.4 km²" under active measure button
+  - Divider + draw tools section (only when `activeDrawingLayerId !== null`): Point / Line / Polygon / Rectangle icons + colour swatches + Delete Selected (conditional) + Cancel (✕)
+  - Active tool highlighted with `bg-blue-600`
+  - All buttons have `aria-label` and `aria-pressed`
+  - `data-testid` attributes on all interactive elements
+- [ ] Create `src/test/components/MapToolbar.test.tsx`:
+  - Renders 4 standard tools
+  - Active tool has `aria-pressed="true"`
+  - `onToolChange` called when tool clicked
+  - Draw section not rendered when `activeDrawingLayerId` is null
+  - Draw section renders when `activeDrawingLayerId` is set
+  - Draw tool buttons call `onDrawToolChange`
+  - Colour swatches call `onDrawColourChange`
+  - Delete Selected only visible when `hasDrawingSelection === true`
+  - Cancel button calls `onCancelDrawing`
+  - Measurement badge shows when `measurement` is provided
+- [ ] Run `next lint --fix` and `tsc --noEmit`.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read this file and update if needed.
+- [ ] Update Journal.
+- [ ] Present `git diff` summary. Wait for approval.
+
+---
+
+## Phase 3 — Lift drawing state; update `MapView` props and handle
+
+**Goal:** Move `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection` from `MapView` local state to props received from `MapWithNav`. Add `activeTool` prop. Expose `deleteDrawingSelected` via `MapViewHandle`. Remove `DrawingToolbar` render from `MapView`.
+
+### Tasks
+
+- [ ] In `src/components/MapView.tsx`:
+  - Add to `MapViewProps`:
+    - `activeTool?: MapTool` (default `'grab'`)
+    - `activeDrawingTool?: DrawingTool | null`
+    - `activeDrawingColour?: string`
+    - `onDrawToolChange?: (t: DrawingTool | null) => void`
+    - `onDrawColourChange?: (hex: string) => void`
+    - `onDrawSelectionChange?: (has: boolean) => void`
+    - `onMeasurementUpdate?: (m: MeasurementState | null) => void`
+  - Remove local state: `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`
+  - Replace with props (with fallback defaults for backward compat)
+  - Update all internal references (`effectiveTool`, draw colour ref, `setActiveDrawingTool` → `onDrawToolChange`, etc.)
+  - Replace `setHasDrawingSelection(...)` → `onDrawSelectionChange?.(...)`
+  - Add `deleteDrawingSelected` to `MapViewHandle` interface → calls `drawRef.current?.trash()`
+  - Remove `<DrawingToolbar ... />` render from JSX
+  - Add `activeToolRef = useRef<MapTool>('grab')` + keep in sync via effect
+- [ ] Ensure `handleCancelDrawing` in `MapView` still calls `onCancelDrawing?.()` and calls `onDrawToolChange?.(null)`.
+- [ ] Update `src/test/components/MapView.test.tsx`:
+  - Pass the new props through the mock/stub where needed
+  - Update any snapshot or explicit assertions about `DrawingToolbar` being absent
+  - Add test: clicking a cell tower when `activeTool='grab'` does not call elevation fetch
+  - Add test: when `activeTool='click'`, general click fires elevation
+- [ ] Run `next lint --fix` and `tsc --noEmit`.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read this file and update if needed.
+- [ ] Update Journal.
+- [ ] Present `git diff` summary. Wait for approval.
+
+---
+
+## Phase 4 — Measurement logic in `MapView`
+
+**Goal:** Implement the Measure Distance and Measure Area modes inside `MapView`.
+
+### Tasks
+
+- [ ] In `src/components/MapView.tsx`, add in `style.load`:
+  - `"measure-source"` — GeoJSON source (FeatureCollection)
+  - `"measure-line"` — line layer (dashed cyan `#06b6d4`, width 2)
+  - `"measure-fill"` — fill layer (cyan, opacity 0.12, only Polygon features)
+  - `"measure-vertices"` — circle layer (cyan, radius 5, white stroke 1.5, only Point features)
+- [ ] Add `measurePointsRef = useRef<[number,number][]>([])` to `MapView`
+- [ ] Add pure helper functions (outside component):
+  - `haversineKm(a, b): number` — great-circle distance between two lon/lat pairs
+  - `computeDistanceKm(points): number` — sum haversine for consecutive pairs
+  - `computeAreaKm2(points): number` — Shoelace formula in equirectangular approximation; returns 0 for < 3 points
+  - `buildMeasureFeatures(points, mode): GeoJSON.FeatureCollection` — returns appropriate features for updating the measure-source
+- [ ] Update the `map.on("click", async (e) => {...})` handler:
+  - After waypoint intercept, check `activeToolRef.current`:
+    - `'grab'` → `return` immediately
+    - `'measure-distance'` or `'measure-area'` → push `[lng, lat]` to `measurePointsRef.current`, call `updateMeasureSources(map, ...)`, call `onMeasurementUpdate?.(...)`; return
+    - `'click'` → fall through to existing elevation logic
+- [ ] Add `map.on("dblclick", (e) => { e.preventDefault(); ... })` — on double-click in measure mode, pop the duplicate last point added by the preceding click event (Mapbox fires click then dblclick), leaving the path finalised.
+- [ ] Add `useEffect([activeTool])` to:
+  - Update `activeToolRef.current`
+  - Clear measure state when leaving measure modes
+  - Set cursor appropriately
+- [ ] Add `clearMeasureSources(map)` helper — sets measure-source to empty FeatureCollection
+- [ ] Update `src/test/components/MapView.test.tsx`:
+  - Test `haversineKm` / `computeDistanceKm` / `computeAreaKm2` pure helpers directly (import them)
+  - Test: when `activeTool='measure-distance'`, map click appends a point and calls `onMeasurementUpdate` with `{ distance_km: ... }`
+  - Test: when `activeTool='grab'`, map click does not call fetch or `onMeasurementUpdate`
+  - Test: switching from `'measure-distance'` to `'grab'` clears measure state
+- [ ] Run `next lint --fix` and `tsc --noEmit`.
+- [ ] Run `npm test` — all tests must pass.
+- [ ] Run `prettier --write .`.
+- [ ] Re-read this file and update if needed.
+- [ ] Update Journal.
+- [ ] Present `git diff` summary. Wait for approval.
+
+---
+
+## Phase 5 — Wire everything in `MapWithNav`
+
+**Goal:** Add the new state to `MapWithNav`, render `MapToolbar`, and pass all new props to `MapView`.
+
+### Tasks
+
 - [ ] In `src/components/MapWithNav.tsx`:
-  - Add `handleCommsToggle` callback using a single `setLayerVisibility` functional update that reads current state of all 4 cell keys, computes `anyOn`, and sets all four to `!anyOn`.
-  - Pass `onToggleComms={handleCommsToggle}` to `<LayerPanel>`.
-- [ ] After completing tasks, if any TODOs were added or anything left unimplemented, add new tasks to cover them.
-- [ ] Update/add unit tests in `src/test/components/LayerPanel.test.tsx`:
-  - Replace tests for individual GSM/UMTS/LTE/CDMA rows with a "Cell Towers" row test.
-  - Test `onToggleComms` callback is invoked.
-  - Test scroll container renders (max-h class present).
+  - Import `MapTool`, `DEFAULT_MAP_TOOL`, `MeasurementState` from `@/lib/mapTool`
+  - Import `MapToolbar` from `./MapToolbar`
+  - Import `COLOUR_PALETTE` from `@/lib/customLayers`
+  - Add state:
+    - `activeTool: MapTool` (default `DEFAULT_MAP_TOOL`)
+    - `activeDrawingTool: DrawingTool | null` (default `null`)
+    - `activeDrawingColour: string` (default `COLOUR_PALETTE[0].hex`)
+    - `hasDrawingSelection: boolean` (default `false`)
+    - `measurement: MeasurementState | null` (default `null`)
+  - Add handler: `handleDeleteSelected` → `mapViewRef.current?.deleteDrawingSelected()`
+  - Add handler: `handleToolChange(t: MapTool)` — sets activeTool, clears measurement if leaving measure mode
+  - Pass new props to `<MapView>`: `activeTool`, `activeDrawingTool`, `activeDrawingColour`, `onDrawToolChange={setActiveDrawingTool}`, `onDrawColourChange={setActiveDrawingColour}`, `onDrawSelectionChange={setHasDrawingSelection}`, `onMeasurementUpdate={setMeasurement}`
+  - Render `<MapToolbar>` with all required props positioned `absolute bottom-4 left-1/2 -translate-x-1/2 z-10`
+  - When `activeTool` changes to a non-measure value, also reset `measurement` to `null`
+  - When `activeDrawingLayerId` becomes null, reset `activeDrawingTool` to null
 - [ ] Update `src/test/components/MapWithNav.test.tsx`:
-  - Update the `LayerPanel` stub to accept `onToggleComms` prop.
-  - Add test that `handleCommsToggle` toggles all 4 cell keys.
-- [ ] Run `next lint --fix` and fix any remaining lint issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — must be green before proceeding.
+  - Update the `MapView` stub to accept and forward the new props
+  - Update the `MapToolbar` stub (or use actual component with mocked children)
+  - Add test: selecting Grab tool calls `setActiveTool('grab')`
+  - Add test: selecting a draw tool when layer active passes tool to MapView
+  - Add test: `onMeasurementUpdate` updates measurement state and passes to MapToolbar
+  - Add test: `onDeleteSelected` calls `mapViewRef.deleteDrawingSelected`
+- [ ] Run `next lint --fix` and `tsc --noEmit`.
+- [ ] Run `npm test` — all tests must pass.
 - [ ] Run `prettier --write .`.
-- [ ] Re-read `MODIFICATION_IMPLEMENTATION.md` and update accordingly.
-- [ ] `git diff` to review changes; draft commit message; present to user for approval.
-- [ ] Wait for user approval, then commit.
-- [ ] Verify hot-reload in browser shows the new single Cell Towers toggle and scrollable panel.
+- [ ] Re-read this file and update if needed.
+- [ ] Update Journal.
+- [ ] Present `git diff` summary. Wait for approval.
 
 ---
 
-## Phase 2 — Weather panel: merge area name into date row
+## Phase 6 — Final cleanup and documentation
 
-### Tasks
-
-- [ ] In `src/components/MapWithNav.tsx` (inline weather panel JSX):
-  - Remove the separate area-name `<div>` block (`px-3 pt-2.5 pb-1`).
-  - Remove the separate date row `<div>` (`flex items-center gap-2 px-3 py-2 border-b`).
-  - Replace both with a single `<div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-700/40">` containing:
-    - `<span className="text-xs font-bold text-white flex-1 truncate">{area.name}</span>`
-    - `<DatePicker bare … />`
-- [ ] In `src/components/WeatherWidget.tsx`:
-  - Reduce `mb-1` on the label row to `mb-0.5`.
-- [ ] In `src/components/DatePicker.tsx`:
-  - Reduce select padding `px-2 py-1` → `px-1.5 py-0.5`.
-- [ ] After completing tasks, if any TODOs were added or anything left unimplemented, add new tasks to cover them.
-- [ ] Update tests in `src/test/components/MapWithNav.test.tsx`:
-  - Confirm the area name and DatePicker are now in the same row (no separate heading block).
-- [ ] Update `src/test/components/WeatherWidget.test.tsx` if any class-based assertions exist.
-- [ ] Update `src/test/components/DatePicker.test.tsx` if select padding assertions exist.
-- [ ] Run `next lint --fix` and fix remaining issues.
-- [ ] Run `tsc --noEmit` and fix any TypeScript errors.
-- [ ] Run `npm test` — must be green.
-- [ ] Run `prettier --write .`.
-- [ ] Re-read `MODIFICATION_IMPLEMENTATION.md` and update accordingly.
-- [ ] `git diff` to review; draft commit message; present for approval.
-- [ ] Wait for approval, then commit.
-- [ ] Verify hot-reload: weather panel header is now one compact row.
-
----
-
-## Phase 3 — Final verification & wrap-up
-
-### Tasks
-
-- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal below.
-- [ ] Update `README.md` if it contains UI layout notes (check and update if relevant).
-- [ ] Update `CLAUDE.md` to reflect:
-  - LayerPanel now shows a single "Cell Towers" COMMS row (not 4 individual rows); `onToggleComms` prop added.
-  - Weather panel header merges area name and DatePicker into one row.
-  - LayerPanel content has `max-h` cap with scroll.
-  - Updated coverage summary.
-- [ ] Ask the user to inspect the running app and confirm satisfaction, or request further changes.
+- [ ] Run `npm run test:coverage` and record the coverage summary in the Journal.
+- [ ] Verify in the browser (dev server must be running):
+  - Toolbar appears at bottom-center
+  - Grab mode: map pans normally, no elevation popup on click
+  - Click mode: elevation and municipality popups fire
+  - Measure Distance: clicking places points, distance badge updates
+  - Measure Area: clicking builds polygon, area badge updates
+  - Double-click finalises measurement without adding extra point
+  - Switching tool clears measurement
+  - When a drawing layer is active: draw section appears in toolbar
+  - Draw tools work (Point/Line/Polygon/Rectangle)
+  - Colour swatches work
+  - Delete Selected appears when a draw feature is selected
+  - Cancel button exits drawing mode
+  - Old `DrawingToolbar` (top-right) is gone
+- [ ] Update `CLAUDE.md`:
+  - Update `MapToolbar` description
+  - Update `MapView` props list
+  - Update `MapWithNav` state list
+  - Remove `DrawingToolbar` from active components note (keep as "kept for test compatibility")
+  - Add `src/lib/mapTool.ts` to the file structure
+- [ ] Ask the user to inspect the running app and confirm satisfaction or request changes.
+- [ ] After user approval, update Journal with final state.
+- [ ] Present final `git diff` summary. Wait for approval before committing.
 
 ---
 
-## Coverage Summary (Phase 3 — 476 tests)
+## Notes
 
-```
-All files  | 88.16% stmts | 83.95% branch | 79.68% functions
-LayerPanel.tsx       100% stmts / 100% branch
-DatePicker.tsx       100% stmts / 100% branch
-WeatherWidget.tsx    ~98.5% stmts
-RoutePanel.tsx       ~96% stmts
-MapWithNav.tsx       ~80% stmts
-MapView.tsx          ~83% stmts (branch gaps at async null guards — expected)
-```
-
-### Journal
-
-- **Phase 0**: All 477 baseline tests passed.
-- **Phase 1**: Replaced 4 individual COMMS rows (GSM/UMTS/LTE/CDMA) with a single "Cell Towers" row. Added `onToggleComms` prop to LayerPanel; `handleCommsToggle` in MapWithNav sets all four cell keys atomically. Added `max-h-[calc(100vh-10rem)] overflow-y-auto` to LayerPanel content. Reduced gap/padding. Tests updated: net -1 test (4 removed, 3 added). 476 tests pass.
-- **Phase 2**: Merged area-name header row + DatePicker date row into one compact `py-1.5` row in MapWithNav weather panel. Reduced DatePicker select padding (`px-1.5 py-0.5`), WeatherWidget label margin (`mb-0.5`). No test changes needed — stubs are unaffected. 476 tests pass.
-- **Phase 3**: Coverage run complete. CLAUDE.md updated with LayerPanel `onToggleComms`/scroll notes, weather panel compact-header description, and updated coverage summary.
+- After completing any task, if you added TODOs or left anything partially implemented, add new tasks to capture them.
+- The `DrawingToolbar.tsx` component file must not be deleted — existing tests import it.
+- The `DrawingToolbar.test.tsx` tests should continue to pass unchanged throughout all phases.
+- Measurement math is self-contained (no external dependency). Haversine is accurate enough for Finland-scale distances; Shoelace + equirectangular is sufficient for areas up to ~100 km².

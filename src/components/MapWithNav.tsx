@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import AreaNav from "./AreaNav";
 import MapView, { type MapViewHandle } from "./MapView";
+import MapToolbar from "./MapToolbar";
 import LayerPanel from "./LayerPanel";
 import InfoPanel, { type InfoPanelData } from "./InfoPanel";
 import WeatherWidget from "./WeatherWidget";
@@ -17,7 +18,8 @@ import {
   type LayerKey,
   type LayerVisibility,
 } from "@/lib/layers";
-import type { CustomLayer } from "@/lib/customLayers";
+import { COLOUR_PALETTE, type CustomLayer } from "@/lib/customLayers";
+import type { DrawingTool } from "@/lib/customLayers";
 import type {
   PlannedRoute,
   RouteHazard,
@@ -26,6 +28,11 @@ import type {
   VehicleProfile,
   Waypoint,
 } from "@/lib/routing";
+import {
+  DEFAULT_MAP_TOOL,
+  type MapTool,
+  type MeasurementState,
+} from "@/lib/mapTool";
 
 export default function MapWithNav() {
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>("turku");
@@ -71,6 +78,16 @@ export default function MapWithNav() {
   // AI Summary state
   const [routeSummary, setRouteSummary] = useState<string | null>(null);
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+
+  // Map toolbar state
+  const [activeTool, setActiveTool] = useState<MapTool>(DEFAULT_MAP_TOOL);
+  const [activeDrawingTool, setActiveDrawingTool] =
+    useState<DrawingTool | null>(null);
+  const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
+    COLOUR_PALETTE[0].hex,
+  );
+  const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
+  const [measurement, setMeasurement] = useState<MeasurementState | null>(null);
 
   // Panel collapse coordination
 
@@ -233,7 +250,19 @@ export default function MapWithNav() {
     });
     if (activeDrawingLayerId === id) {
       setActiveDrawingLayerId(null);
+      setActiveDrawingTool(null);
     }
+  }
+
+  function handleToolChange(tool: MapTool) {
+    setActiveTool(tool);
+    if (tool !== "measure-distance" && tool !== "measure-area") {
+      setMeasurement(null);
+    }
+  }
+
+  function handleDeleteSelected() {
+    mapViewRef.current?.deleteDrawingSelected();
   }
 
   const handleCloseRoutePanel = useCallback(() => {
@@ -272,7 +301,10 @@ export default function MapWithNav() {
         customLayers={customLayers}
         enabledCustomLayerIds={enabledCustomLayerIds}
         activeDrawingLayerId={activeDrawingLayerId}
-        onCancelDrawing={() => setActiveDrawingLayerId(null)}
+        onCancelDrawing={() => {
+          setActiveDrawingLayerId(null);
+          setActiveDrawingTool(null);
+        }}
         onInfoPanel={handleInfoPanel}
         infoPanelOpen={infoPanelData !== null}
         plannedRoute={plannedRoute}
@@ -283,6 +315,32 @@ export default function MapWithNav() {
         routeHazards={routeIntelligence?.hazards ?? []}
         routeCoverageGaps={routeIntelligence?.coverage?.gap_geometry ?? null}
         focusedHazard={focusedHazard}
+        activeTool={activeTool}
+        activeDrawingTool={activeDrawingTool}
+        activeDrawingColour={activeDrawingColour}
+        onDrawToolChange={setActiveDrawingTool}
+        onDrawColourChange={setActiveDrawingColour}
+        onDrawSelectionChange={setHasDrawingSelection}
+        onMeasurementUpdate={setMeasurement}
+      />
+      <MapToolbar
+        activeTool={activeTool}
+        onToolChange={handleToolChange}
+        measurement={measurement}
+        activeDrawingLayerId={activeDrawingLayerId}
+        activeDrawingLayerName={
+          customLayers.find((l) => l.id === activeDrawingLayerId)?.name
+        }
+        activeDrawingTool={activeDrawingTool}
+        activeDrawingColour={activeDrawingColour}
+        hasDrawingSelection={hasDrawingSelection}
+        onDrawToolChange={setActiveDrawingTool}
+        onDrawColourChange={setActiveDrawingColour}
+        onDeleteSelected={handleDeleteSelected}
+        onCancelDrawing={() => {
+          setActiveDrawingLayerId(null);
+          setActiveDrawingTool(null);
+        }}
       />
       <LayerPanel
         visibility={layerVisibility}

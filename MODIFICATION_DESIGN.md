@@ -1,201 +1,260 @@
-# UI Compaction — Modification Design
+# Design: Unified Bottom-Center Map Toolbar
 
 ## Overview
 
-Multiple floating panels on the left-hand side of the map overlap on common browser viewport sizes (1280–1440 px wide, 720–900 px tall). This document describes targeted compaction changes to reduce vertical space consumption, merge redundant controls, and add scrolling safeguards to the layer panel.
+Replace the existing floating `DrawingToolbar` (top-right panel) with a new unified bottom-center toolbar called `MapToolbar`. The toolbar always exposes four interaction-mode buttons (Grab, Click, Measure Distance, Measure Area). When a custom drawing layer is active, draw tool buttons (Point / Line / Polygon / Rectangle + colour palette + Delete Selected) are appended to the right of the standard tools, separated by a visual divider. Switching away from a measure tool immediately clears the temporary geometry.
 
 ---
 
-## Problem Analysis
+## Detailed Analysis of the Goal
 
-### Current layout (left side, top → bottom)
+### Current state
 
-| Panel | Position | Approx height |
-|-------|----------|---------------|
-| AreaNav | `top-4` (16 px) centered | ~38 px |
-| Weather/Date panel | `left-4 top-10` (40 px) | ~120–140 px |
-| LayerPanel | `left-4 bottom-10` (bottom-anchored) | ~330–400 px (grows with custom layers) |
+| Element                         | Location                  | Behaviour                                                                                          |
+| ------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
+| Map interaction                 | Always "click everything" | Elevation + municipality popups fire on every click                                                |
+| DrawingToolbar                  | `absolute top-16 right-4` | Only visible when `activeDrawingLayerId !== null`; owns its own tool/colour state inside `MapView` |
+| No grab / click / measure tools | —                         | No explicit mode selector                                                                          |
 
-At 900 px viewport height the layer panel reaches ~`bottom-10 + 330 px ≈ 370 px from bottom = 530 px from top`. The weather panel ends at roughly `40 + 140 = 180 px from top`. There is ~350 px of gap, but custom layers make the layer panel grow upward and eventually overlap the weather panel. The weather panel itself nearly overlaps the AreaNav (AreaNav bottom ≈ 54 px, weather panel top = 40 px → 14 px gap).
+### What the user asked for
 
-### Root causes
-
-1. **Weather panel header wastes a full row** — the area name sits in its own `pt-2.5 pb-1` block above the date row, adding ~32–36 px.
-2. **Four COMMS rows** — GSM, UMTS, LTE, CDMA each consume a row (`gap-1.5` between them) ≈ 4 × 20 px = 80 px just for comms; in practice only operators want per-type control which is not a current use-case.
-3. **LayerPanel has no height cap** — adding custom layers causes unbounded growth upward.
-4. **Minor spacing waste** — `gap-1.5` between rows, `pb-3` bottom padding, `py-2` date row are all slightly larger than needed.
+1. **Grab** – default map-pan behaviour (cursor = grab/grabbing).
+2. **Click** – what currently always fires: elevation query + municipality highlight + road/bridge popups.
+3. **Measure Distance** – click to place points forming a LineString; running km total shown inline; cleared on tool switch.
+4. **Measure Area** – click to form a Polygon; m² / km² shown inline; cleared on tool switch.
+5. **Draw tools (append when layer active)** – Point / Line / Polygon / Rectangle + colour palette + Delete Selected (when selection exists). No visible divider change — the existing cancel mechanism remains (deselecting the active layer in LayerPanel).
 
 ---
 
 ## Alternatives Considered
 
-### A — CSS-only scrolling trick on LayerPanel
-Add `max-h` + `overflow-y-auto` without touching content. Solves the scroll problem but not the overlap problem.
+### A. Keep toolbar inside MapView (no state lifting)
 
-### B — Move panels to different screen edges
-Put weather top-right. Breaks left-panel visual grouping and conflicts with InfoPanel/RoutePanel on the right.
+- Con: `MapView` is already 2 000+ lines. Adding more UI state makes it harder to test and maintain.
+- Con: The new toolbar must sit _outside_ the `<div ref={containerRef}>` element because Mapbox owns that DOM node's events.
 
-### C — Collapsible weather panel
-Already the LayerPanel has a collapse chevron. Adding the same to weather adds toggle fatigue for the most-used element.
+### B. Move all state into a Context
 
-### D — Selected approach: targeted compaction (3 changes)
-1. **Merge area-name row into date row** in the weather panel → saves ~32 px.
-2. **Replace 4 COMMS rows with 1 "Cell Towers" row** in LayerPanel → saves ~60 px.
-3. **Cap LayerPanel height with scroll** → prevents future growth from causing overlaps.
-4. **Minor spacing reductions** across DatePicker selects, row gaps, and padding.
+- Con: Overkill for a single feature; the existing prop-drilling pattern is consistent throughout the codebase.
+
+### C. Render toolbar inside MapView's React tree (already outside containerRef)
+
+- `MapView` already renders `DrawingToolbar` and `FeatureDialog` inside its root `<div className="relative w-full h-full">`, outside the map container div. The toolbar could live there.
+- Con: Bottom-center positioning would float relative to MapView, which is full-screen — this works fine actually. But drawing state still needs to be shared with MapWithNav.
+- Pro: keeps drawing state local to MapView.
+
+### D. Lift drawing state to MapWithNav, position toolbar in MapWithNav ✓ (chosen)
+
+- `MapWithNav` already owns `activeDrawingLayerId`, all route state, and the InfoPanel. Adding `activeTool`, `activeDrawingTool`, and `activeDrawingColour` is a small, consistent extension.
+- `MapToolbar` becomes a simple presentational component, easy to test.
+- `MapView` receives tool state via props; its internal click handler switches behaviour based on `activeTool`.
+- `DrawingToolbar.tsx` is kept (test compatibility) but no longer rendered by `MapView`.
 
 ---
 
 ## Detailed Design
 
-### 1. Weather panel header compaction (`MapWithNav.tsx`)
+### 1. New type: `MapTool`
 
-**Before:**
-```
-+------------------------------+
-| Archipelago Sea              |  <- separate name row (pt-2.5 pb-1)
-+------------------------------+
-| Date            [Jan] [15]   |  <- date row (py-2 border-b)
-+------------------------------+
-| Historical avg x 10 yr       |
-| 2.3C +/- 1.2  max 3.5 min 1 |
-| 45% rain avg 3.2 mm          |
-+------------------------------+
-```
-
-**After:**
-```
-+------------------------------+
-| Archipelago Sea  [Jan] [15]  |  <- merged row (py-1.5)
-+------------------------------+
-| Historical avg x 10 yr       |
-| 2.3C +/- 1.2  max 3.5 min 1 |
-| 45% rain avg 3.2 mm          |
-+------------------------------+
-```
-
-Implementation: replace the two `<div>` blocks (area-name block + date row) with a single flex row. Area name uses `text-xs font-bold flex-1` (smaller than current `text-sm`). DatePicker bare selector occupies the right portion.
-
-### 2. Combined Cell Towers toggle (`LayerPanel.tsx` + `MapWithNav.tsx`)
-
-**Before (COMMS section):**
-```
-COMMS
-* GSM          [x]
-* UMTS         [x]
-* LTE          [x]
-* CDMA         [x]
-* Coverage Cir [ ]
-```
-
-**After:**
-```
-COMMS
-* Cell Towers  [x]
-* Coverage Cir [ ]
-```
-
-**Logic:** `commsOn = vis.cellGSM || vis.cellUMTS || vis.cellLTE || vis.cellCDMA`. Toggling sets all four to `!anyOn`.
-
-**Interface change in `LayerPanel`:**
 ```ts
-interface LayerPanelProps {
-  visibility: LayerVisibility;
-  onToggle: (key: LayerKey) => void;
-  onToggleComms: () => void;          // NEW — controls all 4 cell types at once
-  customLayerProps?: CustomLayerPanelProps;
+// src/lib/mapTool.ts  (new small module)
+export type MapTool = "grab" | "click" | "measure-distance" | "measure-area";
+export const DEFAULT_MAP_TOOL: MapTool = "grab";
+
+export interface MeasurementState {
+  distance_km?: number;
+  area_km2?: number;
 }
 ```
 
-**`MapWithNav` handler:**
+### 2. State lifted to `MapWithNav`
+
 ```ts
-const handleCommsToggle = useCallback(() => {
-  setLayerVisibility((prev) => {
-    const anyOn = prev.cellGSM || prev.cellUMTS || prev.cellLTE || prev.cellCDMA;
-    return { ...prev, cellGSM: !anyOn, cellUMTS: !anyOn, cellLTE: !anyOn, cellCDMA: !anyOn };
-  });
-}, []);
+// New state added to MapWithNav
+const [activeTool, setActiveTool] = useState<MapTool>("grab");
+const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(
+  null,
+);
+const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
+  COLOUR_PALETTE[0].hex,
+);
+const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
+const [measurement, setMeasurement] = useState<MeasurementState | null>(null);
 ```
 
-The four individual `LayerKey` values (`cellGSM`, `cellUMTS`, `cellLTE`, `cellCDMA`) are **not removed** from `LayerVisibility` or `LAYER_GROUPS` — `MapView` still uses them for per-type symbol layer visibility and cluster filtering. Only the UI surface changes.
+`MapView` loses its own `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection` state and receives them as props instead.
 
-### 3. LayerPanel max-height + scroll
+### 3. New props added to `MapViewProps`
 
-The content `<div>` gains `max-h-[calc(100vh-10rem)] overflow-y-auto` so it never grows taller than the available viewport height minus safe margins. A custom thin scrollbar keeps the aesthetic clean.
-
-```tsx
-<div className="px-3 pb-2 flex flex-col gap-1 max-h-[calc(100vh-10rem)] overflow-y-auto">
+```ts
+activeTool?: MapTool;                              // which interaction mode
+activeDrawingTool?: DrawingTool | null;            // lifted from MapView
+activeDrawingColour?: string;                      // lifted from MapView
+onDrawToolChange?: (t: DrawingTool | null) => void;
+onDrawColourChange?: (hex: string) => void;
+onDrawSelectionChange?: (has: boolean) => void;
+onMeasurementUpdate?: (m: MeasurementState | null) => void;
 ```
 
-`100vh - 10rem` = viewport height minus 160 px (accounts for AreaNav, bottom margin, and browser chrome).
+### 4. New component: `MapToolbar`
 
-### 4. Minor spacing reductions
+**File:** `src/components/MapToolbar.tsx`
 
-| Element | Before | After | Saving |
-|---------|--------|-------|--------|
-| LayerPanel row gap | `gap-1.5` | `gap-1` | ~4 px per N rows |
-| LayerPanel bottom padding | `pb-3` | `pb-2` | 4 px |
-| DatePicker select padding | `px-2 py-1` | `px-1.5 py-0.5` | ~4 px per select |
-| LayerPanel header | `py-2` | `py-1.5` | 4 px |
-| WeatherWidget top label | `mb-1` | `mb-0.5` | 4 px |
+**Position in MapWithNav:** `absolute bottom-4 left-1/2 -translate-x-1/2 z-10` — bottom-center, floats above the map.
+
+**Visual structure (left → right):**
+
+```
+[ ✋ Grab ] [ 👆 Click ] [ 📏 Dist ] [ ⬡ Area ]   ║   [ • ] [ — ] [ ⬡ ] [ ▭ ]  ● ● ● ● ● ● ● ●  [ Del ] [ ✕ ]
+                                                   ^
+                                   only when activeDrawingLayerId !== null
+```
+
+- Toolbar: `rounded-xl border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl px-3 py-2 flex items-center gap-1`
+- Each tool button: 36×36 px rounded, `aria-pressed`, active = `bg-blue-600 text-white`, inactive = `text-slate-400 hover:text-white hover:bg-slate-700`
+- Measurement badge: small `text-[10px]` label under (or right of) the active measure button showing "3.2 km" or "1.4 km²"
+- Colour swatches: 20×20 px circles
+- "Delete" appears only when `hasDrawingSelection === true`
+- Cancel (✕) exits drawing mode: calls `onCancelDrawing()` (which clears `activeDrawingLayerId` in MapWithNav)
+
+**Props:**
+
+```ts
+interface MapToolbarProps {
+  activeTool: MapTool;
+  onToolChange: (t: MapTool) => void;
+  measurement: MeasurementState | null;
+  // Draw tools section
+  activeDrawingLayerId: string | null;
+  activeDrawingLayerName: string | undefined;
+  activeDrawingTool: DrawingTool | null;
+  activeDrawingColour: string;
+  hasDrawingSelection: boolean;
+  onDrawToolChange: (t: DrawingTool | null) => void;
+  onDrawColourChange: (hex: string) => void;
+  onDeleteSelected: () => void;
+  onCancelDrawing: () => void;
+}
+```
+
+### 5. Measurement implementation in `MapView`
+
+#### Refs added to MapView
+
+```ts
+const measurePointsRef = useRef<[number, number][]>([]);
+const activeToolRef = useRef<MapTool>(activeTool ?? "grab");
+```
+
+#### Map sources/layers added in `style.load`
+
+```
+"measure-source"  → GeoJSON FeatureCollection
+"measure-line"    → line layer, dashed cyan (#06b6d4), width 2, dashes [4,2]
+"measure-fill"    → fill layer, cyan fill-opacity 0.15 (Polygon only)
+"measure-vertices" → circle layer, radius 4, cyan, for each clicked point
+```
+
+#### Click handler routing (inside existing `map.on("click", async (e) => {...})`)
+
+```
+1. waypoint intercept (unchanged first)
+2. grab mode → return early (no action)
+3. measure-distance / measure-area → append point, update source, call onMeasurementUpdate
+4. click mode → existing elevation + interactive-layer logic
+```
+
+#### Double-click to finish / undo last point
+
+- `map.on("dblclick", ...)` — prevent default zoom; pop last point (double-click adds the point twice, so remove the extra one). The measurement finalises with whatever points remain.
+
+#### `computeMeasurement` — pure math helpers (no dependency)
+
+- Distance: sum haversine formula across consecutive point pairs → `distance_km`
+- Area: Shoelace formula on projected coordinates → `area_km2`
+
+#### Clearing on tool switch
+
+```ts
+useEffect(() => {
+  activeToolRef.current = activeTool ?? "grab";
+  if (activeTool !== "measure-distance" && activeTool !== "measure-area") {
+    measurePointsRef.current = [];
+    clearMeasureSources(map);
+    onMeasurementUpdate?.(null);
+  }
+  // Update cursor
+  map.getCanvas().style.cursor =
+    activeTool === "grab"
+      ? ""
+      : activeTool === "click"
+        ? "default"
+        : "crosshair";
+}, [activeTool]);
+```
+
+### 6. Cursor management
+
+| `activeTool`       | Cursor                              |
+| ------------------ | ----------------------------------- |
+| `grab`             | `""` (Mapbox handles grab/grabbing) |
+| `click`            | `"default"`                         |
+| `measure-distance` | `"crosshair"`                       |
+| `measure-area`     | `"crosshair"`                       |
+
+### 7. Removing `DrawingToolbar` render from `MapView`
+
+The `DrawingToolbar` component render inside `MapView`'s JSX is removed. The component file itself stays because `DrawingToolbar.test.tsx` imports it directly.
+
+### 8. `handleDeleteSelected` in MapWithNav
+
+Since `drawRef` lives in `MapView`, we expose a method via `MapViewHandle`:
+
+```ts
+interface MapViewHandle {
+  getMapScreenshot: () => string | undefined;
+  deleteDrawingSelected: () => void; // calls drawRef.current?.trash()
+}
+```
+
+MapWithNav calls `mapViewRef.current?.deleteDrawingSelected()` from the toolbar's `onDeleteSelected`.
 
 ---
 
-## Architecture Diagram
+## Component Diagram
 
 ```mermaid
 graph TD
-    A["MapWithNav (state owner)"] --> B["LayerPanel"]
-    A --> C["Weather panel (inline JSX)"]
-    A --> D["MapView"]
+  MWN["MapWithNav\n(activeTool, activeDrawingTool,\nactiveDrawingColour, hasDrawingSelection,\nmeasurement)"]
+  MV["MapView\n(receives activeTool, drawTool,\ndrawColour props; owns measure logic;\nexposes deleteDrawingSelected via ref)"]
+  MT["MapToolbar\n(absolute bottom-4 left-1/2 -translate-x-1/2)\nGrab | Click | Dist | Area\n[optional draw tools when layer active]"]
+  DT["DrawingToolbar\n(kept for tests, no longer rendered)"]
+  FD["FeatureDialog\n(unchanged, stays in MapView)"]
 
-    subgraph LayerPanelProps
-      B1["visibility: LayerVisibility"]
-      B2["onToggle: key to void"]
-      B3["onToggleComms: () to void  (NEW)"]
-    end
-
-    B --> B1 & B2 & B3
-
-    subgraph "handleCommsToggle (new in MapWithNav)"
-      H1["reads prev.cellGSM|UMTS|LTE|CDMA"]
-      H2["sets all four to anyOn = false"]
-    end
-
-    A --> H1 --> H2
-
-    subgraph "Weather panel merged row"
-      W1["area name (flex-1, text-xs font-bold)"]
-      W2["DatePicker bare (right side)"]
-    end
-
-    C --> W1 & W2
-
-    subgraph "LayerPanel COMMS section"
-      L1["Cell Towers (single row) -> onToggleComms"]
-      L2["Coverage Circles -> onToggle cellCoverageCircles"]
-    end
-
-    B --> L1 & L2
+  MWN -->|"activeTool, drawTool, drawColour props"| MV
+  MWN -->|"all toolbar props"| MT
+  MV -->|"onDrawSelectionChange"| MWN
+  MV -->|"onMeasurementUpdate"| MWN
+  MT -->|"onToolChange"| MWN
+  MT -->|"onDrawToolChange"| MWN
+  MT -->|"onDrawColourChange"| MWN
+  MT -->|"onDeleteSelected → mapViewRef.deleteDrawingSelected"| MWN
+  MV --> FD
+  DT -. "no longer rendered" .-> MV
 ```
 
 ---
 
-## Summary
+## Implementation Summary
 
-| Change | Files | Approx line delta |
-|--------|-------|-------------|
-| Merge weather header into date row | `MapWithNav.tsx` | -10, +5 |
-| Single Cell Towers toggle | `LayerPanel.tsx`, `MapWithNav.tsx` | -15, +10 |
-| LayerPanel max-height + scroll | `LayerPanel.tsx` | +3 |
-| Minor spacing reductions | `LayerPanel.tsx`, `DatePicker.tsx`, `WeatherWidget.tsx` | +/-10 |
-| Update tests | `LayerPanel.test.tsx`, `MapWithNav.test.tsx`, `DatePicker.test.tsx` | +/-20 |
-
-No database, API, or Mapbox layer changes are required. The individual `LayerKey` values for each cell type remain intact in `lib/layers.ts` and `MapView.tsx` — only the panel UI surface changes.
-
----
-
-## References
-
-- Tailwind CSS v4 `max-h`, `overflow-y-auto` utilities (project already on Tailwind v4)
-- React 18 automatic batching — functional `setState` updaters are applied sequentially on accumulated state, so toggling 4 keys requires a single `setLayerVisibility` call setting all at once.
+| File                                      | Change                                                                                                                                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/mapTool.ts`                      | **New**: `MapTool` type, `DEFAULT_MAP_TOOL`, `MeasurementState`                                                                                                               |
+| `src/components/MapToolbar.tsx`           | **New**: unified toolbar component                                                                                                                                            |
+| `src/components/MapView.tsx`              | Accept drawing state as props; add `activeTool` prop; add measure sources/layers; route click by tool; expose `deleteDrawingSelected` via ref; remove `DrawingToolbar` render |
+| `src/components/MapWithNav.tsx`           | Add `activeTool`, `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`, `measurement` state; wire `MapToolbar`; pass new props to `MapView`                      |
+| `src/components/DrawingToolbar.tsx`       | No change (kept for test compatibility)                                                                                                                                       |
+| `src/test/components/MapToolbar.test.tsx` | **New**: unit tests for toolbar                                                                                                                                               |
+| `src/test/components/MapView.test.tsx`    | Update prop list; add tests for tool routing and measure                                                                                                                      |
+| `src/test/components/MapWithNav.test.tsx` | Update stub props; add tool state wiring tests                                                                                                                                |
+| `CLAUDE.md`                               | Update component descriptions                                                                                                                                                 |

@@ -996,7 +996,7 @@ describe("MapView", () => {
   });
 
   it("fetches /api/elevation with the clicked lng/lat and opens a Popup with elevation data", async () => {
-    render(<MapView />);
+    render(<MapView activeTool="click" />);
     await fireStyleLoad();
     MockPopup.mockClear();
     mockSetLngLat.mockClear();
@@ -1033,7 +1033,7 @@ describe("MapView", () => {
   });
 
   it("does not open a Popup or place a marker when elevation_m is null (outside AOI or too far)", async () => {
-    render(<MapView />);
+    render(<MapView activeTool="click" />);
     await fireStyleLoad();
     MockPopup.mockClear();
 
@@ -1056,7 +1056,7 @@ describe("MapView", () => {
   });
 
   it("does not open a Popup when the elevation fetch throws", async () => {
-    render(<MapView />);
+    render(<MapView activeTool="click" />);
     await fireStyleLoad();
     MockPopup.mockClear();
 
@@ -1072,7 +1072,7 @@ describe("MapView", () => {
   });
 
   it("suppresses elevation when clicking on an interactive feature layer", async () => {
-    render(<MapView />);
+    render(<MapView activeTool="click" />);
     await fireStyleLoad();
     MockPopup.mockClear();
     MockMarker.mockClear();
@@ -1097,7 +1097,7 @@ describe("MapView", () => {
   });
 
   it("suppresses elevation when clicking on a custom drawing layer feature", async () => {
-    render(<MapView />);
+    render(<MapView activeTool="click" />);
     await fireStyleLoad();
     MockMarker.mockClear();
 

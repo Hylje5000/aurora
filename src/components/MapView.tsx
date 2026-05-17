@@ -25,8 +25,8 @@ import {
   type DrawingTool,
 } from "@/lib/customLayers";
 import FeatureDialog from "@/components/FeatureDialog";
-import DrawingToolbar from "@/components/DrawingToolbar";
 import type { InfoPanelData } from "@/components/InfoPanel";
+import type { MapTool, MeasurementState } from "@/lib/mapTool";
 import ElectionPieChart from "@/components/ElectionPieChart";
 import {
   PROFILE_COLORS,
@@ -76,10 +76,19 @@ interface MapViewProps {
   routeHazards?: RouteHazard[];
   focusedHazard?: RouteHazard | null;
   routeCoverageGaps?: GeoJSON.Geometry | null;
+  // Tool / drawing state (lifted from MapView to MapWithNav)
+  activeTool?: MapTool;
+  activeDrawingTool?: DrawingTool | null;
+  activeDrawingColour?: string;
+  onDrawToolChange?: (t: DrawingTool | null) => void;
+  onDrawColourChange?: (hex: string) => void;
+  onDrawSelectionChange?: (has: boolean) => void;
+  onMeasurementUpdate?: (m: MeasurementState | null) => void;
 }
 
 export interface MapViewHandle {
   getMapScreenshot: () => string | undefined;
+  deleteDrawingSelected: () => void;
 }
 
 function buildAoiCollection() {
@@ -123,6 +132,94 @@ function filterByEnabled(
       (f) => f.properties != null && enabled.has(f.properties.radio as string),
     ),
   };
+}
+
+// ── Measurement math helpers ───────────────────────────────────────────────
+
+export function haversineKm(a: [number, number], b: [number, number]): number {
+  const R = 6371;
+  const dLat = ((b[1] - a[1]) * Math.PI) / 180;
+  const dLon = ((b[0] - a[0]) * Math.PI) / 180;
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+  const c =
+    sinDLat * sinDLat +
+    Math.cos((a[1] * Math.PI) / 180) *
+      Math.cos((b[1] * Math.PI) / 180) *
+      sinDLon *
+      sinDLon;
+  return R * 2 * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
+}
+
+export function computeDistanceKm(points: [number, number][]): number {
+  if (points.length < 2) return 0;
+  let total = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    total += haversineKm(points[i], points[i + 1]);
+  }
+  return total;
+}
+
+export function computeAreaKm2(points: [number, number][]): number {
+  if (points.length < 3) return 0;
+  const R = 6371;
+  // Shoelace on geographic coordinates, projected equirectangularly at centroid lat
+  const centLat = points.reduce((s, p) => s + p[1], 0) / points.length;
+  const cosLat = Math.cos((centLat * Math.PI) / 180);
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    const xi = points[i][0] * cosLat;
+    const yi = points[i][1];
+    const xj = points[j][0] * cosLat;
+    const yj = points[j][1];
+    area += xi * yj - xj * yi;
+  }
+  // Convert degrees² to km²: 1° lat ≈ 111.32 km
+  return Math.abs(area / 2) * 111.32 * 111.32;
+}
+
+function buildMeasureFeatures(
+  points: [number, number][],
+  mode: "measure-distance" | "measure-area",
+): GeoJSON.FeatureCollection {
+  if (points.length === 0) return { type: "FeatureCollection", features: [] };
+  const features: GeoJSON.Feature[] = [];
+  // Vertex circles
+  for (const pt of points) {
+    features.push({
+      type: "Feature",
+      properties: { featureRole: "vertex" },
+      geometry: { type: "Point", coordinates: pt },
+    });
+  }
+  // Line / polygon outline
+  if (points.length >= 2) {
+    if (mode === "measure-area" && points.length >= 3) {
+      features.push({
+        type: "Feature",
+        properties: { featureRole: "fill" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[...points, points[0]]],
+        },
+      });
+    } else {
+      features.push({
+        type: "Feature",
+        properties: { featureRole: "line" },
+        geometry: { type: "LineString", coordinates: points },
+      });
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
+function clearMeasureSources(map: mapboxgl.Map) {
+  const src = map.getSource("measure-source") as
+    | mapboxgl.GeoJSONSource
+    | undefined;
+  src?.setData({ type: "FeatureCollection", features: [] });
 }
 
 const EMPTY_COLLECTION: GeoJSON.FeatureCollection = {
@@ -478,6 +575,13 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     routeHazards = [],
     focusedHazard = null,
     routeCoverageGaps = null,
+    activeTool = "grab",
+    activeDrawingTool = null,
+    activeDrawingColour = COLOUR_PALETTE[0].hex,
+    onDrawToolChange,
+    onDrawColourChange,
+    onDrawSelectionChange,
+    onMeasurementUpdate,
   },
   ref,
 ) {
@@ -490,6 +594,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
   useImperativeHandle(ref, () => ({
     getMapScreenshot: () => {
       return mapRef.current?.getCanvas().toDataURL("image/png");
+    },
+    deleteDrawingSelected: () => {
+      drawRef.current?.trash();
     },
   }));
 
@@ -504,9 +611,15 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
 
   // Drawing state
   const activeDrawingLayerIdRef = useRef<string | null>(activeDrawingLayerId);
-  const activeDrawingColourRef = useRef<string>(COLOUR_PALETTE[0].hex);
+  const activeDrawingColourRef = useRef<string>(activeDrawingColour);
   const activeDrawingToolRef = useRef<DrawingTool | null>(null);
   const pendingDrawFeatureRef = useRef<GeoJSON.Feature | null>(null);
+
+  // Tool / measurement state
+  const activeToolRef = useRef<MapTool>(activeTool);
+  const measurePointsRef = useRef<[number, number][]>([]);
+  const onMeasurementUpdateRef = useRef(onMeasurementUpdate);
+  onMeasurementUpdateRef.current = onMeasurementUpdate;
 
   // Elevation marker + popup (both replaced on each click, cleared on teardown)
   const elevationMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -536,16 +649,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
 
   // UI state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [activeDrawingTool, setActiveDrawingTool] =
-    useState<DrawingTool | null>(null);
-  const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
-    COLOUR_PALETTE[0].hex,
-  );
-  const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
   const [dialogFeatureType, setDialogFeatureType] =
     useState<DrawingTool | null>(null);
-
-  const activeLayer = customLayers.find((l) => l.id === activeDrawingLayerId);
 
   // ── Map initialisation (one-shot) ─────────────────────────────────────
   useEffect(() => {
@@ -826,7 +931,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         });
 
         map.on("draw.selectionchange", (e: { features: GeoJSON.Feature[] }) => {
-          setHasDrawingSelection(e.features.length > 0);
+          onDrawSelectionChange?.(e.features.length > 0);
         });
       }
 
@@ -1383,23 +1488,46 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           fetchLayer(map, "railways-source", "/api/railways", railCtrl.signal);
         }
 
-        // Elevation click — fires on every map click (general handler, no layer filter)
+        // General click handler — routed by active tool
         map.on("click", async (e) => {
           const { lng, lat } = e.lngLat;
 
-          // If adding a waypoint, hand off the coordinate and skip elevation
+          // Waypoint intercept takes highest priority
           if (addingWaypointRef.current) {
             onWaypointClickRef.current?.([lng, lat]);
             return;
           }
 
-          // Always clear the previous elevation context on any click
+          const tool = activeToolRef.current;
+
+          // Grab mode — map panning only, no click actions
+          if (tool === "grab") return;
+
+          // Measure modes — accumulate a point and update overlay
+          if (tool === "measure-distance" || tool === "measure-area") {
+            measurePointsRef.current = [
+              ...measurePointsRef.current,
+              [lng, lat],
+            ];
+            const pts = measurePointsRef.current;
+            const src = map.getSource("measure-source") as
+              | mapboxgl.GeoJSONSource
+              | undefined;
+            src?.setData(buildMeasureFeatures(pts, tool));
+            const m =
+              tool === "measure-distance"
+                ? { distance_km: computeDistanceKm(pts) }
+                : { area_km2: computeAreaKm2(pts) };
+            onMeasurementUpdateRef.current?.(m);
+            return;
+          }
+
+          // Click mode — existing elevation + interactive-layer logic
           elevationMarkerRef.current?.remove();
           elevationMarkerRef.current = null;
           elevationPopupRef.current?.remove();
           elevationPopupRef.current = null;
 
-          // Yield to layer-specific handlers (cell towers, roads, etc. and custom layers)
           const hitInteractive = map
             .queryRenderedFeatures(e.point)
             .some(
@@ -1451,6 +1579,22 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
               .addTo(map);
           } catch {
             // Elevation is supplementary — fail silently
+          }
+        });
+
+        // Double-click in measure mode — finalise without adding duplicate point
+        map.on("dblclick", (e) => {
+          const tool = activeToolRef.current;
+          if (tool !== "measure-distance" && tool !== "measure-area") return;
+          e.preventDefault();
+          // The preceding click event already added the last point; pop the duplicate
+          if (measurePointsRef.current.length > 0) {
+            measurePointsRef.current = measurePointsRef.current.slice(0, -1);
+            const pts = measurePointsRef.current;
+            const src = map.getSource("measure-source") as
+              | mapboxgl.GeoJSONSource
+              | undefined;
+            src?.setData(buildMeasureFeatures(pts, tool));
           }
         });
 
@@ -1579,6 +1723,46 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#f97316",
           "line-width": 1.5,
           "line-opacity": 0.55,
+        },
+      });
+
+      // ── Measurement overlay ────────────────────────────────────────────
+      map.addSource("measure-source", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "measure-fill",
+        type: "fill",
+        source: "measure-source",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: { "fill-color": "#06b6d4", "fill-opacity": 0.12 },
+      });
+      map.addLayer({
+        id: "measure-line",
+        type: "line",
+        source: "measure-source",
+        filter: [
+          "in",
+          ["geometry-type"],
+          ["literal", ["LineString", "Polygon"]],
+        ] as mapboxgl.FilterSpecification,
+        paint: {
+          "line-color": "#06b6d4",
+          "line-width": 2,
+          "line-dasharray": [4, 2],
+        },
+      });
+      map.addLayer({
+        id: "measure-vertices",
+        type: "circle",
+        source: "measure-source",
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-color": "#06b6d4",
+          "circle-radius": 5,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
         },
       });
 
@@ -1778,6 +1962,31 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
   useEffect(() => {
     activeDrawingColourRef.current = activeDrawingColour;
   }, [activeDrawingColour]);
+
+  // ── Sync active tool → ref, cursor, and measure state ─────────────────
+  useEffect(() => {
+    activeToolRef.current = activeTool;
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    const canvas = map.getCanvas();
+    if (activeTool === "grab") {
+      canvas.style.cursor = "";
+    } else if (activeTool === "click") {
+      canvas.style.cursor = "default";
+    } else {
+      canvas.style.cursor = "crosshair";
+    }
+
+    if (activeTool !== "measure-distance" && activeTool !== "measure-area") {
+      measurePointsRef.current = [];
+      if (styleLoadedRef.current) {
+        clearMeasureSources(map);
+      }
+      onMeasurementUpdateRef.current?.(null);
+    }
+  }, [activeTool]);
 
   // ── Sync InfoPanel highlight ───────────────────────────────────────────
   useEffect(() => {
@@ -2103,12 +2312,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     setDialogOpen(false);
   }
 
-  function handleDeleteSelected() {
-    drawRef.current?.trash();
-  }
-
   function handleCancelDrawing() {
-    setActiveDrawingTool(null);
+    onDrawToolChange?.(null);
     drawRef.current?.changeMode("simple_select");
     onCancelDrawing?.();
   }
@@ -2116,19 +2321,6 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
-
-      {activeDrawingLayerId && activeLayer && (
-        <DrawingToolbar
-          activeDrawingLayerName={activeLayer.name}
-          activeTool={effectiveTool}
-          activeColour={activeDrawingColour}
-          hasSelection={hasDrawingSelection}
-          onToolChange={setActiveDrawingTool}
-          onColourChange={setActiveDrawingColour}
-          onCancel={handleCancelDrawing}
-          onDeleteSelected={handleDeleteSelected}
-        />
-      )}
 
       <FeatureDialog
         open={dialogOpen}
