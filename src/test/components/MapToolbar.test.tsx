@@ -74,9 +74,7 @@ describe("MapToolbar", () => {
         activeDrawingLayerName="Alpha"
       />,
     );
-    expect(
-      screen.queryByTestId("draw-colour-palette"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("draw-colour-palette")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("draw-delete-selected"),
     ).not.toBeInTheDocument();

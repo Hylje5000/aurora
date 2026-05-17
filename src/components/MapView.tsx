@@ -65,7 +65,6 @@ interface MapViewProps {
   customLayers?: CustomLayer[];
   enabledCustomLayerIds?: Set<string>;
   activeDrawingLayerId?: string | null;
-  onCancelDrawing?: () => void;
   onInfoPanel?: (data: InfoPanelData | null) => void;
   infoPanelOpen?: boolean;
   plannedRoute?: PlannedRoute | null;
@@ -80,8 +79,6 @@ interface MapViewProps {
   activeTool?: MapTool;
   activeDrawingTool?: DrawingTool | null;
   activeDrawingColour?: string;
-  onDrawToolChange?: (t: DrawingTool | null) => void;
-  onDrawColourChange?: (hex: string) => void;
   onDrawSelectionChange?: (has: boolean) => void;
   onMeasurementUpdate?: (m: MeasurementState | null) => void;
 }
@@ -162,7 +159,6 @@ export function computeDistanceKm(points: [number, number][]): number {
 
 export function computeAreaKm2(points: [number, number][]): number {
   if (points.length < 3) return 0;
-  const R = 6371;
   // Shoelace on geographic coordinates, projected equirectangularly at centroid lat
   const centLat = points.reduce((s, p) => s + p[1], 0) / points.length;
   const cosLat = Math.cos((centLat * Math.PI) / 180);
@@ -564,7 +560,6 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     customLayers = [],
     enabledCustomLayerIds = new Set(),
     activeDrawingLayerId = null,
-    onCancelDrawing,
     onInfoPanel,
     infoPanelOpen = false,
     plannedRoute = null,
@@ -578,8 +573,6 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     activeTool = "grab",
     activeDrawingTool = null,
     activeDrawingColour = COLOUR_PALETTE[0].hex,
-    onDrawToolChange,
-    onDrawColourChange,
     onDrawSelectionChange,
     onMeasurementUpdate,
   },
@@ -2320,12 +2313,6 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     if (feature) drawRef.current?.delete(feature.id as string);
     pendingDrawFeatureRef.current = null;
     setDialogOpen(false);
-  }
-
-  function handleCancelDrawing() {
-    onDrawToolChange?.(null);
-    drawRef.current?.changeMode("simple_select");
-    onCancelDrawing?.();
   }
 
   return (

@@ -30,7 +30,6 @@ vi.mock("@/components/MapView", () => ({
     customLayers,
     enabledCustomLayerIds,
     activeDrawingLayerId,
-    onCancelDrawing,
     onInfoPanel,
     addingWaypoint,
     onWaypointClick,
@@ -43,7 +42,6 @@ vi.mock("@/components/MapView", () => ({
     customLayers: CustomLayer[];
     enabledCustomLayerIds: Set<string>;
     activeDrawingLayerId: string | null;
-    onCancelDrawing: () => void;
     onInfoPanel?: (data: unknown) => void;
     addingWaypoint?: boolean;
     onWaypointClick?: (coords: [number, number]) => void;
@@ -64,7 +62,6 @@ vi.mock("@/components/MapView", () => ({
       data-has-coverage-gaps={String(routeCoverageGaps != null)}
       data-focused-hazard={focusedHazard?.id ?? ""}
     >
-      <button onClick={onCancelDrawing}>CancelDrawing</button>
       <button
         onClick={() => onInfoPanel?.({ title: "Test Municipality", rows: [] })}
       >
@@ -512,7 +509,7 @@ describe("MapWithNav", () => {
     );
   });
 
-  it("clears activeDrawingLayerId when MapView calls onCancelDrawing", async () => {
+  it("clears activeDrawingLayerId when MapToolbar cancel is clicked", async () => {
     render(<MapWithNav />);
     await act(async () => {});
 
@@ -523,9 +520,7 @@ describe("MapWithNav", () => {
       "data-drawing-layer",
       "layer-1",
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "CancelDrawing" }),
-    );
+    await userEvent.click(screen.getByTestId("draw-cancel"));
     expect(screen.getByTestId("map-view")).toHaveAttribute(
       "data-drawing-layer",
       "",

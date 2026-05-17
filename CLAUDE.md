@@ -49,6 +49,8 @@ src/
 │   │                           #   customLayers, enabledCustomLayerIds, activeDrawingLayerId, infoPanelData, selectedDay,
 │   │                           #   routePanelOpen, plannedRoute, routeProfile, routeWaypoints, addingWaypoint, routePanelRef,
 │   │                           #   routeIntelligence, focusedHazard; handleHazardsChange + handleHazardFocus build InfoPanel rows;
+│   │                           #   activeTool (MapTool), activeDrawingTool, activeDrawingColour, hasDrawingSelection, measurement —
+│   │                           #   toolbar state passed to MapToolbar + MapView; handleToolChange clears measurement on tool switch;
 │   │                           #   "Plan a Route" CTA button (bottom-10 right-4, blue); weather panel (left-4 top-10 w-52):
 │   │                           #   single compact header row — area name (flex-1 text-xs font-bold truncate) + DatePicker bare side-by-side;
 │   │                           #   handleCommsToggle atomically sets cellGSM/UMTS/LTE/CDMA to !anyOn via single setLayerVisibility call;
@@ -74,9 +76,18 @@ src/
 │   ├── ElectionPieChart.tsx    # 'use client' — pure inline SVG pie chart of 2023 election vote shares; party color map; top-4 party list
 │   ├── InfoPanel.tsx           # 'use client' — right-side info panel (right-4 top-20 z-20 w-72 max-h-[60vh]); accepts
 │   │                           #   InfoPanelData {title, rows, component?} | null; collapse/expand chevron + close button
-│   ├── DrawingToolbar.tsx      # 'use client' — floating tool palette (top-16 right-4); Point/Line/Polygon/Rectangle + 8-colour palette
+│   ├── MapToolbar.tsx          # 'use client' — bottom-center unified toolbar (absolute bottom-4 left-1/2 -translate-x-1/2 z-10);
+│   │                           #   always shows Grab / Click / Measure Distance / Measure Area buttons; appends draw tools
+│   │                           #   (Point/Line/Polygon/Rectangle + colour palette + Delete Selected + Cancel) when activeDrawingLayerId !== null;
+│   │                           #   active measure tool shows distance/area badge (km or m, km² or m²); all state owned by MapWithNav
+│   ├── DrawingToolbar.tsx      # 'use client' — legacy floating tool palette; NO LONGER RENDERED (kept for test compatibility only)
 │   ├── FeatureDialog.tsx       # 'use client' — modal: name + description for a newly drawn feature
 │   ├── MapView.tsx             # 'use client' Mapbox GL JS — terrain, cell towers, custom drawing layers, Draw control, visibility sync effect;
+│   │                           #   activeTool prop (MapTool) routes map clicks: grab=no-op, measure-distance/area=accumulate points,
+│   │                           #   click=existing elevation+popup logic; measure-source + measure-line/fill/vertices layers for overlay;
+│   │                           #   haversineKm/computeDistanceKm/computeAreaKm2 exported pure helpers for measurement math;
+│   │                           #   drawing state (activeDrawingTool, activeDrawingColour) received as props from MapWithNav;
+│   │                           #   MapViewHandle exposes deleteDrawingSelected() in addition to getMapScreenshot();
 │   │                           #   route-hazards-source + three circle layers (critical/warning/info); useEffect([routeHazards]) syncs GeoJSON;
 │   │                           #   useEffect([focusedHazard]) calls map.flyTo + places color-coded Marker (hazardFocusMarkerRef)
 │   └── MapLoader.tsx           # next/dynamic(MapWithNav, {ssr:false}) — SSR guard
@@ -84,6 +95,7 @@ src/
 │   ├── areas.ts                # AOI definitions: Lappi, Karjala, Turku — bbox, color, description
 │   ├── layers.ts               # LayerKey, LayerVisibility, DEFAULT_LAYER_VISIBILITY, LAYER_GROUPS
 │   ├── customLayers.ts         # CustomLayer, CustomFeature, DrawingTool types; COLOUR_PALETTE (8 colours); DEFAULT_LAYER_COLOUR
+│   ├── mapTool.ts              # MapTool ('grab'|'click'|'measure-distance'|'measure-area'), DEFAULT_MAP_TOOL, MeasurementState
 │   ├── routing.ts              # RouteProfile, Waypoint, PlannedRoute, RouteLeg, RouteStep types; PROFILE_COLORS map;
 │   │                           #   VehicleProfile, VEHICLE_PRESETS (Infantry/Wheeled APC/IFV/MBT/Custom);
 │   │                           #   HazardSeverity, RouteHazard, RouteIntelligence types;
@@ -128,7 +140,8 @@ src/
         ├── WeatherWidget.test.tsx     # loading, stats display, sampleSize=0 fallback, refetch on prop change
         ├── DatePicker.test.tsx        # month/day selects, onChange, day clamping, option counts
         ├── CustomLayerPanel.test.tsx  # layer list, toggle, create form, delete confirm
-        ├── DrawingToolbar.test.tsx    # tool buttons, colour swatches, cancel, delete selected
+        ├── MapToolbar.test.tsx        # 16 tests: standard tool buttons, active state, measurement badges, draw section conditional, colour swatches, delete/cancel
+        ├── DrawingToolbar.test.tsx    # tool buttons, colour swatches, cancel, delete selected (legacy component, kept for test compat)
         └── FeatureDialog.test.tsx     # name/description form, save/discard, keyboard shortcuts
 ```
 
@@ -150,11 +163,14 @@ src/
   - Child components (`AreaNav`, `MapView`, `LayerPanel`, `InfoPanel`) — `vi.mock` with data-attribute stubs in `MapWithNav` tests to isolate state wiring. The `LayerPanel` stub includes a `customLayerProps` section that renders a `data-testid="custom-layer-panel"` div, replacing the former standalone `CustomLayerPanel` stub.
 - **Coverage**: `@vitest/coverage-v8` must match Vitest's major version (both v3). The `vite` package must be installed explicitly as a dev dependency.
 - **AI route**: `POST /api/ai` accepts `{ messages: ChatCompletionMessageParam[], maxTokens?: number, temperature?: number }` and returns `{ content: string, model: string, usage: {promptTokens, completionTokens, totalTokens} | null }`. Uses the `openai` npm SDK with a custom `baseURL` (`CM_BASE_URL + "/v1"`) to call ConfidentialMind's Gemma-4 endpoint. Returns 503 when `CM_BASE_URL`/`CM_API_KEY` are absent, 502 on `OpenAI.APIError`, 400 on bad input. `src/lib/ai.ts` exports `createAIClient()` (factory, not singleton) and `CM_MODEL` constant. No `NEXT_PUBLIC_` prefix — credentials never reach the browser.
-- **Coverage summary (last run — 476 tests)**: All files 88.16% stmts / 83.95% branch / 79.68% functions. `LayerPanel.tsx` 100% stmts/branch, `DatePicker.tsx` 100%, `WeatherWidget.tsx` ~98.5%, `RoutePanel.tsx` ~96%, `MapWithNav.tsx` ~80%, `MapView.tsx` ~83% (branch gaps at async null guards — expected). LayerPanel stub in MapWithNav tests accepts `onToggleComms` prop.
+- **Coverage summary (last run — 495 tests)**: All files 86.99% stmts / 83.85% branch / 77.07% functions. `MapToolbar.tsx` 99.27% stmts, `mapTool.ts` 100%, `LayerPanel.tsx` 100% stmts/branch, `DatePicker.tsx` 100%, `WeatherWidget.tsx` ~98.5%, `RoutePanel.tsx` ~96%, `MapWithNav.tsx` ~80%, `MapView.tsx` ~80% (branch gaps at async null guards and measure mode — expected). LayerPanel stub in MapWithNav tests accepts `onToggleComms` prop.
+- **MapView elevation tests**: Tests for elevation click behaviour pass `activeTool="click"` explicitly, because the default tool is now `"grab"` (which returns early from the click handler).
+- **Measurement math**: `haversineKm`, `computeDistanceKm`, `computeAreaKm2` are exported from `MapView.tsx` for direct unit testing. Accuracy: haversine is exact for great-circle distances; area uses Shoelace + equirectangular approximation, accurate to < 1% for polygons up to ~100 km across in Finland.
 - **RoutePanel debounce testing**: Uses `vi.advanceTimersByTimeAsync(400)` for route fetch and `vi.advanceTimersByTimeAsync(600)` for intelligence fetch inside `act()` to properly flush microtasks after the debounced async fetch inside `setTimeout`.
 
 ## Key Patterns
 
+- **Map toolbar**: `MapToolbar` (`absolute bottom-4 left-1/2 -translate-x-1/2`) always shows four interaction-mode buttons: Grab (no-op), Click (elevation/municipality popups), Measure Distance (haversine, km), Measure Area (Shoelace, km²). When `activeDrawingLayerId !== null`, draw tools (Point/Line/Polygon/Rectangle + colour palette + Delete Selected + Cancel) are appended after a divider. State lives in `MapWithNav`; `MapView` receives `activeTool` as a prop. The general `map.on("click")` handler dispatches by `activeToolRef.current`: grab=return early, measure=accumulate point, click=existing elevation logic. Measurement geometry is rendered on `measure-source` with `measure-line`, `measure-fill`, and `measure-vertices` layers; cleared immediately when switching away from a measure tool.
 - **Mapbox SSR guard**: `mapbox-gl` uses `window` at import time. `MapLoader` wraps `MapWithNav` with `next/dynamic({ ssr: false })` so it is never imported in the server bundle.
 - **Map init**: `MapView` holds the DOM container via `containerRef` and the `Map` instance via `mapRef` (not state). Initialised once in `useEffect([], [])` with cleanup `map.remove()`.
 - **AOI layers**: On `map.on('style.load', ...)`, `MapView` adds a single GeoJSON source (`aoi-source`) with all three AOI bounding-box polygons, then an `aoi-fill` layer (opacity 0.12) and `aoi-outline` layer (width 2), both using `["get", "color"]` data-driven expressions.

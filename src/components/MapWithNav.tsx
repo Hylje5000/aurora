@@ -83,9 +83,7 @@ export default function MapWithNav() {
   const [activeTool, setActiveTool] = useState<MapTool>(DEFAULT_MAP_TOOL);
   const [activeDrawingTool, setActiveDrawingTool] =
     useState<DrawingTool | null>(null);
-  const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
-    COLOUR_PALETTE[0].hex,
-  );
+  const activeDrawingColour = COLOUR_PALETTE[0].hex;
   const [measurement, setMeasurement] = useState<MeasurementState | null>(null);
 
   // Panel collapse coordination
@@ -305,10 +303,6 @@ export default function MapWithNav() {
         customLayers={customLayers}
         enabledCustomLayerIds={enabledCustomLayerIds}
         activeDrawingLayerId={activeDrawingLayerId}
-        onCancelDrawing={() => {
-          setActiveDrawingLayerId(null);
-          setActiveDrawingTool(null);
-        }}
         onInfoPanel={handleInfoPanel}
         infoPanelOpen={infoPanelData !== null}
         plannedRoute={plannedRoute}
@@ -322,8 +316,6 @@ export default function MapWithNav() {
         activeTool={activeTool}
         activeDrawingTool={activeDrawingTool}
         activeDrawingColour={activeDrawingColour}
-        onDrawToolChange={handleDrawToolChange}
-        onDrawColourChange={setActiveDrawingColour}
         onMeasurementUpdate={setMeasurement}
       />
       <MapToolbar
