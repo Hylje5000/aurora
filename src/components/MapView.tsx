@@ -396,6 +396,7 @@ function addCustomLayerSourcesToMap(
     paint: {
       "fill-color": ["get", "color"],
       "fill-opacity": 0.5,
+      "fill-emissive-strength": 1,
     },
   });
 
@@ -412,6 +413,7 @@ function addCustomLayerSourcesToMap(
     paint: {
       "line-color": ["get", "color"],
       "line-width": 5,
+      "line-emissive-strength": 1,
     },
   });
 
@@ -430,6 +432,7 @@ function addCustomLayerSourcesToMap(
       "circle-radius": 11,
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 2.5,
+      "circle-emissive-strength": 1,
     },
   });
 
@@ -447,6 +450,9 @@ function addCustomLayerSourcesToMap(
       "icon-image": ["get", "sidc", ["get", "properties"]],
       "icon-size": 0.6,
       "icon-allow-overlap": true,
+    },
+    paint: {
+      "icon-emissive-strength": 1,
     },
   });
 }
@@ -697,6 +703,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "fill-color": "#38bdf8",
           "fill-opacity": 0.06,
+          "fill-emissive-strength": 1,
         },
       });
       // Glow layer for visibility
@@ -709,6 +716,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-width": 16,
           "line-blur": 6,
           "line-opacity": 0.7,
+          "line-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -718,6 +726,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "line-color": "#ffffff",
           "line-width": 2,
+          "line-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -727,6 +736,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "line-color": "#38bdf8",
           "line-width": 6,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -994,6 +1004,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
             "rgba(210,235,255,0.12)",
             "rgba(0,0,0,0)",
           ],
+          "fill-emissive-strength": 1,
         },
       });
 
@@ -1008,6 +1019,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "line-color": "rgba(180,255,200,0.80)",
           "line-width": 0.8,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1026,6 +1038,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "line-color": "rgba(210,255,220,1.0)",
           "line-width": 2,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1051,6 +1064,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "text-color": "#ccffdd",
           "text-halo-color": "rgba(0,0,0,0.85)",
           "text-halo-width": 2.5,
+          "text-emissive-strength": 1,
         },
       });
 
@@ -1079,7 +1093,11 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         type: "fill",
         source: "municipalities-source",
         layout: { visibility: vis.municipalities ? "visible" : "none" },
-        paint: { "fill-color": "#ffffff", "fill-opacity": 0.05 },
+        paint: {
+          "fill-color": "#ffffff",
+          "fill-opacity": 0.05,
+          "fill-emissive-strength": 1,
+        },
       });
       map.addLayer({
         id: "municipalities-outline",
@@ -1090,13 +1108,13 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#ffffff",
           "line-opacity": 0.4,
           "line-width": 1,
+          "line-emissive-strength": 1,
         },
       });
       map.addSource("municipality-highlight-source", {
         type: "geojson",
         data: EMPTY_COLLECTION,
       });
-      // slot:"top" renders above Standard style night-mode color pipeline
       map.addLayer({
         id: "municipality-highlight-fill",
         type: "fill",
@@ -1105,6 +1123,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "fill-color": "#ffffff",
           "fill-opacity": 0.08,
+          "fill-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -1116,6 +1135,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#ffffff",
           "line-width": 5,
           "line-opacity": 1,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1144,6 +1164,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#0f172a",
           "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2, 14, 4],
           "line-opacity": 0.45,
+          "line-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -1169,6 +1190,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 14, 2.5],
           "line-opacity": 0.6,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1193,6 +1215,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "icon-size": 0.5,
           "icon-allow-overlap": true,
         },
+        paint: {
+          "icon-emissive-strength": 1,
+        },
       });
 
       // Railways
@@ -1209,6 +1234,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#a78bfa",
           "line-width": 3,
           "line-dasharray": [4, 2],
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1610,6 +1636,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#ffffff",
           "line-width": 28,
           "line-opacity": 0.4,
+          "line-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -1621,6 +1648,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": PROFILE_COLORS["driving"],
           "line-width": 16,
           "line-opacity": 1.0,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1639,6 +1667,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "circle-radius": 7,
           "circle-stroke-color": "#fff",
           "circle-stroke-width": 1.5,
+          "circle-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -1651,6 +1680,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "circle-radius": 9,
           "circle-stroke-color": "#fff",
           "circle-stroke-width": 2,
+          "circle-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -1663,6 +1693,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "circle-radius": 11,
           "circle-stroke-color": "#fff",
           "circle-stroke-width": 2.5,
+          "circle-emissive-strength": 1,
         },
       });
 
@@ -1682,6 +1713,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-width": 6,
           "line-dasharray": [6, 4],
           "line-opacity": 0.85,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1700,7 +1732,11 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
             ? "visible"
             : "none",
         },
-        paint: { "fill-color": "#f97316", "fill-opacity": 0.15 },
+        paint: {
+          "fill-color": "#f97316",
+          "fill-opacity": 0.15,
+          "fill-emissive-strength": 1,
+        },
       });
       map.addLayer({
         id: "coverage-circles-line",
@@ -1716,6 +1752,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#f97316",
           "line-width": 1.5,
           "line-opacity": 0.55,
+          "line-emissive-strength": 1,
         },
       });
 
@@ -1729,7 +1766,11 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         type: "fill",
         source: "measure-source",
         filter: ["==", ["geometry-type"], "Polygon"],
-        paint: { "fill-color": "#06b6d4", "fill-opacity": 0.12 },
+        paint: {
+          "fill-color": "#06b6d4",
+          "fill-opacity": 0.12,
+          "fill-emissive-strength": 1,
+        },
       });
       map.addLayer({
         id: "measure-line",
@@ -1744,6 +1785,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "line-color": "#06b6d4",
           "line-width": 2,
           "line-dasharray": [4, 2],
+          "line-emissive-strength": 1,
         },
       });
       map.addLayer({
@@ -1756,6 +1798,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "circle-radius": 5,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
+          "circle-emissive-strength": 1,
         },
       });
 
