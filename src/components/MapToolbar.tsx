@@ -67,7 +67,7 @@ export default function MapToolbar({
 }: MapToolbarProps) {
   return (
     <div
-      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl px-3 py-2 select-none touch-none"
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-start gap-1 rounded-xl border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl px-3 py-2 select-none touch-none"
       data-testid="map-toolbar"
     >
       {/* Standard tools */}

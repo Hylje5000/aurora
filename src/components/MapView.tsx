@@ -1979,13 +1979,12 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
       canvas.style.cursor = "crosshair";
     }
 
-    if (activeTool !== "measure-distance" && activeTool !== "measure-area") {
-      measurePointsRef.current = [];
-      if (styleLoadedRef.current) {
-        clearMeasureSources(map);
-      }
-      onMeasurementUpdateRef.current?.(null);
+    // Always reset measurement on any tool switch (including between the two measure modes)
+    measurePointsRef.current = [];
+    if (styleLoadedRef.current) {
+      clearMeasureSources(map);
     }
+    onMeasurementUpdateRef.current?.(null);
   }, [activeTool]);
 
   // ── Sync InfoPanel highlight ───────────────────────────────────────────
