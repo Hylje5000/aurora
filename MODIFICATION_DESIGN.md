@@ -1,260 +1,162 @@
-# Design: Unified Bottom-Center Map Toolbar
+# Design: Fix Map Overlay Color Rendering in Night Mode
 
 ## Overview
 
-Replace the existing floating `DrawingToolbar` (top-right panel) with a new unified bottom-center toolbar called `MapToolbar`. The toolbar always exposes four interaction-mode buttons (Grab, Click, Measure Distance, Measure Area). When a custom drawing layer is active, draw tool buttons (Point / Line / Polygon / Rectangle + colour palette + Delete Selected) are appended to the right of the standard tools, separated by a visual divider. Switching away from a measure tool immediately clears the temporary geometry.
+Map overlay items (route lines, hazard markers, custom drawing features, AOI outlines, coverage circles, roads, railways, etc.) appear dark grey/desaturated when the satellite view is off. The same items render in their true colors when satellite is on. This document analyses the root cause and proposes a fix.
 
----
+## Detailed Analysis
 
-## Detailed Analysis of the Goal
+### Root Cause
 
-### Current state
+The application uses **Mapbox Standard style** (`mapbox://styles/mapbox/standard`) when satellite is off. On `style.load`, it calls:
 
-| Element                         | Location                  | Behaviour                                                                                          |
-| ------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| Map interaction                 | Always "click everything" | Elevation + municipality popups fire on every click                                                |
-| DrawingToolbar                  | `absolute top-16 right-4` | Only visible when `activeDrawingLayerId !== null`; owns its own tool/colour state inside `MapView` |
-| No grab / click / measure tools | —                         | No explicit mode selector                                                                          |
+```ts
+map.setConfigProperty("basemap", "lightPreset", "night");
+```
 
-### What the user asked for
+In Mapbox GL JS v3+, the Standard style uses a physically-based lighting model. The `lightPreset: "night"` preset reduces scene light intensity dramatically, simulating nighttime. **Every custom layer with default emissive strength (0) participates in this lighting model** — meaning the rendered colour is multiplied by the (very low) scene light intensity, producing a dark, desaturated appearance.
 
-1. **Grab** – default map-pan behaviour (cursor = grab/grabbing).
-2. **Click** – what currently always fires: elevation query + municipality highlight + road/bridge popups.
-3. **Measure Distance** – click to place points forming a LineString; running km total shown inline; cleared on tool switch.
-4. **Measure Area** – click to form a Polygon; m² / km² shown inline; cleared on tool switch.
-5. **Draw tools (append when layer active)** – Point / Line / Polygon / Rectangle + colour palette + Delete Selected (when selection exists). No visible divider change — the existing cancel mechanism remains (deselecting the active layer in LayerPanel).
+When satellite view is on, the style switches to `mapbox://styles/mapbox/satellite-streets-v12`, which is a legacy Mapbox style that does **not** use the Standard style lighting model. Custom layers in the satellite style render at their true paint colours, which is why the problem disappears.
 
----
+### Emissive Strength Paint Properties
+
+Mapbox GL JS v3 introduced per-layer emissive-strength properties that control how much a layer participates in the scene lighting:
+
+| Layer type | Property | Default |
+|---|---|---|
+| `fill` | `fill-emissive-strength` | `0` |
+| `line` | `line-emissive-strength` | `0` |
+| `circle` | `circle-emissive-strength` | `0` |
+| `symbol` (icon) | `icon-emissive-strength` | `0` |
+| `symbol` (text) | `text-emissive-strength` | `0` |
+
+- **Value `0`**: Layer colour is fully subject to the scene lighting (dims in night mode).
+- **Value `1`**: Layer emits its own colour fully — renders at the exact specified paint colour regardless of lighting.
+
+### Evidence in Existing Code
+
+The developer already applied a workaround for municipality highlight layers at line 1099:
+
+```ts
+// slot:"top" renders above Standard style night-mode color pipeline
+map.addLayer({ id: "municipality-highlight-fill", ..., slot: "top", ... });
+```
+
+Using `slot: "top"` inserts the layer above the Standard style's rendering pipeline. However:
+
+1. This approach was only applied to two municipality highlight layers — all other overlay layers are unaffected.
+2. The `slot: "top"` approach changes rendering order (non-slotted layers render above slotted ones), which the developer acknowledged at line 1602–1603 when deliberately keeping route layers slot-less.
+3. The emissive-strength approach is semantically correct, doesn't change z-order, and works at any slot position.
+
+### Affected Layers
+
+| Layer ID | Type | Slot | Status |
+|---|---|---|---|
+| `aoi-fill` | fill | none | Affected |
+| `aoi-outline-glow` | line | none | Affected |
+| `aoi-outline` | line | none | Affected |
+| `aoi-outline-outer` | line | none | Affected |
+| `municipalities-fill` | fill | none | Affected |
+| `municipalities-outline` | line | none | Affected |
+| `municipality-highlight-fill` | fill | top | Workaround applied — add emissive-strength too |
+| `municipality-highlight-line` | line | top | Workaround applied — add emissive-strength too |
+| `landcover-military` | fill | bottom | Affected (GO/SLOW-GO/NO-GO colors) |
+| `contours-minor` | line | bottom | Affected |
+| `contours-major` | line | bottom | Affected |
+| `contours-labels` (text) | symbol | middle | Affected |
+| `roads-line-casing` | line | none | Affected |
+| `roads-line` | line | none | Affected |
+| `bridges-symbol` | symbol | none | Affected |
+| `railways-line` | line | none | Affected |
+| `route-line-outline` | line | none | Affected |
+| `route-line` | line | none | Affected |
+| `route-hazards-info` | circle | none | Affected |
+| `route-hazards-warning` | circle | none | Affected |
+| `route-hazards-critical` | circle | none | Affected |
+| `route-coverage-gaps-line` | line | top | Affected |
+| `coverage-circles-fill` | fill | middle | Affected |
+| `coverage-circles-line` | line | bottom | Affected |
+| `measure-fill` | fill | none | Affected |
+| `measure-line` | line | none | Affected |
+| `measure-vertices` | circle | none | Affected |
+| `custom-layer-{id}-fill` | fill | none | Affected |
+| `custom-layer-{id}-line` | line | none | Affected |
+| `custom-layer-{id}-circle` | circle | none | Affected |
+| `custom-layer-{id}-symbol` | symbol | none | Affected |
+| `cell-towers-*` | symbol | top | Working (icon images embed colour) |
+| `hillshading` | hillshade | bottom | Intentionally excluded — lighting is desired |
 
 ## Alternatives Considered
 
-### A. Keep toolbar inside MapView (no state lifting)
+### Alternative 1: Change `lightPreset` away from `"night"`
 
-- Con: `MapView` is already 2 000+ lines. Adding more UI state makes it harder to test and maintain.
-- Con: The new toolbar must sit _outside_ the `<div ref={containerRef}>` element because Mapbox owns that DOM node's events.
+Remove or change the `lightPreset: "night"` call so the basemap uses a brighter preset.
 
-### B. Move all state into a Context
+**Rejected**: The night preset is intentional — it gives the map the dark military aesthetic the project requires. Removing it would change the basemap appearance dramatically.
 
-- Con: Overkill for a single feature; the existing prop-drilling pattern is consistent throughout the codebase.
+### Alternative 2: Move all layers to `slot: "top"`
 
-### C. Render toolbar inside MapView's React tree (already outside containerRef)
+Change all affected layers to use `slot: "top"` (as was done for municipality highlights).
 
-- `MapView` already renders `DrawingToolbar` and `FeatureDialog` inside its root `<div className="relative w-full h-full">`, outside the map container div. The toolbar could live there.
-- Con: Bottom-center positioning would float relative to MapView, which is full-screen — this works fine actually. But drawing state still needs to be shared with MapWithNav.
-- Pro: keeps drawing state local to MapView.
+**Rejected**: Changes rendering z-order. Non-slotted layers render above `slot: "top"` layers; the existing route layer comment (line 1602) relies on this for correct layering. Changing slots would require careful reordering of `addLayer` calls.
 
-### D. Lift drawing state to MapWithNav, position toolbar in MapWithNav ✓ (chosen)
+### Alternative 3: Add `*-emissive-strength: 1` paint properties (Selected)
 
-- `MapWithNav` already owns `activeDrawingLayerId`, all route state, and the InfoPanel. Adding `activeTool`, `activeDrawingTool`, and `activeDrawingColour` is a small, consistent extension.
-- `MapToolbar` becomes a simple presentational component, easy to test.
-- `MapView` receives tool state via props; its internal click handler switches behaviour based on `activeTool`.
-- `DrawingToolbar.tsx` is kept (test compatibility) but no longer rendered by `MapView`.
+Add emissive-strength properties to all custom overlay layers so they render at full brightness regardless of the scene lighting.
 
----
+**Selected because:**
+- Semantically correct — the property was designed exactly for this use case.
+- Does not change rendering order or z-ordering.
+- Works regardless of slot assignment.
+- Surgical change to paint properties only — no layer/source restructuring.
+- The satellite style (`satellite-streets-v12`) ignores these properties harmlessly.
 
 ## Detailed Design
 
-### 1. New type: `MapTool`
-
-```ts
-// src/lib/mapTool.ts  (new small module)
-export type MapTool = "grab" | "click" | "measure-distance" | "measure-area";
-export const DEFAULT_MAP_TOOL: MapTool = "grab";
-
-export interface MeasurementState {
-  distance_km?: number;
-  area_km2?: number;
-}
-```
-
-### 2. State lifted to `MapWithNav`
-
-```ts
-// New state added to MapWithNav
-const [activeTool, setActiveTool] = useState<MapTool>("grab");
-const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(
-  null,
-);
-const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
-  COLOUR_PALETTE[0].hex,
-);
-const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
-const [measurement, setMeasurement] = useState<MeasurementState | null>(null);
-```
-
-`MapView` loses its own `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection` state and receives them as props instead.
-
-### 3. New props added to `MapViewProps`
-
-```ts
-activeTool?: MapTool;                              // which interaction mode
-activeDrawingTool?: DrawingTool | null;            // lifted from MapView
-activeDrawingColour?: string;                      // lifted from MapView
-onDrawToolChange?: (t: DrawingTool | null) => void;
-onDrawColourChange?: (hex: string) => void;
-onDrawSelectionChange?: (has: boolean) => void;
-onMeasurementUpdate?: (m: MeasurementState | null) => void;
-```
-
-### 4. New component: `MapToolbar`
-
-**File:** `src/components/MapToolbar.tsx`
-
-**Position in MapWithNav:** `absolute bottom-4 left-1/2 -translate-x-1/2 z-10` — bottom-center, floats above the map.
-
-**Visual structure (left → right):**
+Add the appropriate `*-emissive-strength: 1` property to the paint object of every affected custom layer in `src/components/MapView.tsx`:
 
 ```
-[ ✋ Grab ] [ 👆 Click ] [ 📏 Dist ] [ ⬡ Area ]   ║   [ • ] [ — ] [ ⬡ ] [ ▭ ]  ● ● ● ● ● ● ● ●  [ Del ] [ ✕ ]
-                                                   ^
-                                   only when activeDrawingLayerId !== null
+fill-emissive-strength: 1    → aoi-fill, municipalities-fill, municipality-highlight-fill,
+                                landcover-military, coverage-circles-fill, measure-fill,
+                                custom-layer-{id}-fill
+
+line-emissive-strength: 1    → aoi-outline-glow, aoi-outline, aoi-outline-outer,
+                                municipalities-outline, municipality-highlight-line,
+                                contours-minor, contours-major,
+                                roads-line-casing, roads-line, railways-line,
+                                route-line-outline, route-line,
+                                route-coverage-gaps-line, coverage-circles-line,
+                                measure-line, custom-layer-{id}-line
+
+circle-emissive-strength: 1  → route-hazards-info, route-hazards-warning,
+                                route-hazards-critical, measure-vertices,
+                                custom-layer-{id}-circle
+
+icon-emissive-strength: 1    → bridges-symbol, custom-layer-{id}-symbol
+
+text-emissive-strength: 1    → contours-labels
 ```
 
-- Toolbar: `rounded-xl border border-slate-700 bg-slate-900/90 backdrop-blur-sm shadow-xl px-3 py-2 flex items-center gap-1`
-- Each tool button: 36×36 px rounded, `aria-pressed`, active = `bg-blue-600 text-white`, inactive = `text-slate-400 hover:text-white hover:bg-slate-700`
-- Measurement badge: small `text-[10px]` label under (or right of) the active measure button showing "3.2 km" or "1.4 km²"
-- Colour swatches: 20×20 px circles
-- "Delete" appears only when `hasDrawingSelection === true`
-- Cancel (✕) exits drawing mode: calls `onCancelDrawing()` (which clears `activeDrawingLayerId` in MapWithNav)
+`hillshading` is intentionally excluded — hillshade relies on lighting for its terrain effect.
 
-**Props:**
-
-```ts
-interface MapToolbarProps {
-  activeTool: MapTool;
-  onToolChange: (t: MapTool) => void;
-  measurement: MeasurementState | null;
-  // Draw tools section
-  activeDrawingLayerId: string | null;
-  activeDrawingLayerName: string | undefined;
-  activeDrawingTool: DrawingTool | null;
-  activeDrawingColour: string;
-  hasDrawingSelection: boolean;
-  onDrawToolChange: (t: DrawingTool | null) => void;
-  onDrawColourChange: (hex: string) => void;
-  onDeleteSelected: () => void;
-  onCancelDrawing: () => void;
-}
-```
-
-### 5. Measurement implementation in `MapView`
-
-#### Refs added to MapView
-
-```ts
-const measurePointsRef = useRef<[number, number][]>([]);
-const activeToolRef = useRef<MapTool>(activeTool ?? "grab");
-```
-
-#### Map sources/layers added in `style.load`
-
-```
-"measure-source"  → GeoJSON FeatureCollection
-"measure-line"    → line layer, dashed cyan (#06b6d4), width 2, dashes [4,2]
-"measure-fill"    → fill layer, cyan fill-opacity 0.15 (Polygon only)
-"measure-vertices" → circle layer, radius 4, cyan, for each clicked point
-```
-
-#### Click handler routing (inside existing `map.on("click", async (e) => {...})`)
-
-```
-1. waypoint intercept (unchanged first)
-2. grab mode → return early (no action)
-3. measure-distance / measure-area → append point, update source, call onMeasurementUpdate
-4. click mode → existing elevation + interactive-layer logic
-```
-
-#### Double-click to finish / undo last point
-
-- `map.on("dblclick", ...)` — prevent default zoom; pop last point (double-click adds the point twice, so remove the extra one). The measurement finalises with whatever points remain.
-
-#### `computeMeasurement` — pure math helpers (no dependency)
-
-- Distance: sum haversine formula across consecutive point pairs → `distance_km`
-- Area: Shoelace formula on projected coordinates → `area_km2`
-
-#### Clearing on tool switch
-
-```ts
-useEffect(() => {
-  activeToolRef.current = activeTool ?? "grab";
-  if (activeTool !== "measure-distance" && activeTool !== "measure-area") {
-    measurePointsRef.current = [];
-    clearMeasureSources(map);
-    onMeasurementUpdate?.(null);
-  }
-  // Update cursor
-  map.getCanvas().style.cursor =
-    activeTool === "grab"
-      ? ""
-      : activeTool === "click"
-        ? "default"
-        : "crosshair";
-}, [activeTool]);
-```
-
-### 6. Cursor management
-
-| `activeTool`       | Cursor                              |
-| ------------------ | ----------------------------------- |
-| `grab`             | `""` (Mapbox handles grab/grabbing) |
-| `click`            | `"default"`                         |
-| `measure-distance` | `"crosshair"`                       |
-| `measure-area`     | `"crosshair"`                       |
-
-### 7. Removing `DrawingToolbar` render from `MapView`
-
-The `DrawingToolbar` component render inside `MapView`'s JSX is removed. The component file itself stays because `DrawingToolbar.test.tsx` imports it directly.
-
-### 8. `handleDeleteSelected` in MapWithNav
-
-Since `drawRef` lives in `MapView`, we expose a method via `MapViewHandle`:
-
-```ts
-interface MapViewHandle {
-  getMapScreenshot: () => string | undefined;
-  deleteDrawingSelected: () => void; // calls drawRef.current?.trash()
-}
-```
-
-MapWithNav calls `mapViewRef.current?.deleteDrawingSelected()` from the toolbar's `onDeleteSelected`.
-
----
-
-## Component Diagram
+## Diagram
 
 ```mermaid
-graph TD
-  MWN["MapWithNav\n(activeTool, activeDrawingTool,\nactiveDrawingColour, hasDrawingSelection,\nmeasurement)"]
-  MV["MapView\n(receives activeTool, drawTool,\ndrawColour props; owns measure logic;\nexposes deleteDrawingSelected via ref)"]
-  MT["MapToolbar\n(absolute bottom-4 left-1/2 -translate-x-1/2)\nGrab | Click | Dist | Area\n[optional draw tools when layer active]"]
-  DT["DrawingToolbar\n(kept for tests, no longer rendered)"]
-  FD["FeatureDialog\n(unchanged, stays in MapView)"]
-
-  MWN -->|"activeTool, drawTool, drawColour props"| MV
-  MWN -->|"all toolbar props"| MT
-  MV -->|"onDrawSelectionChange"| MWN
-  MV -->|"onMeasurementUpdate"| MWN
-  MT -->|"onToolChange"| MWN
-  MT -->|"onDrawToolChange"| MWN
-  MT -->|"onDrawColourChange"| MWN
-  MT -->|"onDeleteSelected → mapViewRef.deleteDrawingSelected"| MWN
-  MV --> FD
-  DT -. "no longer rendered" .-> MV
+flowchart TD
+    A["Mapbox Standard style loaded"] --> B["lightPreset: night applied"]
+    B --> C{"Layer has emissive-strength: 1?"}
+    C -- "No (default 0)" --> D["Scene light dims colour\n→ dark grey appearance"]
+    C -- "Yes" --> E["Layer emits own colour\n→ true colour rendered"]
+    D --> F["Bug: user sees dark grey overlays"]
+    E --> G["Fix: user sees correct colours"]
 ```
 
----
+## Summary
 
-## Implementation Summary
+The fix adds `*-emissive-strength: 1` paint properties to all custom overlay layers in `MapView.tsx`. This is a targeted, semantically correct change to ~30 layer definitions in a single file. No component structure, API, or test fixtures change. The `hillshading` layer is intentionally excluded.
 
-| File                                      | Change                                                                                                                                                                        |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib/mapTool.ts`                      | **New**: `MapTool` type, `DEFAULT_MAP_TOOL`, `MeasurementState`                                                                                                               |
-| `src/components/MapToolbar.tsx`           | **New**: unified toolbar component                                                                                                                                            |
-| `src/components/MapView.tsx`              | Accept drawing state as props; add `activeTool` prop; add measure sources/layers; route click by tool; expose `deleteDrawingSelected` via ref; remove `DrawingToolbar` render |
-| `src/components/MapWithNav.tsx`           | Add `activeTool`, `activeDrawingTool`, `activeDrawingColour`, `hasDrawingSelection`, `measurement` state; wire `MapToolbar`; pass new props to `MapView`                      |
-| `src/components/DrawingToolbar.tsx`       | No change (kept for test compatibility)                                                                                                                                       |
-| `src/test/components/MapToolbar.test.tsx` | **New**: unit tests for toolbar                                                                                                                                               |
-| `src/test/components/MapView.test.tsx`    | Update prop list; add tests for tool routing and measure                                                                                                                      |
-| `src/test/components/MapWithNav.test.tsx` | Update stub props; add tool state wiring tests                                                                                                                                |
-| `CLAUDE.md`                               | Update component descriptions                                                                                                                                                 |
+## References
+
+- Mapbox GL JS v3 Standard style: https://docs.mapbox.com/mapbox-gl-js/guides/standard-style/
+- Emissive strength spec: https://docs.mapbox.com/style-spec/reference/layers/#paint-fill-fill-emissive-strength
+- Light presets: https://docs.mapbox.com/mapbox-gl-js/guides/standard-style/#light-presets

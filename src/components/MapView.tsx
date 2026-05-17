@@ -706,16 +706,14 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           "fill-emissive-strength": 1,
         },
       });
-      // Glow layer for visibility
       map.addLayer({
         id: "aoi-outline-glow",
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": "#38bdf8",
-          "line-width": 16,
-          "line-blur": 6,
-          "line-opacity": 0.7,
+          "line-color": "#0f172a",
+          "line-width": 10,
+          "line-opacity": 1.0,
           "line-emissive-strength": 1,
         },
       });
@@ -724,8 +722,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": "#ffffff",
-          "line-width": 2,
+          "line-color": "#38bdf8",
+          "line-width": 6,
+          "line-opacity": 1.0,
           "line-emissive-strength": 1,
         },
       });
@@ -734,8 +733,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         type: "line",
         source: "aoi-source",
         paint: {
-          "line-color": "#38bdf8",
-          "line-width": 6,
+          "line-color": "#ffffff",
+          "line-width": 2,
+          "line-opacity": 0.6,
           "line-emissive-strength": 1,
         },
       });
@@ -993,15 +993,15 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
             "match",
             ["get", "class"],
             "wood",
-            "rgba(80,200,110,0.18)",
+            "rgba(80,200,110,0.04)",
             "scrub",
-            "rgba(140,195,80,0.13)",
+            "rgba(140,195,80,0.04)",
             "grass",
-            "rgba(160,220,100,0.10)",
+            "rgba(160,220,100,0.04)",
             "crop",
-            "rgba(180,230,110,0.10)",
+            "rgba(180,230,110,0.04)",
             "snow",
-            "rgba(210,235,255,0.12)",
+            "rgba(210,235,255,0.04)",
             "rgba(0,0,0,0)",
           ],
           "fill-emissive-strength": 1,
@@ -1017,7 +1017,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         filter: ["!=", ["get", "index"], 5],
         layout: { visibility: vis.contours ? "visible" : "none" },
         paint: {
-          "line-color": "rgba(180,255,200,0.80)",
+          "line-color": "rgba(180,255,200,1.0)",
           "line-width": 0.8,
           "line-emissive-strength": 1,
         },
@@ -1633,9 +1633,9 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         source: "route-source",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
-          "line-color": "#ffffff",
-          "line-width": 28,
-          "line-opacity": 0.4,
+          "line-color": "#0f172a",
+          "line-width": 14,
+          "line-opacity": 1.0,
           "line-emissive-strength": 1,
         },
       });
@@ -1646,7 +1646,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
           "line-color": PROFILE_COLORS["driving"],
-          "line-width": 16,
+          "line-width": 10,
           "line-opacity": 1.0,
           "line-emissive-strength": 1,
         },
@@ -1734,7 +1734,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         },
         paint: {
           "fill-color": "#f97316",
-          "fill-opacity": 0.15,
+          "fill-opacity": 0.08,
           "fill-emissive-strength": 1,
         },
       });
@@ -1751,7 +1751,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         paint: {
           "line-color": "#f97316",
           "line-width": 1.5,
-          "line-opacity": 0.55,
+          "line-opacity": 0.25,
           "line-emissive-strength": 1,
         },
       });

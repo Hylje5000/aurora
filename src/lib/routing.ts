@@ -108,7 +108,7 @@ export interface PlannedRoute {
 }
 
 export const PROFILE_COLORS: Record<RouteProfile, string> = {
-  driving: "#bae6fd",
+  driving: "#3b82f6",
   walking: "#4ade80",
   cycling: "#fbbf24",
 };
