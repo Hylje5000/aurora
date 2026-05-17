@@ -1970,21 +1970,32 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     const map = mapRef.current;
     if (!map) return;
 
-    const canvas = map.getCanvas();
-    if (activeTool === "grab") {
-      canvas.style.cursor = "";
-    } else if (activeTool === "click") {
-      canvas.style.cursor = "default";
-    } else {
-      canvas.style.cursor = "crosshair";
-    }
-
     // Always reset measurement on any tool switch (including between the two measure modes)
     measurePointsRef.current = [];
     if (styleLoadedRef.current) {
       clearMeasureSources(map);
     }
     onMeasurementUpdateRef.current?.(null);
+
+    const canvas = map.getCanvas();
+
+    if (activeTool === "grab") {
+      // Let Mapbox manage grab/grabbing naturally
+      canvas.style.cursor = "";
+      return;
+    }
+
+    // For all other tools, pin the cursor against Mapbox's internal overrides
+    const cursor = activeTool === "click" ? "default" : "crosshair";
+    canvas.style.cursor = cursor;
+    const keepCursor = () => {
+      canvas.style.cursor = cursor;
+    };
+    canvas.addEventListener("mousemove", keepCursor);
+    return () => {
+      canvas.removeEventListener("mousemove", keepCursor);
+      canvas.style.cursor = "";
+    };
   }, [activeTool]);
 
   // ── Sync InfoPanel highlight ───────────────────────────────────────────

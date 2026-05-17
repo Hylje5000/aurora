@@ -1,5 +1,17 @@
 "use client";
 
+import React from "react";
+import {
+  Hand,
+  MousePointer2,
+  Ruler,
+  BoxSelect,
+  MapPin,
+  PenLine,
+  Hexagon,
+  Square,
+  X,
+} from "lucide-react";
 import type { DrawingTool } from "@/lib/customLayers";
 import type { MapTool, MeasurementState } from "@/lib/mapTool";
 
@@ -14,18 +26,38 @@ interface MapToolbarProps {
   onCancelDrawing: () => void;
 }
 
-const STD_TOOLS: { tool: MapTool; icon: string; label: string }[] = [
-  { tool: "grab", icon: "✋", label: "Grab (pan map)" },
-  { tool: "click", icon: "👆", label: "Click (inspect)" },
-  { tool: "measure-distance", icon: "📏", label: "Measure distance" },
-  { tool: "measure-area", icon: "⬡", label: "Measure area" },
+const STD_TOOLS: {
+  tool: MapTool;
+  icon: React.ReactNode;
+  label: string;
+}[] = [
+  { tool: "grab", icon: <Hand size={16} />, label: "Grab (pan map)" },
+  {
+    tool: "click",
+    icon: <MousePointer2 size={16} />,
+    label: "Click (inspect)",
+  },
+  {
+    tool: "measure-distance",
+    icon: <Ruler size={16} />,
+    label: "Measure distance",
+  },
+  {
+    tool: "measure-area",
+    icon: <BoxSelect size={16} />,
+    label: "Measure area",
+  },
 ];
 
-const DRAW_TOOLS: { tool: DrawingTool; icon: string; label: string }[] = [
-  { tool: "Point", icon: "•", label: "Point" },
-  { tool: "LineString", icon: "—", label: "Line" },
-  { tool: "Polygon", icon: "⬡", label: "Polygon" },
-  { tool: "Rectangle", icon: "▭", label: "Rectangle" },
+const DRAW_TOOLS: {
+  tool: DrawingTool;
+  icon: React.ReactNode;
+  label: string;
+}[] = [
+  { tool: "Point", icon: <MapPin size={14} />, label: "Point" },
+  { tool: "LineString", icon: <PenLine size={14} />, label: "Line" },
+  { tool: "Polygon", icon: <Hexagon size={14} />, label: "Polygon" },
+  { tool: "Rectangle", icon: <Square size={14} />, label: "Rectangle" },
 ];
 
 function measureLabel(
@@ -137,9 +169,9 @@ export default function MapToolbar({
             onClick={onCancelDrawing}
             aria-label="Cancel drawing"
             data-testid="draw-cancel"
-            className="ml-1 w-7 h-7 rounded flex items-center justify-center text-xs text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
+            className="ml-1 w-7 h-7 rounded flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
           >
-            ✕
+            <X size={13} />
           </button>
         </>
       )}
