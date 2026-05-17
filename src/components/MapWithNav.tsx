@@ -86,7 +86,6 @@ export default function MapWithNav() {
   const [activeDrawingColour, setActiveDrawingColour] = useState<string>(
     COLOUR_PALETTE[0].hex,
   );
-  const [hasDrawingSelection, setHasDrawingSelection] = useState(false);
   const [measurement, setMeasurement] = useState<MeasurementState | null>(null);
 
   // Panel collapse coordination
@@ -256,13 +255,18 @@ export default function MapWithNav() {
 
   function handleToolChange(tool: MapTool) {
     setActiveTool(tool);
+    setActiveDrawingTool(null);
     if (tool !== "measure-distance" && tool !== "measure-area") {
       setMeasurement(null);
     }
   }
 
-  function handleDeleteSelected() {
-    mapViewRef.current?.deleteDrawingSelected();
+  function handleDrawToolChange(tool: DrawingTool | null) {
+    setActiveDrawingTool(tool);
+    if (tool !== null) {
+      setActiveTool("grab");
+      setMeasurement(null);
+    }
   }
 
   const handleCloseRoutePanel = useCallback(() => {
@@ -318,9 +322,8 @@ export default function MapWithNav() {
         activeTool={activeTool}
         activeDrawingTool={activeDrawingTool}
         activeDrawingColour={activeDrawingColour}
-        onDrawToolChange={setActiveDrawingTool}
+        onDrawToolChange={handleDrawToolChange}
         onDrawColourChange={setActiveDrawingColour}
-        onDrawSelectionChange={setHasDrawingSelection}
         onMeasurementUpdate={setMeasurement}
       />
       <MapToolbar
@@ -332,11 +335,7 @@ export default function MapWithNav() {
           customLayers.find((l) => l.id === activeDrawingLayerId)?.name
         }
         activeDrawingTool={activeDrawingTool}
-        activeDrawingColour={activeDrawingColour}
-        hasDrawingSelection={hasDrawingSelection}
-        onDrawToolChange={setActiveDrawingTool}
-        onDrawColourChange={setActiveDrawingColour}
-        onDeleteSelected={handleDeleteSelected}
+        onDrawToolChange={handleDrawToolChange}
         onCancelDrawing={() => {
           setActiveDrawingLayerId(null);
           setActiveDrawingTool(null);

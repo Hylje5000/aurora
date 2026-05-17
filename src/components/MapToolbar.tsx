@@ -1,7 +1,6 @@
 "use client";
 
-import { COLOUR_PALETTE } from "@/lib/customLayers";
-import type { DrawingTool, ColourOption } from "@/lib/customLayers";
+import type { DrawingTool } from "@/lib/customLayers";
 import type { MapTool, MeasurementState } from "@/lib/mapTool";
 
 interface MapToolbarProps {
@@ -11,11 +10,7 @@ interface MapToolbarProps {
   activeDrawingLayerId: string | null;
   activeDrawingLayerName: string | undefined;
   activeDrawingTool: DrawingTool | null;
-  activeDrawingColour: string;
-  hasDrawingSelection: boolean;
   onDrawToolChange: (t: DrawingTool | null) => void;
-  onDrawColourChange: (hex: string) => void;
-  onDeleteSelected: () => void;
   onCancelDrawing: () => void;
 }
 
@@ -58,11 +53,7 @@ export default function MapToolbar({
   activeDrawingLayerId,
   activeDrawingLayerName,
   activeDrawingTool,
-  activeDrawingColour,
-  hasDrawingSelection,
   onDrawToolChange,
-  onDrawColourChange,
-  onDeleteSelected,
   onCancelDrawing,
 }: MapToolbarProps) {
   return (
@@ -72,7 +63,7 @@ export default function MapToolbar({
     >
       {/* Standard tools */}
       {STD_TOOLS.map(({ tool, icon, label }) => {
-        const isActive = activeTool === tool;
+        const isActive = activeTool === tool && activeDrawingTool === null;
         const badge = isActive ? measureLabel(measurement, tool) : null;
         return (
           <div key={tool} className="flex flex-col items-center">
@@ -140,38 +131,6 @@ export default function MapToolbar({
               </button>
             );
           })}
-
-          {/* Colour swatches */}
-          <div className="flex gap-1 ml-1" data-testid="draw-colour-palette">
-            {COLOUR_PALETTE.map((c: ColourOption) => (
-              <button
-                key={c.hex}
-                title={c.label}
-                aria-label={c.label}
-                aria-pressed={activeDrawingColour === c.hex}
-                onClick={() => onDrawColourChange(c.hex)}
-                data-testid={`colour-swatch-${c.label.toLowerCase()}`}
-                className={`w-5 h-5 rounded-full border-2 transition-all ${
-                  activeDrawingColour === c.hex
-                    ? "border-white scale-110"
-                    : "border-transparent hover:border-slate-400"
-                }`}
-                style={{ backgroundColor: c.hex }}
-              />
-            ))}
-          </div>
-
-          {/* Delete selected */}
-          {hasDrawingSelection && (
-            <button
-              onClick={onDeleteSelected}
-              aria-label="Delete selected"
-              data-testid="draw-delete-selected"
-              className="ml-1 px-2 h-7 text-[10px] font-mono text-red-400 hover:text-red-300 border border-red-900/50 hover:border-red-700 rounded transition-colors"
-            >
-              Del
-            </button>
-          )}
 
           {/* Cancel drawing mode */}
           <button

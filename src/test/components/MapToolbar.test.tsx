@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import MapToolbar from "@/components/MapToolbar";
-import { COLOUR_PALETTE } from "@/lib/customLayers";
 
 const defaultProps = {
   activeTool: "grab" as const,
@@ -10,11 +9,7 @@ const defaultProps = {
   activeDrawingLayerId: null,
   activeDrawingLayerName: undefined,
   activeDrawingTool: null,
-  activeDrawingColour: COLOUR_PALETTE[0].hex,
-  hasDrawingSelection: false,
   onDrawToolChange: vi.fn(),
-  onDrawColourChange: vi.fn(),
-  onDeleteSelected: vi.fn(),
   onCancelDrawing: vi.fn(),
 };
 
@@ -71,6 +66,22 @@ describe("MapToolbar", () => {
     expect(screen.getByTestId("draw-cancel")).toBeInTheDocument();
   });
 
+  it("does not render colour swatches or delete button in draw section", () => {
+    render(
+      <MapToolbar
+        {...defaultProps}
+        activeDrawingLayerId="layer-1"
+        activeDrawingLayerName="Alpha"
+      />,
+    );
+    expect(
+      screen.queryByTestId("draw-colour-palette"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("draw-delete-selected"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows layer name in draw section", () => {
     render(
       <MapToolbar
@@ -107,50 +118,6 @@ describe("MapToolbar", () => {
     );
     fireEvent.click(screen.getByTestId("draw-btn-point"));
     expect(onDrawToolChange).toHaveBeenCalledWith(null);
-  });
-
-  it("colour swatches call onDrawColourChange", () => {
-    const onDrawColourChange = vi.fn();
-    render(
-      <MapToolbar
-        {...defaultProps}
-        activeDrawingLayerId="layer-1"
-        onDrawColourChange={onDrawColourChange}
-      />,
-    );
-    const swatches = screen.getAllByTestId(/^colour-swatch-/);
-    expect(swatches.length).toBe(COLOUR_PALETTE.length);
-    fireEvent.click(swatches[1]);
-    expect(onDrawColourChange).toHaveBeenCalledWith(COLOUR_PALETTE[1].hex);
-  });
-
-  it("Delete Selected button not shown when hasDrawingSelection is false", () => {
-    render(
-      <MapToolbar
-        {...defaultProps}
-        activeDrawingLayerId="layer-1"
-        hasDrawingSelection={false}
-      />,
-    );
-    expect(
-      screen.queryByTestId("draw-delete-selected"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("Delete Selected button shown when hasDrawingSelection is true", () => {
-    const onDeleteSelected = vi.fn();
-    render(
-      <MapToolbar
-        {...defaultProps}
-        activeDrawingLayerId="layer-1"
-        hasDrawingSelection={true}
-        onDeleteSelected={onDeleteSelected}
-      />,
-    );
-    const btn = screen.getByTestId("draw-delete-selected");
-    expect(btn).toBeInTheDocument();
-    fireEvent.click(btn);
-    expect(onDeleteSelected).toHaveBeenCalled();
   });
 
   it("cancel button calls onCancelDrawing", () => {
